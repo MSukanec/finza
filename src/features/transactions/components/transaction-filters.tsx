@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useFinanceStore } from '@/stores/finance-store';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 
@@ -92,8 +92,7 @@ export function TransactionFilters({
 
       {/* Popover Filters */}
       <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="outline" className="h-10 gap-2 px-4 shadow-sm relative">
+        <PopoverTrigger className={buttonVariants({ variant: 'outline', className: 'h-10 gap-2 px-4 shadow-sm relative' })}>
             <Filter className="w-4 h-4 text-muted-foreground" />
             <span className="hidden sm:inline font-medium">Filtros</span>
             {activeFiltersCount > 0 && (
@@ -101,7 +100,6 @@ export function TransactionFilters({
                    {activeFiltersCount}
                 </span>
             )}
-          </Button>
         </PopoverTrigger>
         <PopoverContent align="end" className="w-[340px] p-4 space-y-4 shadow-xl border-border/50">
            
@@ -132,7 +130,7 @@ export function TransactionFilters({
               {/* Cuenta/Billetera */}
               <div className="space-y-1.5">
                  <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><Wallet className="w-3.5 h-3.5" /> Billetera o Cuenta</Label>
-                 <Select value={filterWalletId} onValueChange={onWalletChange}>
+                 <Select value={filterWalletId} onValueChange={(val) => { if (val) onWalletChange(val); }}>
                     <SelectTrigger className="h-9">
                        <SelectValue />
                     </SelectTrigger>
@@ -147,7 +145,7 @@ export function TransactionFilters({
               <div className="grid grid-cols-2 gap-2">
                  <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><CheckSquare className="w-3.5 h-3.5" /> Grupo</Label>
-                    <Select value={filterGroupId} onValueChange={(val) => { onGroupChange(val); onCategoryChange('all'); }}>
+                    <Select value={filterGroupId} onValueChange={(val) => { if (val) { onGroupChange(val); onCategoryChange('all'); } }}>
                        <SelectTrigger className="h-9">
                           <SelectValue />
                        </SelectTrigger>
@@ -160,7 +158,7 @@ export function TransactionFilters({
                  
                  <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><Tags className="w-3.5 h-3.5" /> Categoría</Label>
-                    <Select value={filterCategoryId} onValueChange={onCategoryChange}>
+                    <Select value={filterCategoryId} onValueChange={(val) => { if (val) onCategoryChange(val); }}>
                        <SelectTrigger className="h-9">
                           <SelectValue />
                        </SelectTrigger>
