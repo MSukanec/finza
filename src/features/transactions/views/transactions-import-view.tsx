@@ -58,9 +58,10 @@ export function TransactionsImportView() {
     setFile(file);
     setStatus('parsing');
 
-    Papa.parse<CSVRow>(file, {
+    Papa.parse<any>(file, {
       header: true,
       skipEmptyLines: true,
+      transformHeader: (h) => h.trim().toUpperCase(),
       complete: (results) => {
         setParsedRows(results.data);
         setStatus('ready');
@@ -141,7 +142,10 @@ export function TransactionsImportView() {
       const importBatchId = `batch_${Date.now()}`;
 
       for (const row of parsedRows) {
-        if (!row.TIPO || !row.TOTAL) continue;
+        if (!row.TIPO || !row.TOTAL) {
+           addLog(`Skipped row (missing TIPO or TOTAL): ` + JSON.stringify(row));
+           continue;
+        }
 
         let dateObj = new Date();
         if (row.FECHA) {
