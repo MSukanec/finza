@@ -32,6 +32,8 @@ interface Mapping {
    originalGroup?: string;
    originalName?: string;
    type?: 'income'|'expense';
+   // for wallets
+   currency?: string;
 }
 
 function parseArgentineMoney(val: string): number {
@@ -185,11 +187,18 @@ export function TransactionsImportView() {
   };
 
   const generateMappings = (rows: CSVRow[]) => {
-      const uWallets = new Set<string>();
+      const uWallets = new Map<string, { original: string, currency: string }>();
       const uCats = new Map<string, {group: string, name: string, type: 'income'|'expense'}>();
 
       rows.forEach(r => {
-          if (r.BILLETERA) uWallets.add(r.BILLETERA.trim());
+          const rawW = r.BILLETERA?.trim();
+          if (rawW) {
+             const cur = r.FIAT?.toUpperCase().startsWith('D') ? 'USD' : 'ARS';
+             const id = `${rawW} (${cur})`;
+             if (!uWallets.has(id)) {
+                 uWallets.set(id, { original: rawW, currency: cur });
+             }
+          }
           const cVal = r.CATEGORIA?.trim() || '';
           const sVal = r.SUBCATEGORIA?.trim() || '';
           
@@ -208,10 +217,13 @@ export function TransactionsImportView() {
       });
 
       const wm: Record<string, Mapping> = {};
-      Array.from(uWallets).forEach(w => {
-         const match = computeFuzzyMatch(w, accounts, 'name');
-         wm[w] = {
-             original: w,
+      Array.from(uWallets.entries()).forEach(([key, val]) => {
+         const scopedDbAccs = accounts.filter(a => a.currency_id.toLowerCase() === val.currency.toLowerCase());
+         const match = computeFuzzyMatch(val.original, scopedDbAccs, 'name');
+         wm[key] = {
+             original: key,
+             originalName: val.original,
+             currency: val.currency,
              mappedId: match ? match.id : 'create',
              isAutoMatched: !!match
          };
@@ -266,12 +278,12 @@ export function TransactionsImportView() {
       const finalWallets = { ...walletMappings };
       for (const [key, mapping] of Object.entries(walletMappings)) {
          if (mapping.mappedId === 'create') {
-            addLog(`✨ Creando billetera: ${mapping.original}`);
+            addLog(`✨ Creando billetera: ${mapping.originalName} en ${mapping.currency}`);
             const { data: newW } = await supabase.from('wallets').insert({
               user_id: userData.id,
-              name: mapping.original,
+              name: mapping.originalName,
               type: 'bank',
-              currency_code: 'ARS'
+              currency_code: mapping.currency
             }).select().single();
             if (newW) finalWallets[key].mappedId = newW.id;
          }
@@ -301,7 +313,10 @@ export function TransactionsImportView() {
         if (!row.TIPO || !row.TOTAL) continue;
 
         const rawWallet = row.BILLETERA?.trim() || '';
-        const wMapping = finalWallets[rawWallet];
+        const currency = row.FIAT?.toUpperCase().startsWith('D') ? 'USD' : 'ARS';
+        const wKey = `${rawWallet} (${currency})`;
+        
+        const wMapping = finalWallets[wKey];
         if (wMapping && wMapping.mappedId === 'ignore') continue;
 
         let dateObj = new Date();
@@ -317,7 +332,6 @@ export function TransactionsImportView() {
         let type: 'income'|'expense'|'transfer' = row.TIPO.toUpperCase() === 'INGRESO' ? 'income' : 'expense';
         const amount = parseArgentineMoney(row.TOTAL);
         const walletId = wMapping ? wMapping.mappedId : null;
-        const currency = row.FIAT?.toUpperCase().startsWith('D') ? 'USD' : 'ARS';
         
         let description = row.DETALLE?.trim() || '';
         if (row.NOMBRE || row.APELLIDO) {
@@ -516,16 +530,19 @@ export function TransactionsImportView() {
                                      "flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border",
                                      w.isAutoMatched ? "border-income/30 bg-income/5" : "border-destructive/30 bg-destructive/5"
                                  )}>
-                                     <span className="font-medium text-sm w-full sm:w-1/2">{w.original || '(Vacío)'}</span>
+                                     <div className="flex flex-col w-full sm:w-1/2">
+                                         <span className="font-medium text-sm">{w.originalName || '(Vacío)'}</span>
+                                         <span className="text-xs text-muted-foreground opacity-70">Moneda asignada: {w.currency}</span>
+                                     </div>
                                      <select 
-                                         className="flex h-9 w-full rounded-md border border-input bg-background/50 px-3 py-1 text-sm shadow-sm"
+                                         className="flex h-9 w-full rounded-md border border-input bg-background/50 px-3 py-1 text-sm shadow-sm font-semibold text-primary"
                                          value={w.mappedId}
                                          onChange={(e) => setWalletMappings(prev => ({...prev, [w.original]: {...w, mappedId: e.target.value, isAutoMatched: e.target.value !== 'create' && e.target.value !== 'ignore'}}))}
                                      >
-                                         <option value="create">✨ Crear Nueva Billetera</option>
+                                         <option value="create">✨ Crear Nueva Billetera en {w.currency}</option>
                                          <option value="ignore">🗑️ Ignorar y no importar</option>
-                                         <optgroup label="Billeteras Existentes">
-                                            {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
+                                         <optgroup label="Billeteras Existentes Compatibles">
+                                            {accounts.filter(acc => acc.currency_id.toLowerCase() === w.currency?.toLowerCase()).map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
                                          </optgroup>
                                      </select>
                                  </div>
