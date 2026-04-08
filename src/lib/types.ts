@@ -15,6 +15,7 @@ export interface Account {
   name: string;
   type: 'cash' | 'bank' | 'digital';
   currency_id: string;
+  initial_balance: number;
   balance: number;
   color: string;
   icon: string;

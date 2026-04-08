@@ -71,7 +71,8 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       name: w.name,
       type: w.type,
       currency_id: w.currency_code.toLowerCase(),
-      balance: 0,
+      initial_balance: Number(w.initial_balance || 0),
+      balance: Number(w.initial_balance || 0),
       color: '#3b82f6',
       icon: 'wallet',
       created_at: w.created_at
@@ -211,6 +212,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
        user_id: userData.id,
        name: acc.name,
        type: acc.type,
+       initial_balance: acc.initial_balance || 0,
        currency_code: acc.currency_id.toUpperCase()
     });
     if (error) {
@@ -224,6 +226,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     if (data.name) updateData.name = data.name;
     if (data.type) updateData.type = data.type;
     if (data.currency_id) updateData.currency_code = data.currency_id.toUpperCase();
+    if (data.initial_balance !== undefined) updateData.initial_balance = data.initial_balance;
     
     const { error } = await supabase.from('wallets').update(updateData).eq('id', id);
     if (error) throw error;

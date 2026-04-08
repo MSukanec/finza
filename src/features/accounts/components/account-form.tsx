@@ -24,6 +24,7 @@ export function AccountForm() {
   const [name, setName] = useState('');
   const [type, setType] = useState('bank');
   const [currencyId, setCurrencyId] = useState('ars');
+  const [initialBalance, setInitialBalance] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -32,10 +33,12 @@ export function AccountForm() {
           setName(acc.name);
           setType(acc.type);
           setCurrencyId(acc.currency_id);
+          setInitialBalance(acc.initial_balance?.toString() || '0');
        } else {
           setName('');
           setType('bank');
           setCurrencyId('ars');
+          setInitialBalance('0');
        }
     }
   }, [isOpen, isEdit, sheetData]);
@@ -45,17 +48,20 @@ export function AccountForm() {
 
     try {
       const acc = sheetData?.account as any;
+      const parsedBalance = parseFloat(initialBalance) || 0;
       if (isEdit && acc) {
          await updateAccount(acc.id, {
             name: name.trim(),
             type: type as any,
             currency_id: currencyId,
+            initial_balance: parsedBalance
          });
       } else {
          await addAccount({
             name: name.trim(),
             type,
             currency_id: currencyId,
+            initial_balance: parsedBalance
          });
       }
       closeSheet();
@@ -115,6 +121,17 @@ export function AccountForm() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Saldo Inicial / Activo Base</Label>
+            <Input
+              type="number"
+              placeholder="0.00"
+              value={initialBalance}
+              onChange={(e) => setInitialBalance(e.target.value)}
+              className="bg-accent/30 border-border/50"
+            />
           </div>
 
           <Button
