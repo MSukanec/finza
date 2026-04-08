@@ -2,12 +2,11 @@
 
 import { useFinanceStore } from '@/stores/finance-store';
 import { useUIStore } from '@/stores/ui-store';
-import { getCurrencySymbol } from '@/lib/mock-data';
+
 import { SimpleAccordion } from '@/components/ui/simple-accordion';
 import { Button } from '@/components/ui/button';
 import { Plus, Landmark, Pencil } from 'lucide-react';
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
+
 import { cn } from '@/lib/utils';
 
 export function DebtsView() {
@@ -16,6 +15,7 @@ export function DebtsView() {
   const debts = useFinanceStore((s) => s.debts);
   const categories = useFinanceStore((s) => s.categories);
   const transactions = useFinanceStore((s) => s.transactions);
+  const currencies = useFinanceStore((s) => s.currencies);
 
   return (
     <div className="space-y-6">
@@ -47,7 +47,7 @@ export function DebtsView() {
           {debts.map(debt => {
             const category = categories.find(c => c.id === debt.category_id);
             const name = category?.name || 'Deuda sin nombre';
-            const currencySymbol = getCurrencySymbol(debt.currency_code);
+            const currencySymbol = currencies.find(curr => curr.id.toUpperCase() === debt.currency_code.toUpperCase())?.symbol || '$';
             
             // Sum transactions
             const txs = transactions.filter(t => t.category_id === debt.category_id);
@@ -119,10 +119,10 @@ export function DebtsView() {
                                  <div key={tx.id} className="flex items-center justify-between p-3 rounded-lg border bg-background/50 hover:bg-accent/50 transition-colors">
                                      <div className="flex flex-col">
                                          <span className="text-sm font-medium">{tx.description || 'Abono general'}</span>
-                                         <span className="text-xs text-muted-foreground">{format(new Date(tx.date), "d 'de' MMMM, yyyy", { locale: es })}</span>
+                                         <span className="text-xs text-muted-foreground">{new Intl.DateTimeFormat('es-AR', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(tx.date))}</span>
                                      </div>
                                      <span className="font-semibold text-sm">
-                                         {getCurrencySymbol(tx.currency_id)} {tx.amount.toLocaleString('es-AR')}
+                                         {currencies.find(c => c.id.toUpperCase() === tx.currency_id.toUpperCase())?.symbol || '$'} {tx.amount.toLocaleString('es-AR')}
                                      </span>
                                  </div>
                              ))}
