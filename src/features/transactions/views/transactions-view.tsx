@@ -5,11 +5,15 @@ import { TransactionList } from '../components/transaction-list';
 import { TransactionFilters } from '../components/transaction-filters';
 import { useState, useMemo } from 'react';
 import type { TransactionType } from '@/lib/types';
+import { Button } from '@/components/ui/button';
+import { Plus } from 'lucide-react';
+import { useUIStore } from '@/stores/ui-store';
 
 export function TransactionsView() {
   const transactions = useFinanceStore((s) => s.transactions);
   const [filterType, setFilterType] = useState<TransactionType | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const openSheet = useUIStore((s) => s.openSheet);
 
   const filtered = useMemo(() => {
     let result = transactions;
@@ -27,6 +31,10 @@ export function TransactionsView() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Movimientos</h1>
+        <Button size="sm" className="gap-2" onClick={() => openSheet('new-transaction')}>
+          <Plus className="w-4 h-4" />
+          <span className="hidden sm:inline">Nuevo Registro</span>
+        </Button>
       </div>
       <TransactionFilters
         filterType={filterType}

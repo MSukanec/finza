@@ -25,6 +25,7 @@ import { useUIStore } from '@/stores/ui-store';
 import { useFinanceStore } from '@/stores/finance-store';
 import { TransactionForm } from '@/features/transactions/components/transaction-form';
 import { AccountForm } from '@/features/accounts/components/account-form';
+import { UserProfile } from '@/components/user-profile';
 
 const mainNavItems = [
   { href: '/dashboard', label: 'Inicio', icon: LayoutDashboard },
@@ -122,7 +123,8 @@ export default function DashboardLayout({
         </nav>
 
         {/* Footer */}
-        <div className="p-3 border-t border-border space-y-1">
+        <div className="p-3 border-t border-border space-y-2">
+          <UserProfile />
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-all duration-200 w-full"
@@ -143,12 +145,15 @@ export default function DashboardLayout({
             </div>
             <span className="font-bold text-base tracking-tight">Finza</span>
           </div>
-          <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="p-2 rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="p-2 rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+            <UserProfile />
+          </div>
         </header>
 
         {/* Scrollable Content */}

@@ -36,8 +36,8 @@ export const DEFAULT_CATEGORIES: Category[] = [
 export const MOCK_ACCOUNTS: Account[] = [
   { id: 'acc-cash', name: 'Efectivo', type: 'cash', currency_id: 'ars', balance: 45000, color: '#22c55e', icon: 'Wallet', created_at: '2026-01-01T00:00:00Z' },
   { id: 'acc-bank', name: 'Banco Nación', type: 'bank', currency_id: 'ars', balance: 250000, color: '#3b82f6', icon: 'Building2', created_at: '2026-01-01T00:00:00Z' },
-  { id: 'acc-savings-usd', name: 'Ahorro USD', type: 'savings', currency_id: 'usd', balance: 1200, color: '#10b981', icon: 'PiggyBank', created_at: '2026-01-01T00:00:00Z' },
-  { id: 'acc-credit', name: 'Tarjeta VISA', type: 'credit', currency_id: 'ars', balance: -35000, color: '#8b5cf6', icon: 'CreditCard', created_at: '2026-01-01T00:00:00Z' },
+  { id: 'acc-savings-usd', name: 'Ahorro USD', type: 'bank', currency_id: 'usd', balance: 1200, color: '#10b981', icon: 'PiggyBank', created_at: '2026-01-01T00:00:00Z' },
+  { id: 'acc-credit', name: 'Tarjeta VISA', type: 'digital', currency_id: 'ars', balance: -35000, color: '#8b5cf6', icon: 'CreditCard', created_at: '2026-01-01T00:00:00Z' },
 ];
 
 // ===== MOCK TRANSACTIONS =====
