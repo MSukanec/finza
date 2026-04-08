@@ -241,6 +241,7 @@ export function TransactionsImportView() {
         );
 
         transactionsToInsert.push({
+           id: crypto.randomUUID(),
            user_id: userData.id,
            type: type,
            amount: amount,
@@ -258,6 +259,7 @@ export function TransactionsImportView() {
          addLog(`⚠️ Quedaron ${pendingTransfers.length} 'MOVIMIENTOS' sin pareja (se importarán como normales).`);
          pendingTransfers.forEach(pt => {
             transactionsToInsert.push({
+               id: crypto.randomUUID(),
                user_id: userData.id,
                type: pt.type,
                amount: pt.amount,
