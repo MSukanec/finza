@@ -175,7 +175,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     await get().hydrate();
   },
   revertImportBatch: async (batchId) => {
-    const { error } = await supabase.from('transactions').update({ deleted_at: new Date().toISOString() }).eq('import_batch', batchId);
+    const { error } = await supabase.from('transactions').delete().eq('import_batch', batchId);
     if (error) {
        console.error("Revert Error:", error);
        throw error;

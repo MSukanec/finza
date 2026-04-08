@@ -340,7 +340,7 @@ export function TransactionsImportView() {
      try {
        await revertImportBatch(batchId);
        fetchBatches();
-       alert("Lote eliminado con éxito (Soft Delete).");
+       alert("Lote eliminado con éxito de forma permanente (Hard Delete).");
      } catch(e: any) {
        alert("Error revirtiendo el lote: " + e.message);
      }
@@ -424,7 +424,7 @@ export function TransactionsImportView() {
                     Lotes Importados
                   </CardTitle>
                   <CardDescription className="text-destructive/80">
-                     Si te equivocas, revierte lotes enteros con 1 clic (Soft Delete Seguro).
+                     Si te equivocas, revierte lotes enteros con 1 clic (Hard Delete permanente).
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
