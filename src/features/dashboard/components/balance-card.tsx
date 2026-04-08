@@ -15,12 +15,19 @@ export function BalanceCard() {
   const primaryCurrency = currencies.find((c) => c.id === primaryCurrencyId) || currencies[0];
 
   const stats = useMemo(() => {
-    // Total balance across all accounts (converted to primary currency)
-    const totalBalance = accounts.reduce((sum, acc) => {
-      const rate = EXCHANGE_RATES[acc.currency_id] || 1;
-      const primaryRate = EXCHANGE_RATES[primaryCurrencyId] || 1;
-      return sum + (acc.balance * rate) / primaryRate;
-    }, 0);
+    // Total balances separated by currency
+    const balancesByCurrency = accounts.reduce((acc, account) => {
+       const currId = account.currency_id || 'ars';
+       acc[currId] = (acc[currId] || 0) + account.balance;
+       return acc;
+    }, {} as Record<string, number>);
+
+    const activeBalances = Object.keys(balancesByCurrency).map(currId => {
+       return {
+          currency: currencies.find(c => c.id === currId) || currencies[0],
+          amount: balancesByCurrency[currId]
+       };
+    }).sort((a, b) => (a.currency.id === primaryCurrencyId ? -1 : 1));
 
     // This month's income/expense
     const now = new Date();
@@ -45,7 +52,7 @@ export function BalanceCard() {
         return sum + (t.amount * rate) / primaryRate;
       }, 0);
 
-    return { totalBalance, monthIncome, monthExpense };
+    return { activeBalances, monthIncome, monthExpense };
   }, [accounts, transactions, primaryCurrencyId]);
 
   return (
@@ -56,9 +63,19 @@ export function BalanceCard() {
 
       <div className="relative">
         <p className="text-sm text-muted-foreground font-medium mb-1">Balance Total</p>
-        <p className="text-3xl md:text-4xl font-bold tracking-tight animate-count-up">
-          {formatMoney(stats.totalBalance, primaryCurrency)}
-        </p>
+        <div className="flex flex-col gap-1">
+          {stats.activeBalances.length > 0 ? (
+             stats.activeBalances.map((b, idx) => (
+                <p key={b.currency.id} className={`${idx === 0 ? 'text-3xl md:text-4xl font-bold text-foreground' : 'text-xl font-semibold text-muted-foreground'} tracking-tight animate-count-up`}>
+                  {formatMoney(b.amount, b.currency)}
+                </p>
+             ))
+          ) : (
+                <p className="text-3xl md:text-4xl font-bold tracking-tight animate-count-up">
+                  {formatMoney(0, primaryCurrency)}
+                </p>
+          )}
+        </div>
 
         <div className="flex flex-wrap gap-4 mt-4">
           <div className="flex items-center gap-2">
