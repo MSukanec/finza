@@ -65,6 +65,7 @@ export function AccountsView() {
           return (
             <Card
               key={account.id}
+              onClick={() => openSheet('edit-account', { account })}
               className="border-border/50 hover:border-border transition-colors cursor-pointer group"
             >
               <CardContent className="p-4">

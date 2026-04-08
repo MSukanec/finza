@@ -18,11 +18,11 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 -- 3. RLS Policies
 CREATE POLICY "USERS SELECT OWN_USER_DATA" ON public.users
     FOR SELECT TO public
-    USING (auth_id = auth.uid() OR id = (SELECT id FROM public.users WHERE auth_id = auth.uid()));
+    USING (auth_id = auth.uid());
 
 CREATE POLICY "USERS UPDATE OWN_USER_DATA" ON public.users
     FOR UPDATE TO public
-    USING (auth_id = auth.uid() OR id = (SELECT id FROM public.users WHERE auth_id = auth.uid()));
+    USING (auth_id = auth.uid());
 
 -- 4. Audit triggers for timestamp
 CREATE OR REPLACE FUNCTION public.handle_updated_at()

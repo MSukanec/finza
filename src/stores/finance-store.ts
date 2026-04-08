@@ -186,7 +186,14 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     await get().hydrate();
   },
   updateAccount: async (id, data) => {
-    await get().hydrate(); // Stub
+    const updateData: any = {};
+    if (data.name) updateData.name = data.name;
+    if (data.type) updateData.type = data.type;
+    if (data.currency_id) updateData.currency_code = data.currency_id.toUpperCase();
+    
+    const { error } = await supabase.from('wallets').update(updateData).eq('id', id);
+    if (error) throw error;
+    await get().hydrate();
   },
   removeAccount: async (id) => {
     await supabase.from('wallets').delete().eq('id', id);

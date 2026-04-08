@@ -7,34 +7,57 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export function AccountForm() {
   const activeSheet = useUIStore((s) => s.activeSheet);
+  const sheetData = useUIStore((s) => s.sheetData);
   const closeSheet = useUIStore((s) => s.closeSheet);
 
   const currencies = useFinanceStore((s) => s.currencies);
   const addAccount = useFinanceStore((s) => s.addAccount);
+  const updateAccount = useFinanceStore((s) => s.updateAccount);
 
-  const isOpen = activeSheet === 'new-account';
+  const isEdit = activeSheet === 'edit-account';
+  const isOpen = activeSheet === 'new-account' || isEdit;
 
   const [name, setName] = useState('');
   const [type, setType] = useState('bank');
   const [currencyId, setCurrencyId] = useState('ars');
 
+  useEffect(() => {
+    if (isOpen) {
+       const acc = sheetData?.account as any;
+       if (isEdit && acc) {
+          setName(acc.name);
+          setType(acc.type);
+          setCurrencyId(acc.currency_id);
+       } else {
+          setName('');
+          setType('bank');
+          setCurrencyId('ars');
+       }
+    }
+  }, [isOpen, isEdit, sheetData]);
+
   const handleSubmit = async () => {
     if (!name.trim()) return;
 
     try {
-      await addAccount({
-        name: name.trim(),
-        type,
-        currency_id: currencyId,
-      });
-
-      setName('');
-      setType('bank');
-      setCurrencyId('ars');
+      const acc = sheetData?.account as any;
+      if (isEdit && acc) {
+         await updateAccount(acc.id, {
+            name: name.trim(),
+            type: type as any,
+            currency_id: currencyId,
+         });
+      } else {
+         await addAccount({
+            name: name.trim(),
+            type,
+            currency_id: currencyId,
+         });
+      }
       closeSheet();
     } catch (e: any) {
       alert("Hubo un error guardando en Supabase: " + (e.message || JSON.stringify(e)));
@@ -45,7 +68,9 @@ export function AccountForm() {
     <Dialog open={isOpen} onOpenChange={(open) => !open && closeSheet()}>
       <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-md p-6">
         <DialogHeader className="pb-4">
-          <DialogTitle className="text-lg text-center sm:text-left">Nueva Cuenta</DialogTitle>
+          <DialogTitle className="text-lg text-center sm:text-left">
+            {isEdit ? 'Editar Cuenta' : 'Nueva Cuenta'}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 pb-6">
@@ -95,7 +120,7 @@ export function AccountForm() {
             disabled={!name.trim()}
             className="w-full h-12 text-base font-semibold mt-4"
           >
-            Crear Cuenta
+            {isEdit ? 'Guardar Cambios' : 'Crear Cuenta'}
           </Button>
         </div>
       </DialogContent>
