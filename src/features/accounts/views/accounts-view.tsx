@@ -165,6 +165,11 @@ export function AccountsView() {
                                      <span className={cn(acc.balance < 0 ? "text-expense" : "")}>
                                          {formatMoney(acc.balance, group.currency)}
                                      </span>
+                                     {(acc.initial_balance !== undefined) && (
+                                        <span className="text-[10px] text-muted-foreground/70 font-normal">
+                                            Inicial: {formatMoney(acc.initial_balance || 0, group.currency)}
+                                        </span>
+                                     )}
                                  </div>
                              </div>
                          </div>
