@@ -30,11 +30,13 @@ function parseArgentineMoney(val: string): number {
   const lastComma = str.lastIndexOf(',');
   const lastDot = str.lastIndexOf('.');
 
-  if (lastComma > lastDot) {
-    str = str.replace(/\./g, '');
-    str = str.replace(',', '.');
-  } else if (lastDot > lastComma) {
-    str = str.replace(/,/g, '');
+  if (lastComma !== -1 && lastDot !== -1) {
+    if (lastComma > lastDot) {
+      str = str.replace(/\./g, '');
+      str = str.replace(',', '.');
+    } else {
+      str = str.replace(/,/g, '');
+    }
   } else if (lastComma !== -1) {
     const parts = str.replace(/[^0-9,-]/g, '').split(',');
     if (parts.length > 2) return parseFloat(str.replace(/,/g, '')) || 0;
