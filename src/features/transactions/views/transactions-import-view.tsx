@@ -173,7 +173,18 @@ export function TransactionsImportView() {
     Papa.parse<any>(file, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: (h) => h.trim().toUpperCase(),
+      transformHeader: (h) => {
+        let clean = h.trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        if (clean === 'FECHA') return 'FECHA';
+        if (clean === 'TIPO') return 'TIPO';
+        if (clean === 'CATEGORIA') return 'CATEGORIA';
+        if (clean === 'SUBCATEGORIA') return 'SUBCATEGORIA';
+        if (clean === 'DESCRIPCION' || clean === 'DETALLE' || clean === 'CONCEPTO') return 'DETALLE';
+        if (clean === 'FIAT' || clean === 'MONEDA') return 'FIAT';
+        if (clean === 'BILLETERA' || clean === 'CUENTA') return 'BILLETERA';
+        if (clean === 'TOTAL' || clean === 'MONTO' || clean === 'IMPORTE') return 'TOTAL';
+        return clean;
+      },
       complete: (results) => {
         setParsedRows(results.data);
         generateMappings(results.data);
@@ -204,9 +215,9 @@ export function TransactionsImportView() {
           
           if (cVal && cVal.toUpperCase() !== 'MOVIMIENTOS') {
              const t = r.TIPO?.toUpperCase() === 'INGRESO' ? 'income' : 'expense';
-             // CORE FIX 1: If SUBCATEGORIA is empty, they intend cVal to be the Group, and Name to be "General".
-             const groupName = cVal;
-             const catName = sVal ? sVal : 'General';
+             // CORE FIX 1: If SUBCATEGORIA is empty, they intend cVal to be the Name, and Group to be "General".
+             const groupName = sVal ? cVal : 'General';
+             const catName = sVal ? sVal : cVal;
              
              uCats.set(`${t}-${groupName}-${catName}`, {
                  group: groupName,
@@ -400,8 +411,8 @@ export function TransactionsImportView() {
         // --- NORMAL LOGIC ---
         const cVal = row.CATEGORIA?.trim() || '';
         const sVal = row.SUBCATEGORIA?.trim() || '';
-        const groupName = cVal;
-        const catName = sVal ? sVal : 'General';
+        const groupName = sVal ? cVal : 'General';
+        const catName = sVal ? sVal : cVal;
         const mapKey = `${type}-${groupName}-${catName}`;
         const cMapping = finalCats[mapKey];
 
