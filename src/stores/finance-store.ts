@@ -141,7 +141,6 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     const payload = {
        user_id: userData.id,
        wallet_id: tx.account_id,
-       destination_account_id: tx.destination_account_id,
        category_id: tx.category_id || null,
        type: tx.type,
        amount: tx.amount,
@@ -157,11 +156,11 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
 
     if (tx.type === 'transfer' && tx.destination_account_id && data) {
        await supabase.from('transactions').insert({
-          user_id: userData.id,
-          wallet_id: tx.destination_account_id,
-          type: 'transfer',
-          amount: tx.amount,
-          currency_code: tx.currency_id.toUpperCase(),
+           user_id: userData.id,
+           wallet_id: tx.destination_account_id,
+           type: 'transfer',
+           amount: -Math.abs(tx.amount),
+           currency_code: tx.currency_id.toUpperCase(),
           description: `Transferencia entrante: ${tx.description}`,
           date: tx.date || new Date().toISOString(),
           related_transaction_id: data.id

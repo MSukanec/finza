@@ -189,17 +189,35 @@ export function TransactionsImportView() {
               const sourceWalletId = isExpense ? wallet?.id : matched.walletId;
               const destWalletId = isExpense ? matched.walletId : wallet?.id;
 
+              const txIdOut = crypto.randomUUID();
+              const txIdIn = crypto.randomUUID();
+
               transactionsToInsert.push({
+                 id: txIdOut,
                  user_id: userData.id,
                  type: 'transfer',
                  amount: amount,
                  currency_code: currency,
                  wallet_id: sourceWalletId,
-                 destination_account_id: destWalletId,
-                 description: 'Transferencia (Auto-fusionada)',
+                 description: 'Transferencia (Auto-fusionada) - Origen',
                  date: dateObj.toISOString(),
                  invoiced_at: null,
-                 import_batch: importBatchId
+                 import_batch: importBatchId,
+                 related_transaction_id: txIdIn
+              });
+
+              transactionsToInsert.push({
+                 id: txIdIn,
+                 user_id: userData.id,
+                 type: 'transfer',
+                 amount: -amount,
+                 currency_code: currency,
+                 wallet_id: destWalletId,
+                 description: 'Transferencia (Auto-fusionada) - Destino',
+                 date: dateObj.toISOString(),
+                 invoiced_at: null,
+                 import_batch: importBatchId,
+                 related_transaction_id: txIdOut
               });
               continue;
            } else {
