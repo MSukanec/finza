@@ -6,8 +6,9 @@ import { useFinanceStore } from '@/stores/finance-store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Upload, CheckCircle2, ArrowRightLeft, FileSpreadsheet, RotateCcw } from 'lucide-react';
+import { Upload, CheckCircle2, ArrowRightLeft, FileSpreadsheet, RotateCcw, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
+import { cn } from '@/lib/utils';
 
 interface CSVRow {
   FECHA: string;
@@ -21,6 +22,16 @@ interface CSVRow {
   NOMBRE: string;
   APELLIDO: string;
   FACTURADO: string;
+}
+
+interface Mapping {
+   original: string;
+   mappedId: string | 'create' | 'ignore';
+   isAutoMatched: boolean;
+   // for categories
+   originalGroup?: string;
+   originalName?: string;
+   type?: 'income'|'expense';
 }
 
 function parseArgentineMoney(val: string): number {
@@ -68,11 +79,18 @@ function parseArgentineMoney(val: string): number {
 export function TransactionsImportView() {
   const [file, setFile] = useState<File | null>(null);
   const [parsedRows, setParsedRows] = useState<CSVRow[]>([]);
-  const [status, setStatus] = useState<'idle' | 'parsing' | 'ready' | 'importing' | 'done' | 'error'>('idle');
+  
+  const [step, setStep] = useState<'upload' | 'mapping' | 'importing' | 'done' | 'error'>('upload');
+  
+  const [walletMappings, setWalletMappings] = useState<Record<string, Mapping>>({});
+  const [catMappings, setCatMappings] = useState<Record<string, Mapping>>({});
+
   const [logs, setLogs] = useState<string[]>([]);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
-  
   const [batches, setBatches] = useState<{ id: string, count: number }[]>([]);
+
+  const accounts = useFinanceStore(s => s.accounts);
+  const categories = useFinanceStore(s => s.categories);
 
   const addLog = (msg: string) => setLogs(prev => [...prev, msg]);
 
@@ -121,7 +139,6 @@ export function TransactionsImportView() {
     const file = e.target.files?.[0];
     if (!file) return;
     setFile(file);
-    setStatus('parsing');
 
     Papa.parse<any>(file, {
       header: true,
@@ -129,92 +146,123 @@ export function TransactionsImportView() {
       transformHeader: (h) => h.trim().toUpperCase(),
       complete: (results) => {
         setParsedRows(results.data);
-        setStatus('ready');
-        addLog(`✅ Archivo cargado: ${results.data.length} filas detectadas.`);
+        generateMappings(results.data);
+        setStep('mapping');
       },
       error: (err) => {
-        setStatus('error');
+        setStep('error');
         addLog(`❌ Error parseando CSV: ${err.message}`);
       }
     });
   };
 
+  const generateMappings = (rows: CSVRow[]) => {
+      const uWallets = new Set<string>();
+      const uCats = new Map<string, {group: string, name: string, type: 'income'|'expense'}>();
+
+      rows.forEach(r => {
+          if (r.BILLETERA) uWallets.add(r.BILLETERA.trim());
+          const cVal = r.CATEGORIA?.trim() || '';
+          const sVal = r.SUBCATEGORIA?.trim() || '';
+          
+          if (cVal && cVal.toUpperCase() !== 'MOVIMIENTOS') {
+             const t = r.TIPO?.toUpperCase() === 'INGRESO' ? 'income' : 'expense';
+             // CORE FIX 1: If SUBCATEGORIA is empty, they intend cVal to be the Group, and Name to be "General".
+             const groupName = cVal;
+             const catName = sVal ? sVal : 'General';
+             
+             uCats.set(`${t}-${groupName}-${catName}`, {
+                 group: groupName,
+                 name: catName,
+                 type: t
+             });
+          }
+      });
+
+      const wm: Record<string, Mapping> = {};
+      Array.from(uWallets).forEach(w => {
+         const match = accounts.find(a => a.name.toLowerCase() === w.toLowerCase());
+         wm[w] = {
+             original: w,
+             mappedId: match ? match.id : 'create',
+             isAutoMatched: !!match
+         };
+      });
+      
+      const cm: Record<string, Mapping> = {};
+      Array.from(uCats.entries()).forEach(([key, val]) => {
+         const match = categories.find(c => 
+             c.name.toLowerCase() === val.name.toLowerCase() && 
+             c.type === val.type && 
+             (c.group_name || 'General').toLowerCase() === val.group.toLowerCase()
+         );
+         cm[key] = {
+             original: key,
+             originalGroup: val.group,
+             originalName: val.name,
+             type: val.type,
+             mappedId: match ? match.id : 'create',
+             isAutoMatched: !!match
+         };
+      });
+
+      setWalletMappings(wm);
+      setCatMappings(cm);
+  };
+
   const processImport = async () => {
-    setStatus('importing');
-    addLog('🚀 Iniciando proceso inteligente de importación...');
+    setStep('importing');
+    addLog('🚀 Iniciando inyección de datos usando tus mapeos...');
     const state = useFinanceStore.getState();
     const { data: userData } = await supabase.from('users').select('id').eq('auth_id', state.user?.id).single();
     if (!userData) {
       addLog('❌ Error: Usuario no encontrado en BD.');
-      setStatus('error');
+      setStep('error');
       return;
     }
 
     try {
-      const uniqueWallets = new Set<string>();
-      const uniqueCategories = new Map<string, {group: string, name: string, type: 'income'|'expense'}>();
-
-      parsedRows.forEach(row => {
-        if (row.BILLETERA) uniqueWallets.add(row.BILLETERA.trim());
-        const cVal = row.CATEGORIA?.trim() || '';
-        const sVal = row.SUBCATEGORIA?.trim() || '';
-        if (cVal && cVal.toUpperCase() !== 'MOVIMIENTOS') {
-          const t = row.TIPO?.toUpperCase() === 'INGRESO' ? 'income' : 'expense';
-          const groupName = sVal ? cVal : 'General';
-          const catName = sVal ? sVal : cVal;
-          uniqueCategories.set(`${t}-${catName}`, {
-             group: groupName,
-             name: catName,
-             type: t
-          });
-        }
-      });
-
-      addLog(`🔍 Detectadas ${uniqueWallets.size} billeteras y ${uniqueCategories.size} categorías.`);
-
-      const currentWallets = [...state.accounts];
-      for (const w of Array.from(uniqueWallets)) {
-        if (!currentWallets.find(a => a.name.toLowerCase() === w.toLowerCase())) {
-          addLog(`✨ Creando billetera: ${w}`);
-          const { data: newW } = await supabase.from('wallets').insert({
-            user_id: userData.id,
-            name: w,
-            type: 'bank',
-            currency_code: 'ARS'
-          }).select().single();
-          if (newW) currentWallets.push(newW as any);
-        }
+      // 1. Process "Create" Wallet Mappings
+      const finalWallets = { ...walletMappings };
+      for (const [key, mapping] of Object.entries(walletMappings)) {
+         if (mapping.mappedId === 'create') {
+            addLog(`✨ Creando billetera: ${mapping.original}`);
+            const { data: newW } = await supabase.from('wallets').insert({
+              user_id: userData.id,
+              name: mapping.original,
+              type: 'bank',
+              currency_code: 'ARS'
+            }).select().single();
+            if (newW) finalWallets[key].mappedId = newW.id;
+         }
       }
 
-      const currentCategories = [...state.categories];
-      for (const cat of Array.from(uniqueCategories.values())) {
-        const exists = currentCategories.find(c => 
-          c.name.toLowerCase() === cat.name.toLowerCase() && 
-          c.type === cat.type && 
-          (c.group_name || 'General').toLowerCase() === cat.group.toLowerCase()
-        );
-        if (!exists) {
-          addLog(`✨ Creando categoría: ${cat.group} > ${cat.name}`);
-          const { data: newC } = await supabase.from('categories').insert({
-            user_id: userData.id,
-            name: cat.name,
-            group_name: cat.group,
-            type: cat.type
-          }).select().single();
-          if (newC) currentCategories.push(newC as any);
-        }
+      // 2. Process "Create" Category Mappings
+      const finalCats = { ...catMappings };
+      for (const [key, mapping] of Object.entries(catMappings)) {
+         if (mapping.mappedId === 'create') {
+            addLog(`✨ Creando categoría: ${mapping.originalGroup} > ${mapping.originalName}`);
+            const { data: newC } = await supabase.from('categories').insert({
+              user_id: userData.id,
+              name: mapping.originalName,
+              group_name: mapping.originalGroup,
+              type: mapping.type
+            }).select().single();
+            if (newC) finalCats[key].mappedId = newC.id;
+         }
       }
 
-      addLog('🧠 Analizando movimientos y fusionando transferencias...');
+      // 3. Build Transactions
       const transactionsToInsert = [];
       const pendingTransfers: any[] = [];
       const importBatchId = `batch_${Date.now()}`;
 
       for (const row of parsedRows) {
-        if (!row.TIPO || !row.TOTAL) {
-           addLog(`Skipped row (missing TIPO or TOTAL): ` + JSON.stringify(row));
-           continue;
-        }
+        if (!row.TIPO || !row.TOTAL) continue;
+
+        const rawWallet = row.BILLETERA?.trim() || '';
+        const wMapping = finalWallets[rawWallet];
+        if (wMapping && wMapping.mappedId === 'ignore') continue;
 
         let dateObj = new Date();
         if (row.FECHA) {
@@ -228,7 +276,7 @@ export function TransactionsImportView() {
         
         let type: 'income'|'expense'|'transfer' = row.TIPO.toUpperCase() === 'INGRESO' ? 'income' : 'expense';
         const amount = parseArgentineMoney(row.TOTAL);
-        const wallet = currentWallets.find(w => w.name.toLowerCase() === row.BILLETERA?.trim().toLowerCase());
+        const walletId = wMapping ? wMapping.mappedId : null;
         const currency = row.FIAT?.toUpperCase().startsWith('D') ? 'USD' : 'ARS';
         
         let description = row.DETALLE?.trim() || '';
@@ -238,11 +286,11 @@ export function TransactionsImportView() {
         }
 
         let invoicedAt = null;
-        if (row.FACTURADO && row.FACTURADO.toLowerCase() === 'x') {
+        if (row.FACTURADO?.toLowerCase() === 'x') {
            invoicedAt = dateObj.toISOString();
         }
 
-        // TRANSFER LOGIC
+        // --- TRANSFER LOGIC ---
         if (row.CATEGORIA?.toUpperCase() === 'MOVIMIENTOS') {
            const sameDateTransfers = pendingTransfers.filter(pt => 
               pt.dateStr === row.FECHA && 
@@ -255,8 +303,8 @@ export function TransactionsImportView() {
               pendingTransfers.splice(pendingTransfers.indexOf(matched), 1);
 
               const isExpense = type === 'expense';
-              const sourceWalletId = isExpense ? wallet?.id : matched.walletId;
-              const destWalletId = isExpense ? matched.walletId : wallet?.id;
+              const sourceWalletId = isExpense ? walletId : matched.walletId;
+              const destWalletId = isExpense ? matched.walletId : walletId;
 
               const txIdOut = crypto.randomUUID();
               const txIdIn = crypto.randomUUID();
@@ -267,7 +315,7 @@ export function TransactionsImportView() {
                  type: 'transfer',
                  amount: amount,
                  currency_code: currency,
-                 wallet_id: sourceWalletId,
+                 wallet_id: sourceWalletId !== 'create' ? sourceWalletId : null,
                  description: 'Transferencia (Auto-fusionada) - Origen',
                  date: dateObj.toISOString(),
                  invoiced_at: null,
@@ -281,7 +329,7 @@ export function TransactionsImportView() {
                  type: 'transfer',
                  amount: -amount,
                  currency_code: currency,
-                 wallet_id: destWalletId,
+                 wallet_id: destWalletId !== 'create' ? destWalletId : null,
                  description: 'Transferencia (Auto-fusionada) - Destino',
                  date: dateObj.toISOString(),
                  invoiced_at: null,
@@ -290,27 +338,20 @@ export function TransactionsImportView() {
               });
               continue;
            } else {
-              pendingTransfers.push({
-                 dateStr: row.FECHA,
-                 type: type,
-                 amount: amount,
-                 walletId: wallet?.id,
-                 currency,
-                 dateObj
-              });
+              pendingTransfers.push({ dateStr: row.FECHA, type, amount, walletId, currency, dateObj });
               continue;
            }
         }
 
-        // NORMAL TX
+        // --- NORMAL LOGIC ---
         const cVal = row.CATEGORIA?.trim() || '';
         const sVal = row.SUBCATEGORIA?.trim() || '';
-        const catName = sVal ? sVal : cVal;
+        const groupName = cVal;
+        const catName = sVal ? sVal : 'General';
+        const mapKey = `${type}-${groupName}-${catName}`;
+        const cMapping = finalCats[mapKey];
 
-        const cat = currentCategories.find(c => 
-          c.name.toLowerCase() === catName.toLowerCase() && 
-          c.type === type
-        );
+        if (cMapping && cMapping.mappedId === 'ignore') continue;
 
         transactionsToInsert.push({
            id: crypto.randomUUID(),
@@ -318,8 +359,8 @@ export function TransactionsImportView() {
            type: type,
            amount: amount,
            currency_code: currency,
-           wallet_id: wallet?.id || null,
-           category_id: cat?.id || null,
+           wallet_id: walletId !== 'create' ? walletId : null,
+           category_id: (cMapping && cMapping.mappedId !== 'create') ? cMapping.mappedId : null,
            description: description || 'Importado',
            date: dateObj.toISOString(),
            invoiced_at: invoicedAt,
@@ -328,7 +369,7 @@ export function TransactionsImportView() {
       }
 
       if (pendingTransfers.length > 0) {
-         addLog(`⚠️ Quedaron ${pendingTransfers.length} 'MOVIMIENTOS' sin pareja (se importarán como normales).`);
+         addLog(`⚠️ Quedaron ${pendingTransfers.length} 'MOVIMIENTOS' sin pareja.`);
          pendingTransfers.forEach(pt => {
             transactionsToInsert.push({
                id: crypto.randomUUID(),
@@ -336,7 +377,7 @@ export function TransactionsImportView() {
                type: pt.type,
                amount: pt.amount,
                currency_code: pt.currency,
-               wallet_id: pt.walletId,
+               wallet_id: pt.walletId !== 'create' ? pt.walletId : null,
                description: 'Movimiento huérfano',
                date: pt.dateObj.toISOString(),
                invoiced_at: null,
@@ -345,7 +386,7 @@ export function TransactionsImportView() {
          });
       }
 
-      addLog(`⏳ Insertando ${transactionsToInsert.length} movimientos en la base de datos...`);
+      addLog(`⏳ Insertando ${transactionsToInsert.length} movimientos...`);
       const chunkSize = 500;
       for (let i = 0; i < transactionsToInsert.length; i += chunkSize) {
          const chunk = transactionsToInsert.slice(i, i + chunkSize);
@@ -354,26 +395,25 @@ export function TransactionsImportView() {
       }
 
       addLog(`✅ ¡Importación finalizada con éxito!`);
-      setStatus('done');
+      setStep('done');
       await state.hydrate();
       fetchBatches();
 
     } catch (err: any) {
       addLog(`❌ Error Crítico: ${err.message}`);
-      setStatus('error');
+      setStep('error');
     }
   };
 
   const handleRevert = async (batchId: string) => {
      setConfirmingId(null);
      const { revertImportBatch } = useFinanceStore.getState();
-     
      try {
        await revertImportBatch(batchId);
        await fetchBatches();
        window.location.reload();
      } catch(e: any) {
-       console.error("Error revirtiendo el lote: " + e.message);
+       console.error("Error revirtiendo el lote", e);
      }
   };
 
@@ -384,49 +424,115 @@ export function TransactionsImportView() {
           <FileSpreadsheet className="w-6 h-6" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold">Importador Masivo Inteligente</h1>
-          <p className="text-muted-foreground">Convierte tu histórico de Excel a la Arquitectura Finza V2.</p>
+          <h1 className="text-2xl font-bold">Importador Masivo (Wizard)</h1>
+          <p className="text-muted-foreground">Mapea tus Excel con control total antes de inyectar a la base.</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            <Card className="border-border/50">
-              <CardHeader>
-                <CardTitle className="text-lg">Paso 1: Sube tu Excel (como CSV)</CardTitle>
-                <CardDescription>
-                  Guarda tu Excel usando &quot;Guardar como -{'>'} CSV delimitado por comas&quot; y súbelo aquí. Formato esperado de columnas: FECHA, TIPO, CATEGORIA, SUBCATEGORIA, DETALLE, FIAT, BILLETERA, TOTAL, NOMBRE, APELLIDO, FACTURADO.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-col items-center justify-center border-2 border-dashed border-border/50 rounded-2xl p-8 hover:bg-accent/30 transition-colors relative">
-                   <Upload className="w-10 h-10 text-muted-foreground mb-4" />
-                   <p className="text-sm font-medium">Arrastra tu archivo CSV aquí, o haz clic</p>
-                   <input 
-                     type="file" 
-                     accept=".csv" 
-                     className="absolute inset-0 opacity-0 cursor-pointer" 
-                     onChange={handleFileUpload}
-                     disabled={status === 'importing'}
-                   />
-                </div>
-              </CardContent>
-            </Card>
+            
+            {step === 'upload' && (
+                <Card className="border-border/50">
+                  <CardHeader>
+                    <CardTitle className="text-lg">Paso 1: Sube tu Excel</CardTitle>
+                    <CardDescription>
+                      Formato esperado: FECHA, TIPO, CATEGORIA, SUBCATEGORIA, DETALLE, FIAT, BILLETERA, TOTAL...
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-col items-center justify-center border-2 border-dashed border-border/50 rounded-2xl p-8 hover:bg-accent/30 transition-colors relative">
+                       <Upload className="w-10 h-10 text-muted-foreground mb-4" />
+                       <p className="text-sm font-medium">Arrastra tu archivo CSV aquí, o haz clic</p>
+                       <input 
+                         type="file" accept=".csv" 
+                         className="absolute inset-0 opacity-0 cursor-pointer" 
+                         onChange={handleFileUpload}
+                       />
+                    </div>
+                  </CardContent>
+                </Card>
+            )}
 
-            {['ready', 'importing', 'done', 'error'].includes(status) && (
+            {step === 'mapping' && (
+               <Card className="border-primary/50 ring-1 ring-primary/20 shadow-lg animate-in fade-in zoom-in-95 duration-300">
+                  <CardHeader className="bg-primary/5 rounded-t-xl border-b border-primary/10">
+                      <div className="flex items-center justify-between">
+                         <div>
+                            <CardTitle className="text-lg text-primary">Paso 2: Verifica Mapeos</CardTitle>
+                            <CardDescription>Asegúrate de que tus datos de Excel coincidan con la DB.</CardDescription>
+                         </div>
+                         <Button onClick={processImport} className="gap-2 shrink-0">
+                            Inyectar Todo <ChevronRight className="w-4 h-4" />
+                         </Button>
+                      </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                      <div className="p-4 space-y-3 bg-accent/20 border-b border-border/50">
+                          <h3 className="text-sm font-bold uppercase text-muted-foreground tracking-wider">🏦 Billeteras detectadas ({Object.keys(walletMappings).length})</h3>
+                          <div className="space-y-2">
+                             {Object.values(walletMappings).map((w, idx) => (
+                                 <div key={idx} className={cn(
+                                     "flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border",
+                                     w.isAutoMatched ? "border-income/30 bg-income/5" : "border-destructive/30 bg-destructive/5"
+                                 )}>
+                                     <span className="font-medium text-sm w-full sm:w-1/2">{w.original || '(Vacío)'}</span>
+                                     <select 
+                                         className="flex h-9 w-full rounded-md border border-input bg-background/50 px-3 py-1 text-sm shadow-sm"
+                                         value={w.mappedId}
+                                         onChange={(e) => setWalletMappings(prev => ({...prev, [w.original]: {...w, mappedId: e.target.value, isAutoMatched: e.target.value !== 'create' && e.target.value !== 'ignore'}}))}
+                                     >
+                                         <option value="create">✨ Crear Nueva Billetera</option>
+                                         <option value="ignore">🗑️ Ignorar y no importar</option>
+                                         <optgroup label="Billeteras Existentes">
+                                            {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
+                                         </optgroup>
+                                     </select>
+                                 </div>
+                             ))}
+                          </div>
+                      </div>
+
+                      <div className="p-4 space-y-3">
+                          <h3 className="text-sm font-bold uppercase text-muted-foreground tracking-wider">📂 Categorías detectadas ({Object.keys(catMappings).length})</h3>
+                          <div className="space-y-2">
+                             {Object.values(catMappings).map((c, idx) => (
+                                 <div key={idx} className={cn(
+                                     "flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border",
+                                     c.isAutoMatched ? "border-income/30 bg-income/5" : "border-destructive/30 bg-destructive/5"
+                                 )}>
+                                     <div className="flex flex-col w-full sm:w-1/2">
+                                        <span className="font-medium text-sm">{c.originalGroup} &gt; {c.originalName}</span>
+                                        <span className="text-xs text-muted-foreground opacity-70">Tipo: {c.type === 'income' ? 'Ingreso' : 'Gasto'}</span>
+                                     </div>
+                                     <select 
+                                         className="flex h-9 w-full rounded-md border border-input bg-background/50 px-3 py-1 text-sm shadow-sm"
+                                         value={c.mappedId}
+                                         onChange={(e) => setCatMappings(prev => ({...prev, [c.original]: {...c, mappedId: e.target.value, isAutoMatched: e.target.value !== 'create' && e.target.value !== 'ignore'}}))}
+                                     >
+                                         <option value="create">✨ Crear Nueva Categoría</option>
+                                         <option value="ignore">🗑️ Ignorar y no importar</option>
+                                         <optgroup label="Categorías Existentes">
+                                            {categories.filter(dbC => dbC.type === c.type).map(dbC => (
+                                                <option key={dbC.id} value={dbC.id}>{dbC.group_name || 'General'} &gt; {dbC.name}</option>
+                                            ))}
+                                         </optgroup>
+                                     </select>
+                                 </div>
+                             ))}
+                          </div>
+                      </div>
+                  </CardContent>
+               </Card>
+            )}
+
+            {['importing', 'done', 'error'].includes(step) && (
               <Card className="border-border/50 border-primary/20 bg-primary/5">
                 <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      {status === 'done' ? <CheckCircle2 className="w-5 h-5 text-income" /> : <ArrowRightLeft className="w-5 h-5 text-primary" />}
-                      Progreso y Logs
-                    </CardTitle>
-                    {status === 'ready' && (
-                      <Button onClick={processImport} className="font-bold">
-                        Comenzar Magia ⭐
-                      </Button>
-                    )}
-                  </div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    {step === 'done' ? <CheckCircle2 className="w-5 h-5 text-income" /> : <ArrowRightLeft className="w-5 h-5 text-primary animate-pulse" />}
+                    Progreso y Logs
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="bg-background rounded-xl border border-border/50 p-4 font-mono text-xs text-muted-foreground h-64 overflow-y-auto space-y-2">
@@ -439,7 +545,6 @@ export function TransactionsImportView() {
                         {log}
                       </div>
                     ))}
-                    {logs.length === 0 && <p className="opacity-50">Esperando ejecución...</p>}
                   </div>
                 </CardContent>
               </Card>
@@ -454,13 +559,10 @@ export function TransactionsImportView() {
                     <RotateCcw className="w-5 h-5" />
                     Lotes Importados
                   </CardTitle>
-                  <CardDescription className="text-destructive/80">
-                     Si te equivocas, revierte lotes enteros con 1 clic (Hard Delete permanente).
-                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {batches.length === 0 ? (
-                      <p className="text-sm text-destructive/70 text-center py-4">No hay importaciones realizadas aún.</p>
+                      <p className="text-sm text-destructive/70 text-center py-4">No hay importaciones aún.</p>
                   ) : (
                       <div className="space-y-3">
                          {batches.map(batch => (
@@ -473,30 +575,11 @@ export function TransactionsImportView() {
                                  </div>
                                  {confirmingId === batch.id ? (
                                     <div className="flex gap-2">
-                                        <Button 
-                                            variant="destructive" 
-                                            size="sm" 
-                                            className="w-full text-xs font-bold" 
-                                            onClick={() => handleRevert(batch.id)}
-                                        >
-                                            Confirmar
-                                        </Button>
-                                        <Button 
-                                            variant="outline" 
-                                            size="sm" 
-                                            className="w-full text-xs" 
-                                            onClick={() => setConfirmingId(null)}
-                                        >
-                                            Cancelar
-                                        </Button>
+                                        <Button variant="destructive" size="sm" className="w-full text-xs font-bold" onClick={() => handleRevert(batch.id)}>Confirmar Peligro ⚠️</Button>
+                                        <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => setConfirmingId(null)}>Cancelar</Button>
                                     </div>
                                  ) : (
-                                    <Button 
-                                        variant="destructive" 
-                                        size="sm" 
-                                        className="w-full text-xs" 
-                                        onClick={() => setConfirmingId(batch.id)}
-                                    >
+                                    <Button variant="outline" size="sm" className="w-full text-xs text-destructive hover:bg-destructive hover:text-white" onClick={() => setConfirmingId(batch.id)}>
                                         Revertir Lote Completo
                                     </Button>
                                  )}
