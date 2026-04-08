@@ -62,7 +62,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     const [walletsRes, categoriesRes, txRes] = await Promise.all([
       supabase.from('wallets').select('*').order('created_at', { ascending: true }),
       supabase.from('categories').select('*').order('created_at', { ascending: true }),
-      supabase.from('transactions').select('*').order('date', { ascending: false }),
+      supabase.from('transactions').select('*').is('deleted_at', null).order('date', { ascending: false }),
     ]);
 
     const txs = txRes.data || [];
@@ -175,7 +175,11 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     await get().hydrate();
   },
   revertImportBatch: async (batchId) => {
-    await supabase.from('transactions').update({ deleted_at: new Date().toISOString() }).eq('import_batch', batchId);
+    const { error } = await supabase.from('transactions').update({ deleted_at: new Date().toISOString() }).eq('import_batch', batchId);
+    if (error) {
+       console.error("Revert Error:", error);
+       throw error;
+    }
     await get().hydrate();
   },
   updateTransaction: async (id, data) => {

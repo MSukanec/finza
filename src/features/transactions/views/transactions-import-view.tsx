@@ -76,7 +76,8 @@ export function TransactionsImportView() {
   const fetchBatches = async () => {
      const { data } = await supabase.from('transactions')
          .select('import_batch')
-         .not('import_batch', 'is', null);
+         .not('import_batch', 'is', null)
+         .is('deleted_at', null);
          
      if(data) {
         const counts = data.reduce((acc: any, row) => {
