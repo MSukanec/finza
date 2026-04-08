@@ -42,7 +42,10 @@ export function TransactionsView() {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
       />
-      <TransactionList transactions={filtered} />
+      <TransactionList 
+        transactions={filtered} 
+        onEdit={(tx) => openSheet('edit-transaction', { transaction: tx })}
+      />
     </div>
   );
 }

@@ -25,8 +25,9 @@ export interface Category {
   id: string;
   name: string;
   type: 'income' | 'expense';
-  icon: string;
-  color: string;
+  group_name: string;
+  color?: string;
+  icon?: string;
   is_default: boolean;
   created_at: string;
 }

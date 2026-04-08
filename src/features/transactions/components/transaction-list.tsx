@@ -10,9 +10,11 @@ import { useState } from 'react';
 
 interface TransactionListProps {
   transactions: Transaction[];
+  onEdit?: (tx: Transaction) => void;
 }
 
-export function TransactionList({ transactions }: TransactionListProps) {
+export function TransactionList({ transactions, onEdit }: TransactionListProps) {
+  const accounts = useFinanceStore((s) => s.accounts);
   const categories = useFinanceStore((s) => s.categories);
   const currencies = useFinanceStore((s) => s.currencies);
   const removeTransaction = useFinanceStore((s) => s.removeTransaction);
@@ -51,15 +53,19 @@ export function TransactionList({ transactions }: TransactionListProps) {
             {txs.map((tx) => {
               const category = categories.find((c) => c.id === tx.category_id);
               const currency = currencies.find((c) => c.id === tx.currency_id) || currencies[0];
+              const account = accounts.find((a) => a.id === tx.account_id);
               const TypeIcon = getTypeIcon(tx.type);
-              const CategoryIcon = category ? getIcon(category.icon) : TypeIcon;
+              const CategoryIcon = category?.icon ? getIcon(category.icon) : TypeIcon;
 
               return (
                 <div
                   key={tx.id}
                   className="relative group"
                 >
-                  <div className="flex items-center gap-3 py-3 px-2 -mx-2 rounded-xl hover:bg-accent/30 transition-colors cursor-pointer">
+                  <div 
+                    onClick={() => onEdit?.(tx)}
+                    className="flex items-center gap-3 py-3 px-2 -mx-2 rounded-xl hover:bg-accent/30 transition-colors cursor-pointer"
+                  >
                     <div
                       className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
                       style={{ backgroundColor: `${category?.color || '#6b7280'}20` }}
@@ -71,9 +77,14 @@ export function TransactionList({ transactions }: TransactionListProps) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{tx.description}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {category?.name || 'Transferencia'}
-                      </p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-xs text-muted-foreground truncate max-w-[120px]">
+                          {category?.name || 'Transferencia'}
+                        </p>
+                        {account && <span className="text-[10px] uppercase font-medium bg-secondary text-secondary-foreground px-1.5 py-0.5 rounded">
+                          {account.name}
+                        </span>}
+                      </div>
                     </div>
                     <div className="text-right">
                       <p className={cn('text-sm font-semibold', getAmountColorClass(0, tx.type))}>
