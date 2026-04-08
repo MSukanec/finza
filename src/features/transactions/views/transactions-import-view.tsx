@@ -68,6 +68,7 @@ export function TransactionsImportView() {
   const [parsedRows, setParsedRows] = useState<CSVRow[]>([]);
   const [status, setStatus] = useState<'idle' | 'parsing' | 'ready' | 'importing' | 'done' | 'error'>('idle');
   const [logs, setLogs] = useState<string[]>([]);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   
   const [batches, setBatches] = useState<{ id: string, count: number }[]>([]);
 
@@ -341,16 +342,15 @@ export function TransactionsImportView() {
   };
 
   const handleRevert = async (batchId: string) => {
-     if(!window.confirm(`¿Estás seguro que deseas DESHACER la importación de ${batchId}?`)) return;
+     setConfirmingId(null);
      const { revertImportBatch } = useFinanceStore.getState();
      
      try {
        await revertImportBatch(batchId);
        await fetchBatches();
-       window.alert("Lote eliminado con éxito de forma permanente (Hard Delete).");
        window.location.reload();
      } catch(e: any) {
-       window.alert("Error revirtiendo el lote: " + e.message);
+       console.error("Error revirtiendo el lote: " + e.message);
      }
   };
 
@@ -448,14 +448,35 @@ export function TransactionsImportView() {
                                         {batch.count} filas
                                     </Badge>
                                  </div>
-                                 <Button 
-                                     variant="destructive" 
-                                     size="sm" 
-                                     className="w-full text-xs" 
-                                     onClick={() => handleRevert(batch.id)}
-                                 >
-                                     Revertir Lote Completo
-                                 </Button>
+                                 {confirmingId === batch.id ? (
+                                    <div className="flex gap-2">
+                                        <Button 
+                                            variant="destructive" 
+                                            size="sm" 
+                                            className="w-full text-xs font-bold" 
+                                            onClick={() => handleRevert(batch.id)}
+                                        >
+                                            Confirmar
+                                        </Button>
+                                        <Button 
+                                            variant="outline" 
+                                            size="sm" 
+                                            className="w-full text-xs" 
+                                            onClick={() => setConfirmingId(null)}
+                                        >
+                                            Cancelar
+                                        </Button>
+                                    </div>
+                                 ) : (
+                                    <Button 
+                                        variant="destructive" 
+                                        size="sm" 
+                                        className="w-full text-xs" 
+                                        onClick={() => setConfirmingId(batch.id)}
+                                    >
+                                        Revertir Lote Completo
+                                    </Button>
+                                 )}
                              </div>
                          ))}
                       </div>
