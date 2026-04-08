@@ -25,16 +25,20 @@ export function AccountForm() {
   const handleSubmit = async () => {
     if (!name.trim()) return;
 
-    await addAccount({
-      name: name.trim(),
-      type,
-      currency_id: currencyId,
-    });
+    try {
+      await addAccount({
+        name: name.trim(),
+        type,
+        currency_id: currencyId,
+      });
 
-    setName('');
-    setType('bank');
-    setCurrencyId('ars');
-    closeSheet();
+      setName('');
+      setType('bank');
+      setCurrencyId('ars');
+      closeSheet();
+    } catch (e: any) {
+      alert("Hubo un error guardando en Supabase: " + (e.message || JSON.stringify(e)));
+    }
   };
 
   return (

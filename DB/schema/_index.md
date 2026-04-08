@@ -1,72 +1,20 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-04-08T13:31:03.051Z
+> Generated: 2026-04-08T14:18:22.169Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
 ## Schema: `public`
 
----
+### Tables (4)
 
-## Schema: `iam`
+- **`categories`** (6 cols | FK: user_id → users)
+- **`transactions`** (13 cols | FK: user_id → users, wallet_id → wallets, category_id → categories, related_transaction_id → transactions)
+- **`users`** (6 cols)
+- **`wallets`** (8 cols | FK: user_id → users)
 
----
+### Functions (2)
 
-## Schema: `construction`
-
----
-
-## Schema: `projects`
-
----
-
-## Schema: `contacts`
-
----
-
-## Schema: `finance`
-
----
-
-## Schema: `ai`
-
----
-
-## Schema: `catalog`
-
----
-
-## Schema: `academy`
-
----
-
-## Schema: `billing`
-
----
-
-## Schema: `ops`
-
----
-
-## Schema: `notifications`
-
----
-
-## Schema: `audit`
-
----
-
-## Schema: `planner`
-
----
-
-## Schema: `community`
-
----
-
-## Schema: `design`
-
----
-
-## Schema: `providers`
+- `handle_new_user()` → trigger 🔐 *(public/functions_1.md)*
+- `handle_updated_at()` → trigger 🔐 *(public/functions_1.md)*
 
 ---

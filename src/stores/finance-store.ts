@@ -132,7 +132,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   addTransaction: async (tx) => {
     const state = get();
     const { data: userData } = await supabase.from('users').select('id').eq('auth_id', state.user?.id).single();
-    if (!userData) return;
+    if (!userData) throw new Error("Usuario no encontrado en la BD. auth_id: " + state.user?.id);
 
     const { data, error } = await supabase.from('transactions').insert({
       user_id: userData.id,
@@ -171,14 +171,18 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   addAccount: async (acc) => {
     const state = get();
     const { data: userData } = await supabase.from('users').select('id').eq('auth_id', state.user?.id).single();
-    if (!userData) return;
+    if (!userData) throw new Error("Usario público no encontrado. auth_id: " + state.user?.id);
 
-    await supabase.from('wallets').insert({
+    const { error } = await supabase.from('wallets').insert({
        user_id: userData.id,
        name: acc.name,
        type: acc.type,
        currency_code: acc.currency_id.toUpperCase()
     });
+    if (error) {
+      console.error("SUPABASE WALLET INSERT ERROR:", error);
+      throw error;
+    }
     await get().hydrate();
   },
   updateAccount: async (id, data) => {
