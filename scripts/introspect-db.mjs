@@ -37,8 +37,8 @@ async function main() {
     await client.connect();
     console.log('✅ Connected! Introspecting schema...\n');
 
-    // Schemas to introspect
-    const SCHEMAS = ['public', 'iam', 'construction', 'projects', 'contacts', 'finance', 'ai', 'catalog', 'academy', 'billing', 'ops', 'notifications', 'audit', 'planner', 'community', 'design', 'providers'];
+    // Schemas to introspect (only public for Finza)
+    const SCHEMAS = ['public'];
 
     const schemasSQL = SCHEMAS.map(s => `'${s}'`).join(', ');
 

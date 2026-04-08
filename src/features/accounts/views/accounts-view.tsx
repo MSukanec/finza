@@ -8,11 +8,13 @@ import { Button } from '@/components/ui/button';
 import { EXCHANGE_RATES } from '@/lib/mock-data';
 import { Plus, Wallet, TrendingUp } from 'lucide-react';
 import { useMemo } from 'react';
+import { useUIStore } from '@/stores/ui-store';
 
 export function AccountsView() {
   const accounts = useFinanceStore((s) => s.accounts);
   const currencies = useFinanceStore((s) => s.currencies);
   const primaryCurrencyId = useFinanceStore((s) => s.primaryCurrencyId);
+  const openSheet = useUIStore((s) => s.openSheet);
 
   const primaryCurrency = currencies.find((c) => c.id === primaryCurrencyId) || currencies[0];
 
@@ -36,7 +38,7 @@ export function AccountsView() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Cuentas</h1>
-        <Button size="sm" className="gap-2">
+        <Button size="sm" className="gap-2" onClick={() => openSheet('new-account')}>
           <Plus className="w-4 h-4" />
           <span className="hidden sm:inline">Nueva Cuenta</span>
         </Button>

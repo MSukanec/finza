@@ -23,6 +23,8 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useUIStore } from '@/stores/ui-store';
 import { useFinanceStore } from '@/stores/finance-store';
+import { TransactionForm } from '@/features/transactions/components/transaction-form';
+import { AccountForm } from '@/features/accounts/components/account-form';
 
 const mainNavItems = [
   { href: '/dashboard', label: 'Inicio', icon: LayoutDashboard },
@@ -246,6 +248,10 @@ export default function DashboardLayout({
           </div>
         </div>
       )}
+
+      {/* ===== GLOBAL MODALS ===== */}
+      <TransactionForm />
+      <AccountForm />
     </div>
   );
 }

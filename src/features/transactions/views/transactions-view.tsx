@@ -2,7 +2,6 @@
 
 import { useFinanceStore } from '@/stores/finance-store';
 import { TransactionList } from '../components/transaction-list';
-import { TransactionForm } from '../components/transaction-form';
 import { TransactionFilters } from '../components/transaction-filters';
 import { useState, useMemo } from 'react';
 import type { TransactionType } from '@/lib/types';
@@ -36,7 +35,6 @@ export function TransactionsView() {
         onSearchChange={setSearchQuery}
       />
       <TransactionList transactions={filtered} />
-      <TransactionForm />
     </div>
   );
 }
