@@ -54,7 +54,7 @@ export function RecentTransactions() {
             const category = categories.find((c) => c.id === tx.category_id);
             const currency = currencies.find((c) => c.id === tx.currency_id) || currencies[0];
             const TypeIcon = getTypeIcon(tx.type);
-            const CategoryIcon = category ? getIcon(category.icon) : TypeIcon;
+            const CategoryIcon = category?.icon ? getIcon(category.icon) : TypeIcon;
 
             return (
               <div

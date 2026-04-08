@@ -15,7 +15,7 @@ export interface Account {
   name: string;
   type: 'cash' | 'bank' | 'digital';
   currency_id: string;
-  initial_balance: number;
+  initial_balance?: number;
   balance: number;
   color: string;
   icon: string;
@@ -33,7 +33,7 @@ export interface Category {
   name: string;
   type: 'income' | 'expense';
   group_id?: string;
-  group_name: string; // Keep for retro-compatibility until fully migrated
+  group_name?: string; // Keep for retro-compatibility until fully migrated
   color?: string;
   icon?: string;
   is_default: boolean;

@@ -51,7 +51,8 @@ export function CategoriesView() {
          if (!t.category_id) return;
          const current = statsByCat.get(t.category_id) || { uses: 0, ARS: 0, USD: 0 };
          current.uses += 1;
-         if (t.currency_code === 'USD') {
+         const curr = useFinanceStore.getState().currencies.find(c => c.id === t.currency_id);
+         if (curr?.code === 'USD') {
              current.USD += Math.abs(t.amount);
          } else {
              current.ARS += Math.abs(t.amount);

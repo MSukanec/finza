@@ -93,7 +93,7 @@ export function BudgetsView() {
                 {budget.categories.map((bc) => {
                   const cat = categories.find((c) => c.id === bc.category_id);
                   const percent = bc.limit_amount > 0 ? (bc.spent_amount / bc.limit_amount) * 100 : 0;
-                  const Icon = cat ? getIcon(cat.icon) : CheckCircle2;
+                  const Icon = cat?.icon ? getIcon(cat.icon) : CheckCircle2;
 
                   return (
                     <div key={bc.category_id} className="space-y-1.5">
