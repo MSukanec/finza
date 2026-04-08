@@ -5,7 +5,7 @@ import { useFinanceStore } from '@/stores/finance-store';
 import { formatMoney, getAmountColorClass } from '@/lib/money';
 import { getIcon } from '@/lib/icons';
 import { cn } from '@/lib/utils';
-import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Trash2, CheckCircle2, CheckSquare } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Trash2, CheckCircle2, CheckSquare, Flag } from 'lucide-react';
 import { useState } from 'react';
 
 interface TransactionListProps {
@@ -19,6 +19,7 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
   const currencies = useFinanceStore((s) => s.currencies);
   const removeTransaction = useFinanceStore((s) => s.removeTransaction);
   const toggleCheckpoint = useFinanceStore((s) => s.toggleCheckpoint);
+  const toggleTransactionStatus = useFinanceStore((s) => s.toggleTransactionStatus);
   const [swipedId, setSwipedId] = useState<string | null>(null);
 
   const grouped = groupByDate(transactions);
@@ -57,6 +58,7 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
               const account = accounts.find((a) => a.id === tx.account_id);
               const TypeIcon = getTypeIcon(tx.type);
               const CategoryIcon = category?.icon ? getIcon(category.icon) : TypeIcon;
+              const isReviewed = tx.status === 'reviewed';
 
               return (
                 <div key={tx.id} className="relative space-y-1">
@@ -66,14 +68,14 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
                     <div className="flex items-center gap-3 py-4 opacity-90 my-2">
                        <div className="h-px bg-emerald-500/40 flex-1"></div>
                        <div className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 shadow-sm">
-                         <CheckCircle2 className="w-3.5 h-3.5" />
+                         <Flag className="w-3.5 h-3.5" />
                          Revisado hasta aquí
                        </div>
                        <div className="h-px bg-emerald-500/40 flex-1"></div>
                     </div>
                   )}
 
-                  <div className={cn("relative group transition-all", tx.is_checkpoint ? "bg-emerald-500/5 rounded-xl border border-emerald-500/10 shadow-sm" : "")}>
+                  <div className={cn("relative group transition-all", isReviewed ? "bg-emerald-500/5 rounded-xl border border-emerald-500/10 shadow-sm" : "")}>
                     <div 
                       onClick={() => onEdit?.(tx)}
                       className="flex items-center gap-3 py-3 px-2 -mx-2 rounded-xl hover:bg-accent/30 transition-colors cursor-pointer"
@@ -89,41 +91,48 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{tx.description}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <p className="text-xs text-muted-foreground truncate max-w-[120px]">
-                            {category?.name || 'Transferencia'}
+                        <div className="flex flex-col mt-0.5">
+                          <p className="text-[11px] text-muted-foreground leading-snug truncate whitespace-normal break-words">
+                            {category ? `${category.group_name || 'General'} > ${category.name}` : 'Transferencia'}
                           </p>
-                          {account && <span className="text-[10px] uppercase font-medium bg-secondary text-secondary-foreground px-1.5 py-0.5 rounded">
-                            {account.name}
-                          </span>}
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right flex-shrink-0 ml-4">
                         <p className={cn('text-sm font-semibold', getAmountColorClass(0, tx.type))}>
                           {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}
                           {formatMoney(tx.amount, currency)}
                         </p>
-                        <p className="text-[10px] text-muted-foreground">{currency.code}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{account?.name || '---'}</p>
                       </div>
 
                       {/* Hover Actions */}
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      <div className={cn("flex items-center gap-1 transition-all", isReviewed ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            toggleCheckpoint(tx.id, !!tx.is_checkpoint);
+                            toggleTransactionStatus(tx.id, isReviewed ? 'draft' : 'reviewed');
                           }}
-                          className={cn("p-1.5 rounded-lg transition-all", tx.is_checkpoint ? "text-emerald-500 hover:bg-emerald-500/10" : "text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-500")}
-                          title="Marcar Revisión"
+                          className={cn("p-1.5 rounded-lg transition-all", isReviewed ? "text-emerald-600 hover:bg-emerald-500/10" : "text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-500")}
+                          title={isReviewed ? "Marcar como Borrador" : "Marcar Revisión"}
                         >
                           <CheckCircle2 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
+                            toggleCheckpoint(tx.id, !!tx.is_checkpoint);
+                          }}
+                          className={cn("p-1.5 rounded-lg transition-all", tx.is_checkpoint ? "text-emerald-500 hover:bg-emerald-500/10" : "text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-500", isReviewed ? "opacity-0 group-hover:opacity-100" : "")}
+                          title="Fijar Hito de Control (Línea)"
+                        >
+                          <Flag className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
                             removeTransaction(tx.id);
                           }}
-                          className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
+                          className={cn("p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all", isReviewed ? "opacity-0 group-hover:opacity-100" : "")}
                           title="Eliminar"
                         >
                           <Trash2 className="w-4 h-4" />

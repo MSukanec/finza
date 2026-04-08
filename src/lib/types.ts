@@ -58,6 +58,7 @@ export interface Transaction {
   account_id: string;
   destination_account_id: string | null; // For transfers
   description: string;
+  status: 'draft' | 'reviewed';
   date: string;
   invoiced_at?: string;
   import_batch?: string;

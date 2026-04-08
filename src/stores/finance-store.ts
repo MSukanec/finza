@@ -26,6 +26,7 @@ interface FinanceState {
   removeTransaction: (id: string) => Promise<void>;
   revertImportBatch: (batchId: string) => Promise<void>;
   toggleCheckpoint: (id: string, current: boolean) => Promise<void>;
+  toggleTransactionStatus: (id: string, status: 'draft' | 'reviewed') => Promise<void>;
   
   addAccount: (acc: any) => Promise<void>;
   updateAccount: (id: string, data: Partial<Account>) => Promise<void>;
@@ -141,13 +142,15 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         currency_id: t.currency_code.toLowerCase(),
         category_id: t.category_id,
         account_id: t.wallet_id,
-        destination_account_id: t.destination_account_id,
+        destination_account_id: t.related_transaction_id ? t.related_transaction_id : null,
         description: t.description,
         date: t.date,
-        is_checkpoint: t.is_checkpoint,
         invoiced_at: t.invoiced_at,
+        import_batch: t.import_batch,
+        is_checkpoint: t.is_checkpoint,
+        status: t.status || 'draft',
         created_at: t.created_at
-      })),
+      })).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()),
       isHydrated: true,
     });
   },
@@ -258,6 +261,28 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       set(state => ({
         transactions: state.transactions.map(t => 
           t.id === id ? { ...t, is_checkpoint: current } : t
+        )
+      }));
+    }
+  },
+
+  toggleTransactionStatus: async (id: string, status: 'draft' | 'reviewed') => {
+    // Optimistic UI
+    const previousStatus = get().transactions.find(t => t.id === id)?.status || 'draft';
+    set(state => ({
+      transactions: state.transactions.map(t => 
+        t.id === id ? { ...t, status } : t
+      )
+    }));
+    
+    // DB Update
+    const { error } = await supabase.from('transactions').update({ status }).eq('id', id);
+    if (error) {
+      console.error('Error toggling transaction status:', error);
+      // Revert on failure
+      set(state => ({
+        transactions: state.transactions.map(t => 
+          t.id === id ? { ...t, status: previousStatus } : t
         )
       }));
     }
