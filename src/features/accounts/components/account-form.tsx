@@ -89,7 +89,9 @@ export function AccountForm() {
             <Label className="text-xs text-muted-foreground">Tipo de Cuenta</Label>
             <Select value={type} onValueChange={(v) => v && setType(v)}>
               <SelectTrigger className="bg-accent/30 border-border/50">
-                <SelectValue placeholder="Seleccionar tipo" />
+                <SelectValue>
+                  {type === 'bank' ? 'Banco Tradicional' : type === 'cash' ? 'Efectivo' : type === 'digital' ? 'Billetera Digital / Crypto' : 'Seleccionar tipo'}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="cash">Efectivo</SelectItem>

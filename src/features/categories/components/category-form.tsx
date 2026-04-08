@@ -90,7 +90,7 @@ export function CategoryForm() {
             <Label className="text-xs text-muted-foreground">Tipo</Label>
             <Select value={type} onValueChange={(v) => v && setType(v as 'expense' | 'income')}>
               <SelectTrigger className="bg-accent/30 border-border/50">
-                <SelectValue />
+                <SelectValue>{type === 'expense' ? 'Gasto' : 'Ingreso'}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="expense">Gasto</SelectItem>

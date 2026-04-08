@@ -1,0 +1,12 @@
+# Reglas Locales del Proyecto FINZA (Arquitectura Híbrida Español-Inglés)
+
+## 1. Operaciones y Ejecución
+- **NO DEPLOY, NO BUILD:** Nunca debes ejecutar comandos de compilación (`npm run build`, `next build`) ni simulaciones de despliegue (`deploy`) a menos que el usuario lo solicite de manera explícita y directa. Nuestro objetivo es la velocidad en la corrección durante el desarrollo local.
+- Asegúrate siempre de proporcionar el código limpio sin advertencias de linters innecesarias y valida los cambios visualmente al correr `dev`.
+
+## 2. Convención de Idiomas (Regla de Oro)
+- **BACKEND (Base de datos, Nombres de Columnas, Lógica, Rutas de API, Nombres de Archivos):** TODO INGLÉS. (Ejemplo: `transactions`, `amount`, `deleted_at`, `accounts`, `wallet_id`).
+- **FRONTEND (Lo que ve el usuario final: Modales, Alertas, Botones, Tablas, Textos, Selectores):** TODO ESPAÑOL. No está permitido renderizar variables en crudo si su contenido está en inglés. Siempre mapea o dicta traducciones en la UI (Ejemplo: `type === 'bank'` debe mostrarse en la UI como *'Banco Tradicional'*).
+
+## 3. Interfaces de Usuario (Radix Selects)
+- Siempre que utilices `<SelectValue>` en componentes combinados con estados internos en inglés, provee una evaluación explícita de texto en español (ej: `<SelectValue>{ type === 'expense' ? 'Gasto' : 'Ingreso' }</SelectValue>`). De lo contrario, los componentes renderizarán el nombre literal de las variables en inglés, rompiendo la experiencia.
