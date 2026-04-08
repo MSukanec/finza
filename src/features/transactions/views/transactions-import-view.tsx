@@ -76,6 +76,34 @@ function parseArgentineMoney(val: string): number {
   return parseFloat(str) || 0;
 }
 
+function normalizeStr(str: string): string {
+   if (!str) return '';
+   return str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+}
+
+function computeFuzzyMatch(rawOriginal: string, dbEntities: any[], nameKey: string = 'name'): any {
+   const orig = normalizeStr(rawOriginal);
+   if (!orig) return null;
+
+   // 1. Exact Name/Trigram Match
+   const exact = dbEntities.find(e => normalizeStr(e[nameKey]) === orig);
+   if (exact) return exact;
+
+   // 2. Substring Match (e.g., "mercadpago" in "mercado pago" or vice versa)
+   const substringBase = dbEntities.find(e => orig.includes(normalizeStr(e[nameKey]).substring(0, 5)) || normalizeStr(e[nameKey]).includes(orig.substring(0, 5)));
+   if (substringBase) return substringBase;
+
+   // 3. Very Fuzzy distance check (Levenstein partial mockup)
+   // For MVP, if it starts with the same 4 reliable letters, it's a match.
+   const fuzzy = dbEntities.find(e => {
+       const dbN = normalizeStr(e[nameKey]);
+       // Ignore single-letter differences or very short words.
+       return orig.length > 3 && dbN.length > 3 && (orig.startsWith(dbN.substring(0, 4)) || dbN.startsWith(orig.substring(0, 4)));
+   });
+
+   return fuzzy || null;
+}
+
 export function TransactionsImportView() {
   const [file, setFile] = useState<File | null>(null);
   const [parsedRows, setParsedRows] = useState<CSVRow[]>([]);
@@ -181,7 +209,7 @@ export function TransactionsImportView() {
 
       const wm: Record<string, Mapping> = {};
       Array.from(uWallets).forEach(w => {
-         const match = accounts.find(a => a.name.toLowerCase() === w.toLowerCase());
+         const match = computeFuzzyMatch(w, accounts, 'name');
          wm[w] = {
              original: w,
              mappedId: match ? match.id : 'create',
@@ -191,11 +219,23 @@ export function TransactionsImportView() {
       
       const cm: Record<string, Mapping> = {};
       Array.from(uCats.entries()).forEach(([key, val]) => {
-         const match = categories.find(c => 
-             c.name.toLowerCase() === val.name.toLowerCase() && 
-             c.type === val.type && 
-             (c.group_name || 'General').toLowerCase() === val.group.toLowerCase()
+         // Categories are complex because of Type and Group Name.
+         // We filter by type first
+         const scopedDbCats = categories.filter(c => c.type === val.type);
+         let match = null;
+         
+         // Try exact multi-level match first
+         match = scopedDbCats.find(c => 
+             normalizeStr(c.name) === normalizeStr(val.name) && 
+             normalizeStr(c.group_name || 'General') === normalizeStr(val.group)
          );
+
+         // If not exact, fallback to fuzzy logic primarily by Name.
+         if (!match) {
+             const fuzzy = computeFuzzyMatch(val.name, scopedDbCats, 'name');
+             if (fuzzy) match = fuzzy;
+         }
+
          cm[key] = {
              original: key,
              originalGroup: val.group,
