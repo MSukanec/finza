@@ -7,6 +7,7 @@ interface FinanceState {
   currencies: Currency[];
   accounts: Account[];
   categories: Category[];
+  categoryGroups: import('@/lib/types').CategoryGroup[];
   debts: Debt[];
   transactions: Transaction[];
   budgets: Budget[];
@@ -44,6 +45,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   currencies: CURRENCIES,
   accounts: [],
   categories: [],
+  categoryGroups: [],
   debts: [],
   transactions: [],
   budgets: [],
@@ -55,7 +57,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   hydrate: async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      set({ isHydrated: true, user: null, accounts: [], categories: [], debts: [], transactions: [] });
+      set({ isHydrated: true, user: null, accounts: [], categories: [], categoryGroups: [], debts: [], transactions: [] });
       return;
     }
 
@@ -81,10 +83,11 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       return allTxs;
     })();
 
-    const [walletsRes, categoriesRes, debtsRes, txs] = await Promise.all([
+    const [walletsRes, categoriesRes, debtsRes, groupsRes, txs] = await Promise.all([
       supabase.from('wallets').select('*').order('created_at', { ascending: true }),
       supabase.from('categories').select('*, category_groups(name)').order('created_at', { ascending: true }),
       supabase.from('debts').select('*').order('created_at', { ascending: true }),
+      supabase.from('category_groups').select('*').order('name', { ascending: true }),
       txPromise
     ]);
     let accounts = (walletsRes.data || []).map((w: any) => ({
@@ -110,6 +113,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
 
     set({
       accounts,
+      categoryGroups: groupsRes.data || [],
       categories: (categoriesRes.data || []).map((c: any) => ({
         id: c.id,
         name: c.name,
