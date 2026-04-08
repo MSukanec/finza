@@ -26,7 +26,7 @@ interface FinanceState {
   removeTransaction: (id: string) => Promise<void>;
   revertImportBatch: (batchId: string) => Promise<void>;
   toggleCheckpoint: (id: string, current: boolean) => Promise<void>;
-  toggleTransactionStatus: (id: string, status: 'draft' | 'reviewed') => Promise<void>;
+  toggleTransactionStatus: (id: string, status: 'draft' | 'warning' | 'reviewed') => Promise<void>;
   
   addAccount: (acc: any) => Promise<void>;
   updateAccount: (id: string, data: Partial<Account>) => Promise<void>;
@@ -266,7 +266,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     }
   },
 
-  toggleTransactionStatus: async (id: string, status: 'draft' | 'reviewed') => {
+  toggleTransactionStatus: async (id: string, status: 'draft' | 'warning' | 'reviewed') => {
     // Optimistic UI
     const previousStatus = get().transactions.find(t => t.id === id)?.status || 'draft';
     set(state => ({

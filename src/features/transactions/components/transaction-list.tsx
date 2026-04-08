@@ -5,7 +5,7 @@ import { useFinanceStore } from '@/stores/finance-store';
 import { formatMoney, getAmountColorClass } from '@/lib/money';
 import { getIcon } from '@/lib/icons';
 import { cn } from '@/lib/utils';
-import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Trash2, CheckCircle2, CheckSquare, Flag } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Trash2, CheckCircle2, CheckSquare, Flag, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 
 interface TransactionListProps {
@@ -59,6 +59,13 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
               const TypeIcon = getTypeIcon(tx.type);
               const CategoryIcon = category?.icon ? getIcon(category.icon) : TypeIcon;
               const isReviewed = tx.status === 'reviewed';
+              const isWarning = tx.status === 'warning';
+
+              const getNextStatus = (current: string) => {
+                if (current === 'draft') return 'reviewed';
+                if (current === 'reviewed') return 'warning';
+                return 'draft';
+              };
 
               return (
                 <div key={tx.id} className="relative space-y-1">
@@ -75,7 +82,10 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
                     </div>
                   )}
 
-                  <div className={cn("relative group transition-all", isReviewed ? "bg-emerald-500/5 rounded-xl border border-emerald-500/10 shadow-sm" : "")}>
+                  <div className={cn("relative group transition-all", 
+                    isReviewed ? "bg-emerald-500/5 rounded-xl border border-emerald-500/10 shadow-sm" : 
+                    isWarning ? "bg-amber-500/5 rounded-xl border border-amber-500/10 shadow-sm" : ""
+                  )}>
                     <div 
                       onClick={() => onEdit?.(tx)}
                       className="flex items-center gap-3 py-3 px-2 -mx-2 rounded-xl hover:bg-accent/30 transition-colors cursor-pointer"
@@ -106,16 +116,20 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
                       </div>
 
                       {/* Hover Actions */}
-                      <div className={cn("flex items-center gap-1 transition-all", isReviewed ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
+                      <div className={cn("flex items-center gap-1 transition-all", (isReviewed || isWarning) ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            toggleTransactionStatus(tx.id, isReviewed ? 'draft' : 'reviewed');
+                            toggleTransactionStatus(tx.id, getNextStatus(tx.status || 'draft'));
                           }}
-                          className={cn("p-1.5 rounded-lg transition-all", isReviewed ? "text-emerald-600 hover:bg-emerald-500/10" : "text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-500")}
-                          title={isReviewed ? "Marcar como Borrador" : "Marcar Revisión"}
+                          className={cn("p-1.5 rounded-lg transition-all", 
+                            isReviewed ? "text-emerald-600 hover:bg-emerald-500/10" : 
+                            isWarning ? "text-amber-500 hover:bg-amber-500/10" :
+                            "text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-500"
+                          )}
+                          title="Cambiar Estado de Revisión"
                         >
-                          <CheckCircle2 className="w-4 h-4" />
+                          {isWarning ? <AlertTriangle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
                         </button>
                         <button
                           onClick={(e) => {
@@ -132,7 +146,7 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
                             e.stopPropagation();
                             removeTransaction(tx.id);
                           }}
-                          className={cn("p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all", isReviewed ? "opacity-0 group-hover:opacity-100" : "")}
+                          className={cn("p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all", (isReviewed || isWarning) ? "opacity-0 group-hover:opacity-100" : "")}
                           title="Eliminar"
                         >
                           <Trash2 className="w-4 h-4" />

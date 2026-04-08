@@ -49,21 +49,21 @@ function daysAgo(n: number): string {
 }
 
 export const MOCK_TRANSACTIONS: Transaction[] = [
-  { id: 'tx-1', type: 'expense', amount: 8500, currency_id: 'ars', category_id: 'cat-food', account_id: 'acc-cash', destination_account_id: null, description: 'Supermercado', date: daysAgo(0), created_at: daysAgo(0) },
-  { id: 'tx-2', type: 'income', amount: 450000, currency_id: 'ars', category_id: 'cat-salary', account_id: 'acc-bank', destination_account_id: null, description: 'Salario Marzo', date: daysAgo(1), created_at: daysAgo(1) },
-  { id: 'tx-3', type: 'expense', amount: 2500, currency_id: 'ars', category_id: 'cat-transport', account_id: 'acc-cash', destination_account_id: null, description: 'SUBE', date: daysAgo(1), created_at: daysAgo(1) },
-  { id: 'tx-4', type: 'expense', amount: 15000, currency_id: 'ars', category_id: 'cat-entertainment', account_id: 'acc-credit', destination_account_id: null, description: 'Netflix + Spotify', date: daysAgo(2), created_at: daysAgo(2) },
-  { id: 'tx-5', type: 'expense', amount: 45000, currency_id: 'ars', category_id: 'cat-services', account_id: 'acc-bank', destination_account_id: null, description: 'Electricidad + Gas', date: daysAgo(3), created_at: daysAgo(3) },
-  { id: 'tx-6', type: 'expense', amount: 12000, currency_id: 'ars', category_id: 'cat-food', account_id: 'acc-cash', destination_account_id: null, description: 'Delivery', date: daysAgo(3), created_at: daysAgo(3) },
-  { id: 'tx-7', type: 'transfer', amount: 50000, currency_id: 'ars', category_id: null, account_id: 'acc-bank', destination_account_id: 'acc-cash', description: 'Extracción cajero', date: daysAgo(4), created_at: daysAgo(4) },
-  { id: 'tx-8', type: 'income', amount: 85000, currency_id: 'ars', category_id: 'cat-freelance', account_id: 'acc-bank', destination_account_id: null, description: 'Proyecto web', date: daysAgo(5), created_at: daysAgo(5) },
-  { id: 'tx-9', type: 'expense', amount: 32000, currency_id: 'ars', category_id: 'cat-shopping', account_id: 'acc-credit', destination_account_id: null, description: 'Ropa Invierno', date: daysAgo(6), created_at: daysAgo(6) },
-  { id: 'tx-10', type: 'expense', amount: 5500, currency_id: 'ars', category_id: 'cat-health', account_id: 'acc-cash', destination_account_id: null, description: 'Farmacia', date: daysAgo(7), created_at: daysAgo(7) },
-  { id: 'tx-11', type: 'expense', amount: 18000, currency_id: 'ars', category_id: 'cat-food', account_id: 'acc-bank', destination_account_id: null, description: 'Restaurante', date: daysAgo(8), created_at: daysAgo(8) },
-  { id: 'tx-12', type: 'income', amount: 200, currency_id: 'usd', category_id: 'cat-freelance', account_id: 'acc-savings-usd', destination_account_id: null, description: 'Diseño logo', date: daysAgo(10), created_at: daysAgo(10) },
-  { id: 'tx-13', type: 'expense', amount: 75000, currency_id: 'ars', category_id: 'cat-home', account_id: 'acc-bank', destination_account_id: null, description: 'Alquiler', date: daysAgo(12), created_at: daysAgo(12) },
-  { id: 'tx-14', type: 'expense', amount: 9500, currency_id: 'ars', category_id: 'cat-education', account_id: 'acc-credit', destination_account_id: null, description: 'Curso Udemy', date: daysAgo(14), created_at: daysAgo(14) },
-  { id: 'tx-15', type: 'income', amount: 15000, currency_id: 'ars', category_id: 'cat-gifts', account_id: 'acc-cash', destination_account_id: null, description: 'Regalo cumpleaños', date: daysAgo(15), created_at: daysAgo(15) },
+  { id: 'tx-1', type: 'expense', amount: 8500, currency_id: 'ars', category_id: 'cat-food', account_id: 'acc-cash', destination_account_id: null, description: 'Supermercado', date: daysAgo(0), created_at: daysAgo(0), status: 'draft' },
+  { id: 'tx-2', type: 'income', amount: 450000, currency_id: 'ars', category_id: 'cat-salary', account_id: 'acc-bank', destination_account_id: null, description: 'Salario Marzo', date: daysAgo(1), created_at: daysAgo(1), status: 'draft' },
+  { id: 'tx-3', type: 'expense', amount: 2500, currency_id: 'ars', category_id: 'cat-transport', account_id: 'acc-cash', destination_account_id: null, description: 'SUBE', date: daysAgo(1), created_at: daysAgo(1), status: 'draft' },
+  { id: 'tx-4', type: 'expense', amount: 15000, currency_id: 'ars', category_id: 'cat-entertainment', account_id: 'acc-credit', destination_account_id: null, description: 'Netflix + Spotify', date: daysAgo(2), created_at: daysAgo(2), status: 'draft' },
+  { id: 'tx-5', type: 'expense', amount: 45000, currency_id: 'ars', category_id: 'cat-services', account_id: 'acc-bank', destination_account_id: null, description: 'Electricidad + Gas', date: daysAgo(3), created_at: daysAgo(3), status: 'draft' },
+  { id: 'tx-6', type: 'expense', amount: 12000, currency_id: 'ars', category_id: 'cat-food', account_id: 'acc-cash', destination_account_id: null, description: 'Delivery', date: daysAgo(3), created_at: daysAgo(3), status: 'draft' },
+  { id: 'tx-7', type: 'transfer', amount: 50000, currency_id: 'ars', category_id: null, account_id: 'acc-bank', destination_account_id: 'acc-cash', description: 'Extracción cajero', date: daysAgo(4), created_at: daysAgo(4), status: 'draft' },
+  { id: 'tx-8', type: 'income', amount: 85000, currency_id: 'ars', category_id: 'cat-freelance', account_id: 'acc-bank', destination_account_id: null, description: 'Proyecto web', date: daysAgo(5), created_at: daysAgo(5), status: 'draft' },
+  { id: 'tx-9', type: 'expense', amount: 32000, currency_id: 'ars', category_id: 'cat-shopping', account_id: 'acc-credit', destination_account_id: null, description: 'Ropa Invierno', date: daysAgo(6), created_at: daysAgo(6), status: 'draft' },
+  { id: 'tx-10', type: 'expense', amount: 5500, currency_id: 'ars', category_id: 'cat-health', account_id: 'acc-cash', destination_account_id: null, description: 'Farmacia', date: daysAgo(7), created_at: daysAgo(7), status: 'draft' },
+  { id: 'tx-11', type: 'expense', amount: 18000, currency_id: 'ars', category_id: 'cat-food', account_id: 'acc-bank', destination_account_id: null, description: 'Restaurante', date: daysAgo(8), created_at: daysAgo(8), status: 'draft' },
+  { id: 'tx-12', type: 'income', amount: 200, currency_id: 'usd', category_id: 'cat-freelance', account_id: 'acc-savings-usd', destination_account_id: null, description: 'Diseño logo', date: daysAgo(10), created_at: daysAgo(10), status: 'draft' },
+  { id: 'tx-13', type: 'expense', amount: 75000, currency_id: 'ars', category_id: 'cat-home', account_id: 'acc-bank', destination_account_id: null, description: 'Alquiler', date: daysAgo(12), created_at: daysAgo(12), status: 'draft' },
+  { id: 'tx-14', type: 'expense', amount: 9500, currency_id: 'ars', category_id: 'cat-education', account_id: 'acc-credit', destination_account_id: null, description: 'Curso Udemy', date: daysAgo(14), created_at: daysAgo(14), status: 'draft' },
+  { id: 'tx-15', type: 'income', amount: 15000, currency_id: 'ars', category_id: 'cat-gifts', account_id: 'acc-cash', destination_account_id: null, description: 'Regalo cumpleaños', date: daysAgo(15), created_at: daysAgo(15), status: 'draft' },
 ];
 
 // ===== MOCK BUDGETS =====
