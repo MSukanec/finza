@@ -16,6 +16,7 @@ import {
   Moon,
   Sun,
   X,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useTheme } from 'next-themes';
@@ -35,6 +36,7 @@ const mainNavItems = [
   { href: '/budgets', label: 'Presupuestos', icon: Target },
   { href: '/reports', label: 'Reportes', icon: BarChart3 },
   { href: '/categories', label: 'Categorías', icon: Tags },
+  { href: '/importar', label: 'Importar Historial', icon: FileSpreadsheet },
 ];
 
 const bottomNavItems = [

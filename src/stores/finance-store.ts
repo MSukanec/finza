@@ -104,9 +104,10 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         currency_id: t.currency_code.toLowerCase(),
         category_id: t.category_id,
         account_id: t.wallet_id,
+        destination_account_id: t.destination_account_id,
         description: t.description,
         date: t.date,
-        destination_account_id: null,
+        invoiced_at: t.invoiced_at,
         created_at: t.created_at
       })),
       isHydrated: true,
@@ -136,16 +137,20 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     const { data: userData } = await supabase.from('users').select('id').eq('auth_id', state.user?.id).single();
     if (!userData) throw new Error("Usuario no encontrado en la BD. auth_id: " + state.user?.id);
 
-    const { data, error } = await supabase.from('transactions').insert({
-      user_id: userData.id,
-      wallet_id: tx.account_id,
-      category_id: tx.category_id || null,
-      type: tx.type,
-      amount: tx.amount,
-      currency_code: tx.currency_id.toUpperCase(),
-      description: tx.description,
-      date: tx.date || new Date().toISOString(),
-    }).select().single();
+    const payload = {
+       user_id: userData.id,
+       wallet_id: tx.account_id,
+       destination_account_id: tx.destination_account_id,
+       category_id: tx.category_id || null,
+       type: tx.type,
+       amount: tx.amount,
+       currency_code: tx.currency_id.toUpperCase(),
+       description: tx.description,
+       date: tx.date || new Date().toISOString(),
+       invoiced_at: tx.invoiced_at || null
+    };
+
+    const { data, error } = await supabase.from('transactions').insert(payload).select().single();
 
     if (error) console.error("Error creating tx:", error);
 

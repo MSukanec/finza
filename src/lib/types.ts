@@ -42,6 +42,7 @@ export interface Transaction {
   destination_account_id: string | null; // For transfers
   description: string;
   date: string;
+  invoiced_at?: string;
   created_at: string;
 }
 
