@@ -2,10 +2,14 @@
 
 import type { TransactionType } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { Search, Calendar, Wallet } from 'lucide-react';
+import { Search, Calendar, Wallet, Filter, Tags, CheckSquare } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useFinanceStore } from '@/stores/finance-store';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 
 interface TransactionFiltersProps {
   filterType: TransactionType | 'all';
@@ -14,6 +18,10 @@ interface TransactionFiltersProps {
   onSearchChange: (q: string) => void;
   filterWalletId: string;
   onWalletChange: (w: string) => void;
+  filterCategoryId: string;
+  onCategoryChange: (c: string) => void;
+  filterGroupId: string;
+  onGroupChange: (g: string) => void;
   dateFrom: string;
   onDateFromChange: (d: string) => void;
   dateTo: string;
@@ -21,7 +29,7 @@ interface TransactionFiltersProps {
 }
 
 const filterTabs: { value: TransactionType | 'all'; label: string }[] = [
-  { value: 'all', label: 'Todos' },
+  { value: 'all', label: 'Todos los tipos' },
   { value: 'income', label: 'Ingresos' },
   { value: 'expense', label: 'Gastos' },
   { value: 'transfer', label: 'Transferencias' },
@@ -34,79 +42,160 @@ export function TransactionFilters({
   onSearchChange,
   filterWalletId,
   onWalletChange,
+  filterCategoryId,
+  onCategoryChange,
+  filterGroupId,
+  onGroupChange,
   dateFrom,
   onDateFromChange,
   dateTo,
   onDateToChange
 }: TransactionFiltersProps) {
   const accounts = useFinanceStore((s) => s.accounts);
+  const categories = useFinanceStore((s) => s.categories);
+  const groups = useFinanceStore((s) => s.categoryGroups);
+
+  // Active filters count for badge
+  let activeFiltersCount = 0;
+  if (filterType !== 'all') activeFiltersCount++;
+  if (filterWalletId !== 'all') activeFiltersCount++;
+  if (filterCategoryId !== 'all') activeFiltersCount++;
+  if (filterGroupId !== 'all') activeFiltersCount++;
+  if (dateFrom) activeFiltersCount++;
+  if (dateTo) activeFiltersCount++;
+
+  const handleClearFilters = () => {
+     onFilterChange('all');
+     onWalletChange('all');
+     onCategoryChange('all');
+     onGroupChange('all');
+     onDateFromChange('');
+     onDateToChange('');
+  };
+
+  const filteredCategories = filterGroupId !== 'all' 
+       ? categories.filter(c => c.group_id === filterGroupId) 
+       : categories;
+
   return (
-    <div className="space-y-3">
-      {/* Search */}
-      <div className="relative">
+    <div className="flex items-center gap-2 w-full">
+      {/* Search Input */}
+      <div className="relative flex-1">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
           placeholder="Buscar movimiento..."
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="pl-9 bg-accent/30 border-border/50"
+          className="pl-9 h-10 bg-accent/20 border-border/50"
         />
       </div>
 
-      {/* Type filter tabs */}
-      <div className="flex gap-2 overflow-x-auto no-scrollbar">
-        {filterTabs.map((tab) => (
-          <button
-            key={tab.value}
-            onClick={() => onFilterChange(tab.value)}
-            className={cn(
-              'px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200',
-              filterType === tab.value
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-accent/50 text-muted-foreground hover:bg-accent'
+      {/* Popover Filters */}
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" className="h-10 gap-2 px-4 shadow-sm relative">
+            <Filter className="w-4 h-4 text-muted-foreground" />
+            <span className="hidden sm:inline font-medium">Filtros</span>
+            {activeFiltersCount > 0 && (
+                <span className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground font-bold shadow-sm">
+                   {activeFiltersCount}
+                </span>
             )}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-[340px] p-4 space-y-4 shadow-xl border-border/50">
+           
+           <div className="flex items-center justify-between border-b pb-3">
+              <h4 className="font-semibold text-sm">Filtros Avanzados</h4>
+              {activeFiltersCount > 0 && (
+                  <button onClick={handleClearFilters} className="text-xs text-muted-foreground hover:text-foreground transition-colors font-medium">
+                     Limpiar todo
+                  </button>
+              )}
+           </div>
 
-      {/* Advanced Filters: Dates and Wallet */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex-1">
-          <Select value={filterWalletId} onValueChange={(val) => val && onWalletChange(val)}>
-            <SelectTrigger className="w-full bg-accent/30 border-border/50 text-xs text-muted-foreground h-9">
-              <div className="flex items-center gap-2">
-                 <Wallet className="w-4 h-4" />
-                 <SelectValue placeholder="Todas las billeteras" />
+           <div className="space-y-4">
+              
+              {/* Tipo de Gasto */}
+              <div className="space-y-1.5">
+                 <Label className="text-xs text-muted-foreground font-medium">Tipo de Registro</Label>
+                 <Select value={filterType} onValueChange={(v: any) => onFilterChange(v)}>
+                    <SelectTrigger className="h-9">
+                       <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                       {filterTabs.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                    </SelectContent>
+                 </Select>
               </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas las billeteras</SelectItem>
-              {accounts.map(acc => (
-                <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
 
-        <div className="flex items-center gap-2 flex-1 relative">
-           <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-           <Input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => onDateFromChange(e.target.value)}
-              className="pl-8 bg-accent/30 border-border/50 text-xs h-9 w-full"
-           />
-           <span className="text-muted-foreground text-xs">-</span>
-           <Input
-              type="date"
-              value={dateTo}
-              onChange={(e) => onDateToChange(e.target.value)}
-              className="bg-accent/30 border-border/50 text-xs h-9 w-full"
-           />
-        </div>
-      </div>
+              {/* Cuenta/Billetera */}
+              <div className="space-y-1.5">
+                 <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><Wallet className="w-3.5 h-3.5" /> Billetera o Cuenta</Label>
+                 <Select value={filterWalletId} onValueChange={onWalletChange}>
+                    <SelectTrigger className="h-9">
+                       <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                       <SelectItem value="all">Cualquier cuenta</SelectItem>
+                       {accounts.map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                    </SelectContent>
+                 </Select>
+              </div>
+
+              {/* Grupo y Categoría */}
+              <div className="grid grid-cols-2 gap-2">
+                 <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><CheckSquare className="w-3.5 h-3.5" /> Grupo</Label>
+                    <Select value={filterGroupId} onValueChange={(val) => { onGroupChange(val); onCategoryChange('all'); }}>
+                       <SelectTrigger className="h-9">
+                          <SelectValue />
+                       </SelectTrigger>
+                       <SelectContent>
+                          <SelectItem value="all">Todos</SelectItem>
+                          {groups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
+                       </SelectContent>
+                    </Select>
+                 </div>
+                 
+                 <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><Tags className="w-3.5 h-3.5" /> Categoría</Label>
+                    <Select value={filterCategoryId} onValueChange={onCategoryChange}>
+                       <SelectTrigger className="h-9">
+                          <SelectValue />
+                       </SelectTrigger>
+                       <SelectContent>
+                          <SelectItem value="all">Todas</SelectItem>
+                          {filteredCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                       </SelectContent>
+                    </Select>
+                 </div>
+              </div>
+
+              {/* Rango de Fechas */}
+              <div className="space-y-1.5">
+                 <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Rango de Fechas</Label>
+                 <div className="grid grid-cols-2 gap-2">
+                    <Input 
+                       type="date" 
+                       value={dateFrom} 
+                       onChange={(e) => onDateFromChange(e.target.value)} 
+                       className="h-9 text-xs" 
+                    />
+                    <Input 
+                       type="date" 
+                       value={dateTo} 
+                       onChange={(e) => onDateToChange(e.target.value)} 
+                       className="h-9 text-xs" 
+                    />
+                 </div>
+              </div>
+
+           </div>
+           
+        </PopoverContent>
+      </Popover>
+
     </div>
   );
 }

@@ -14,10 +14,14 @@ export function TransactionsView() {
   const [filterType, setFilterType] = useState<TransactionType | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterWalletId, setFilterWalletId] = useState<string>('all');
+  const [filterCategoryId, setFilterCategoryId] = useState<string>('all');
+  const [filterGroupId, setFilterGroupId] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   
   const openSheet = useUIStore((s) => s.openSheet);
+
+  const categories = useFinanceStore((s) => s.categories);
 
   const filtered = useMemo(() => {
     let result = transactions;
@@ -41,8 +45,17 @@ export function TransactionsView() {
       const q = searchQuery.toLowerCase();
       result = result.filter((t) => t.description.toLowerCase().includes(q));
     }
+    if (filterCategoryId !== 'all') {
+      result = result.filter((t) => t.category_id === filterCategoryId);
+    }
+    if (filterGroupId !== 'all') {
+      result = result.filter((t) => {
+         const cat = categories.find(c => c.id === t.category_id);
+         return cat?.group_id === filterGroupId;
+      });
+    }
     return result;
-  }, [transactions, filterType, searchQuery, filterWalletId, dateFrom, dateTo]);
+  }, [transactions, categories, filterType, searchQuery, filterWalletId, filterCategoryId, filterGroupId, dateFrom, dateTo]);
 
   return (
     <div className="space-y-4">
@@ -60,6 +73,10 @@ export function TransactionsView() {
         onSearchChange={setSearchQuery}
         filterWalletId={filterWalletId}
         onWalletChange={setFilterWalletId}
+        filterCategoryId={filterCategoryId}
+        onCategoryChange={setFilterCategoryId}
+        filterGroupId={filterGroupId}
+        onGroupChange={setFilterGroupId}
         dateFrom={dateFrom}
         onDateFromChange={setDateFrom}
         dateTo={dateTo}
