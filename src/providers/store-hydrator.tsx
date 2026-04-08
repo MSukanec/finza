@@ -4,16 +4,14 @@ import { useEffect, useRef } from 'react';
 import { useFinanceStore } from '@/stores/finance-store';
 
 export function StoreHydrator({ children }: { children: React.ReactNode }) {
-  const hydrated = useRef(false);
+  const isHydrated = useFinanceStore((s) => s.isHydrated);
   const hydrate = useFinanceStore((s) => s.hydrate);
-  const login = useFinanceStore((s) => s.login);
-  const user = useFinanceStore((s) => s.user);
 
   useEffect(() => {
-    if (!hydrated.current) {
-      hydrate().then(() => { hydrated.current = true; });
+    if (!isHydrated) {
+      hydrate();
     }
-  }, [hydrate, login]);
+  }, [isHydrated, hydrate]);
 
   return <>{children}</>;
 }
