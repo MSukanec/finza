@@ -29,9 +29,7 @@ export function AccountsView() {
   const accountTypeLabels: Record<string, string> = {
     cash: 'Efectivo',
     bank: 'Banco',
-    savings: 'Ahorro',
-    credit: 'Crédito',
-    investment: 'Inversión',
+    digital: 'Billetera Digital',
   };
 
   return (

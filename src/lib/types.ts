@@ -13,7 +13,7 @@ export interface Currency {
 export interface Account {
   id: string;
   name: string;
-  type: 'cash' | 'bank' | 'savings' | 'credit' | 'investment';
+  type: 'cash' | 'bank' | 'digital';
   currency_id: string;
   balance: number;
   color: string;

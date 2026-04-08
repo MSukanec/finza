@@ -2,7 +2,7 @@
 
 import { useUIStore } from '@/stores/ui-store';
 import { useFinanceStore } from '@/stores/finance-store';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -80,11 +80,11 @@ export function TransactionForm() {
   ];
 
   return (
-    <Sheet open={isOpen} onOpenChange={(open) => !open && closeSheet()}>
-      <SheetContent side="bottom" className="rounded-t-2xl max-h-[85dvh] overflow-y-auto">
-        <SheetHeader className="pb-4">
-          <SheetTitle className="text-lg">Nuevo Movimiento</SheetTitle>
-        </SheetHeader>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && closeSheet()}>
+      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-md p-6">
+        <DialogHeader className="pb-2">
+          <DialogTitle className="text-lg text-center sm:text-left">Nuevo Movimiento</DialogTitle>
+        </DialogHeader>
 
         <div className="space-y-5 pb-6">
           {/* Type selector */}
@@ -208,8 +208,8 @@ export function TransactionForm() {
             Guardar Movimiento
           </Button>
         </div>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
 

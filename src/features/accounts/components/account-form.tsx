@@ -2,7 +2,7 @@
 
 import { useUIStore } from '@/stores/ui-store';
 import { useFinanceStore } from '@/stores/finance-store';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -38,11 +38,11 @@ export function AccountForm() {
   };
 
   return (
-    <Sheet open={isOpen} onOpenChange={(open) => !open && closeSheet()}>
-      <SheetContent side="bottom" className="rounded-t-2xl max-h-[85dvh] overflow-y-auto">
-        <SheetHeader className="pb-4">
-          <SheetTitle className="text-lg">Nueva Cuenta</SheetTitle>
-        </SheetHeader>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && closeSheet()}>
+      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-md p-6">
+        <DialogHeader className="pb-4">
+          <DialogTitle className="text-lg text-center sm:text-left">Nueva Cuenta</DialogTitle>
+        </DialogHeader>
 
         <div className="space-y-4 pb-6">
           <div className="space-y-2">
@@ -64,10 +64,8 @@ export function AccountForm() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="cash">Efectivo</SelectItem>
-                <SelectItem value="bank">Banco / Billetera Virtual</SelectItem>
-                <SelectItem value="savings">Ahorros</SelectItem>
-                <SelectItem value="credit">Tarjeta de Crédito</SelectItem>
-                <SelectItem value="investment">Inversión / Crypto</SelectItem>
+                <SelectItem value="bank">Banco Tradicional</SelectItem>
+                <SelectItem value="digital">Billetera Digital / Crypto</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -96,7 +94,7 @@ export function AccountForm() {
             Crear Cuenta
           </Button>
         </div>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
