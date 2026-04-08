@@ -132,11 +132,15 @@ export function TransactionsImportView() {
 
       parsedRows.forEach(row => {
         if (row.BILLETERA) uniqueWallets.add(row.BILLETERA.trim());
-        if (row.CATEGORIA && row.SUBCATEGORIA && row.CATEGORIA.toUpperCase() !== 'MOVIMIENTOS') {
+        const cVal = row.CATEGORIA?.trim() || '';
+        const sVal = row.SUBCATEGORIA?.trim() || '';
+        if (cVal && cVal.toUpperCase() !== 'MOVIMIENTOS') {
           const t = row.TIPO?.toUpperCase() === 'INGRESO' ? 'income' : 'expense';
-          uniqueCategories.set(`${t}-${row.CATEGORIA.trim()}-${row.SUBCATEGORIA.trim()}`, {
-             group: row.CATEGORIA.trim(),
-             name: row.SUBCATEGORIA.trim(),
+          const groupName = sVal ? cVal : 'General';
+          const catName = sVal ? sVal : cVal;
+          uniqueCategories.set(`${t}-${catName}`, {
+             group: groupName,
+             name: catName,
              type: t
           });
         }
@@ -275,9 +279,12 @@ export function TransactionsImportView() {
         }
 
         // NORMAL TX
+        const cVal = row.CATEGORIA?.trim() || '';
+        const sVal = row.SUBCATEGORIA?.trim() || '';
+        const catName = sVal ? sVal : cVal;
+
         const cat = currentCategories.find(c => 
-          c.name.toLowerCase() === row.SUBCATEGORIA?.trim().toLowerCase() && 
-          (c.group_name || '').toLowerCase() === row.CATEGORIA?.trim().toLowerCase() &&
+          c.name.toLowerCase() === catName.toLowerCase() && 
           c.type === type
         );
 
@@ -334,15 +341,16 @@ export function TransactionsImportView() {
   };
 
   const handleRevert = async (batchId: string) => {
-     if(!confirm(`¿Estás seguro que deseas DESHACER la importación de ${batchId}? Esto ocultará todas las filas.`)) return;
+     if(!window.confirm(`¿Estás seguro que deseas DESHACER la importación de ${batchId}?`)) return;
      const { revertImportBatch } = useFinanceStore.getState();
      
      try {
        await revertImportBatch(batchId);
-       fetchBatches();
-       alert("Lote eliminado con éxito de forma permanente (Hard Delete).");
+       await fetchBatches();
+       window.alert("Lote eliminado con éxito de forma permanente (Hard Delete).");
+       window.location.reload();
      } catch(e: any) {
-       alert("Error revirtiendo el lote: " + e.message);
+       window.alert("Error revirtiendo el lote: " + e.message);
      }
   };
 
