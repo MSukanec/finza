@@ -23,6 +23,46 @@ interface CSVRow {
   FACTURADO: string;
 }
 
+function parseArgentineMoney(val: string): number {
+  if (!val) return 0;
+  let str = String(val).trim();
+  
+  const lastComma = str.lastIndexOf(',');
+  const lastDot = str.lastIndexOf('.');
+
+  if (lastComma > lastDot) {
+    str = str.replace(/\./g, '');
+    str = str.replace(',', '.');
+  } else if (lastDot > lastComma) {
+    str = str.replace(/,/g, '');
+  } else if (lastComma !== -1) {
+    const parts = str.replace(/[^0-9,-]/g, '').split(',');
+    if (parts.length > 2) return parseFloat(str.replace(/,/g, '')) || 0;
+    if (parts[1] && parts[1].length === 3) {
+      if (parts[0] === '0' || parts[0] === '-0') {
+        str = str.replace(',', '.');
+      } else {
+        str = str.replace(',', '');
+      }
+    } else {
+      str = str.replace(',', '.');
+    }
+  } else if (lastDot !== -1) {
+    const parts = str.replace(/[^0-9.-]/g, '').split('.');
+    if (parts.length > 2) return parseFloat(str.replace(/\./g, '')) || 0;
+    if (parts[1] && parts[1].length === 3) {
+      if (parts[0] === '0' || parts[0] === '-0') {
+        // keep dot
+      } else {
+        str = str.replace('.', '');
+      }
+    }
+  }
+  
+  str = str.replace(/[^0-9.-]/g, '');
+  return parseFloat(str) || 0;
+}
+
 export function TransactionsImportView() {
   const [file, setFile] = useState<File | null>(null);
   const [parsedRows, setParsedRows] = useState<CSVRow[]>([]);
@@ -158,7 +198,7 @@ export function TransactionsImportView() {
         }
         
         let type: 'income'|'expense'|'transfer' = row.TIPO.toUpperCase() === 'INGRESO' ? 'income' : 'expense';
-        const amount = parseFloat(row.TOTAL.replace(',', '.').replace(/[^0-9.-]+/g,""));
+        const amount = parseArgentineMoney(row.TOTAL);
         const wallet = currentWallets.find(w => w.name.toLowerCase() === row.BILLETERA?.trim().toLowerCase());
         const currency = row.FIAT?.toUpperCase().startsWith('D') ? 'USD' : 'ARS';
         
