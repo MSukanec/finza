@@ -14,6 +14,15 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Finza — Finanzas Personales",
   description: "Gestión inteligente de tus finanzas personales. Multi-moneda, presupuestos y reportes.",
+  applicationName: "Finza",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Finza",
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export const viewport: Viewport = {
