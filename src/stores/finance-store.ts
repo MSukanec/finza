@@ -13,32 +13,42 @@ interface FinanceState {
 
   primaryCurrencyId: string;
   isHydrated: boolean;
-  user: any | null; // Supabase user
+  user: any | null; 
 
   hydrate: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   
   addTransaction: (tx: any) => Promise<void>;
+  removeTransaction: (id: string) => Promise<void>;
+  
   addAccount: (acc: any) => Promise<void>;
+  updateAccount: (id: string, data: Partial<Account>) => Promise<void>;
+  removeAccount: (id: string) => Promise<void>;
+  
   addCategory: (cat: any) => Promise<void>;
+  updateCategory: (id: string, data: Partial<Category>) => Promise<void>;
+  removeCategory: (id: string) => Promise<void>;
+  
+  addBudget: (budget: Omit<Budget, 'id' | 'created_at'>) => Promise<void>;
+  updateBudget: (id: string, data: Partial<Budget>) => Promise<void>;
+  removeBudget: (id: string) => Promise<void>;
   
   setPrimaryCurrency: (id: string) => void;
 }
 
 export const useFinanceStore = create<FinanceState>()((set, get) => ({
-  currencies: CURRENCIES, // Static for now
+  currencies: CURRENCIES,
   accounts: [],
   categories: [],
   transactions: [],
   budgets: [],
-  exchangeRates: EXCHANGE_RATES, // Static for now
+  exchangeRates: EXCHANGE_RATES,
   primaryCurrencyId: 'ars',
   isHydrated: false,
   user: null,
 
   hydrate: async () => {
-    // 1. Check Session
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       set({ isHydrated: true, user: null, accounts: [], categories: [], transactions: [] });
@@ -47,47 +57,45 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
 
     set({ user: session.user });
 
-    // 2. Fetch Data
     const [walletsRes, categoriesRes, txRes] = await Promise.all([
       supabase.from('wallets').select('*').order('created_at', { ascending: true }),
       supabase.from('categories').select('*').order('created_at', { ascending: true }),
       supabase.from('transactions').select('*').order('date', { ascending: false }),
     ]);
 
-    // Compute Account Balances locally based on transactions (since Wallets table doesn't store balance)
     const txs = txRes.data || [];
-    let accounts = (walletsRes.data || []).map((w) => ({
+    let accounts = (walletsRes.data || []).map((w: any) => ({
       id: w.id,
       name: w.name,
       type: w.type,
       currency_id: w.currency_code.toLowerCase(),
       balance: 0,
+      color: '#3b82f6',
+      icon: 'wallet',
+      created_at: w.created_at
     }));
 
-    // Reconstruct balances
     for (const tx of txs) {
-      const acc = accounts.find((a) => a.id === tx.wallet_id);
+      const acc = accounts.find((a: any) => a.id === tx.wallet_id);
       if (acc) {
         if (tx.type === 'income') acc.balance += Number(tx.amount);
         if (tx.type === 'expense') acc.balance -= Number(tx.amount);
         if (tx.type === 'transfer' || tx.type === 'exchange') acc.balance -= Number(tx.amount);
       }
-      if (tx.type === 'transfer' && tx.related_transaction_id) {
-        // Technically double-entry will handle the other leg independently if modeled as incoming tx 
-        // We'll trust the DB records. If the other leg is recorded as 'income', it will be processed.
-      }
     }
 
     set({
       accounts,
-      categories: (categoriesRes.data || []).map(c => ({
+      categories: (categoriesRes.data || []).map((c: any) => ({
         id: c.id,
         name: c.name,
         type: c.type,
-        color: '#6366f1', // Default color, as our DB doesn't have it yet
-        icon: 'folder'
+        color: '#6366f1',
+        icon: 'folder',
+        is_default: false,
+        created_at: c.created_at
       })),
-      transactions: txs.map(t => ({
+      transactions: txs.map((t: any) => ({
         id: t.id,
         type: t.type,
         amount: Number(t.amount),
@@ -96,7 +104,8 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         account_id: t.wallet_id,
         description: t.description,
         date: t.date,
-        destination_account_id: null, // For simplicity unless queried via related_transaction_id
+        destination_account_id: null,
+        created_at: t.created_at
       })),
       isHydrated: true,
     });
@@ -105,7 +114,6 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   login: async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
-      // Si no existe, lo creamos para que el entorno de desarrollo sea fluido
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password, options: { data: { full_name: 'Test User' } } });
       if (signUpError) throw signUpError;
       set({ user: signUpData.user });
@@ -120,13 +128,12 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     set({ user: null, accounts: [], categories: [], transactions: [] });
   },
 
+  // === TRANSACTIONS ===
   addTransaction: async (tx) => {
     const state = get();
-    // 1. Get user_id from DB user table related to auth
     const { data: userData } = await supabase.from('users').select('id').eq('auth_id', state.user?.id).single();
     if (!userData) return;
 
-    // Normal Transaction
     const { data, error } = await supabase.from('transactions').insert({
       user_id: userData.id,
       wallet_id: tx.account_id,
@@ -140,13 +147,12 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
 
     if (error) console.error("Error creating tx:", error);
 
-    // If transfer, handle leg 2 (Double entry)
     if (tx.type === 'transfer' && tx.destination_account_id && data) {
        await supabase.from('transactions').insert({
           user_id: userData.id,
           wallet_id: tx.destination_account_id,
           type: 'transfer',
-          amount: tx.amount, // Or converted amount
+          amount: tx.amount,
           currency_code: tx.currency_id.toUpperCase(),
           description: `Transferencia entrante: ${tx.description}`,
           date: tx.date || new Date().toISOString(),
@@ -154,9 +160,14 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
        });
     }
 
-    await get().hydrate(); // Reload everything cleanly
+    await get().hydrate();
+  },
+  removeTransaction: async (id) => {
+    await supabase.from('transactions').delete().eq('id', id);
+    await get().hydrate();
   },
 
+  // === ACCOUNTS ===
   addAccount: async (acc) => {
     const state = get();
     const { data: userData } = await supabase.from('users').select('id').eq('auth_id', state.user?.id).single();
@@ -170,7 +181,15 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     });
     await get().hydrate();
   },
+  updateAccount: async (id, data) => {
+    await get().hydrate(); // Stub
+  },
+  removeAccount: async (id) => {
+    await supabase.from('wallets').delete().eq('id', id);
+    await get().hydrate();
+  },
 
+  // === CATEGORIES ===
   addCategory: async (cat) => {
     const state = get();
     const { data: userData } = await supabase.from('users').select('id').eq('auth_id', state.user?.id).single();
@@ -182,6 +201,22 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
        type: cat.type
     });
     await get().hydrate();
+  },
+  updateCategory: async (id, data) => {
+    await get().hydrate(); // Stub
+  },
+  removeCategory: async (id) => {
+    await supabase.from('categories').delete().eq('id', id);
+    await get().hydrate();
+  },
+
+  // === BUDGETS (Local/Stub for now) ===
+  addBudget: async (budget) => {
+    set((state) => ({ budgets: [...state.budgets, { ...budget, id: Date.now().toString(), created_at: new Date().toISOString() } as Budget] }));
+  },
+  updateBudget: async (id, data) => {},
+  removeBudget: async (id) => {
+    set((state) => ({ budgets: state.budgets.filter(b => b.id !== id) }));
   },
 
   setPrimaryCurrency: (id) => set({ primaryCurrencyId: id }),
