@@ -25,6 +25,7 @@ interface FinanceState {
   updateTransaction: (id: string, data: Partial<Transaction>) => Promise<void>;
   removeTransaction: (id: string) => Promise<void>;
   revertImportBatch: (batchId: string) => Promise<void>;
+  toggleCheckpoint: (id: string, current: boolean) => Promise<void>;
   
   addAccount: (acc: any) => Promise<void>;
   updateAccount: (id: string, data: Partial<Account>) => Promise<void>;
@@ -143,6 +144,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         destination_account_id: t.destination_account_id,
         description: t.description,
         date: t.date,
+        is_checkpoint: t.is_checkpoint,
         invoiced_at: t.invoiced_at,
         created_at: t.created_at
       })),
@@ -238,6 +240,27 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     // But basic updates on date, amount, description run safely.
     
     await get().hydrate();
+  },
+
+  toggleCheckpoint: async (id: string, current: boolean) => {
+    // Optimistic UI
+    set(state => ({
+      transactions: state.transactions.map(t => 
+        t.id === id ? { ...t, is_checkpoint: !current } : t
+      )
+    }));
+    
+    // DB Update
+    const { error } = await supabase.from('transactions').update({ is_checkpoint: !current }).eq('id', id);
+    if (error) {
+      console.error('Error toggling checkpoint:', error);
+      // Revert on failure
+      set(state => ({
+        transactions: state.transactions.map(t => 
+          t.id === id ? { ...t, is_checkpoint: current } : t
+        )
+      }));
+    }
   },
 
   // === ACCOUNTS ===

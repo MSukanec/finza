@@ -5,7 +5,7 @@ import { useFinanceStore } from '@/stores/finance-store';
 import { formatMoney, getAmountColorClass } from '@/lib/money';
 import { getIcon } from '@/lib/icons';
 import { cn } from '@/lib/utils';
-import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Trash2 } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Trash2, CheckCircle2, CheckSquare } from 'lucide-react';
 import { useState } from 'react';
 
 interface TransactionListProps {
@@ -18,6 +18,7 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
   const categories = useFinanceStore((s) => s.categories);
   const currencies = useFinanceStore((s) => s.currencies);
   const removeTransaction = useFinanceStore((s) => s.removeTransaction);
+  const toggleCheckpoint = useFinanceStore((s) => s.toggleCheckpoint);
   const [swipedId, setSwipedId] = useState<string | null>(null);
 
   const grouped = groupByDate(transactions);
@@ -58,50 +59,77 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
               const CategoryIcon = category?.icon ? getIcon(category.icon) : TypeIcon;
 
               return (
-                <div
-                  key={tx.id}
-                  className="relative group"
-                >
-                  <div 
-                    onClick={() => onEdit?.(tx)}
-                    className="flex items-center gap-3 py-3 px-2 -mx-2 rounded-xl hover:bg-accent/30 transition-colors cursor-pointer"
-                  >
-                    <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ backgroundColor: `${category?.color || '#6b7280'}20` }}
-                    >
-                      <CategoryIcon
-                        className="w-5 h-5"
-                        style={{ color: category?.color || '#6b7280' }}
-                      />
+                <div key={tx.id} className="relative space-y-1">
+                  
+                  {/* Visual Checkpoint Separator */}
+                  {tx.is_checkpoint && (
+                    <div className="flex items-center gap-3 py-4 opacity-90 my-2">
+                       <div className="h-px bg-emerald-500/40 flex-1"></div>
+                       <div className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 shadow-sm">
+                         <CheckCircle2 className="w-3.5 h-3.5" />
+                         Revisado hasta aquí
+                       </div>
+                       <div className="h-px bg-emerald-500/40 flex-1"></div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{tx.description}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <p className="text-xs text-muted-foreground truncate max-w-[120px]">
-                          {category?.name || 'Transferencia'}
+                  )}
+
+                  <div className={cn("relative group transition-all", tx.is_checkpoint ? "bg-emerald-500/5 rounded-xl border border-emerald-500/10 shadow-sm" : "")}>
+                    <div 
+                      onClick={() => onEdit?.(tx)}
+                      className="flex items-center gap-3 py-3 px-2 -mx-2 rounded-xl hover:bg-accent/30 transition-colors cursor-pointer"
+                    >
+                      <div
+                        className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style={{ backgroundColor: `${category?.color || '#6b7280'}20` }}
+                      >
+                        <CategoryIcon
+                          className="w-5 h-5"
+                          style={{ color: category?.color || '#6b7280' }}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{tx.description}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <p className="text-xs text-muted-foreground truncate max-w-[120px]">
+                            {category?.name || 'Transferencia'}
+                          </p>
+                          {account && <span className="text-[10px] uppercase font-medium bg-secondary text-secondary-foreground px-1.5 py-0.5 rounded">
+                            {account.name}
+                          </span>}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className={cn('text-sm font-semibold', getAmountColorClass(0, tx.type))}>
+                          {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}
+                          {formatMoney(tx.amount, currency)}
                         </p>
-                        {account && <span className="text-[10px] uppercase font-medium bg-secondary text-secondary-foreground px-1.5 py-0.5 rounded">
-                          {account.name}
-                        </span>}
+                        <p className="text-[10px] text-muted-foreground">{currency.code}</p>
+                      </div>
+
+                      {/* Hover Actions */}
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleCheckpoint(tx.id, !!tx.is_checkpoint);
+                          }}
+                          className={cn("p-1.5 rounded-lg transition-all", tx.is_checkpoint ? "text-emerald-500 hover:bg-emerald-500/10" : "text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-500")}
+                          title="Marcar Revisión"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeTransaction(tx.id);
+                          }}
+                          className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className={cn('text-sm font-semibold', getAmountColorClass(0, tx.type))}>
-                        {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}
-                        {formatMoney(tx.amount, currency)}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground">{currency.code}</p>
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeTransaction(tx.id);
-                      }}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
                   </div>
                 </div>
               );

@@ -61,6 +61,7 @@ export interface Transaction {
   date: string;
   invoiced_at?: string;
   import_batch?: string;
+  is_checkpoint?: boolean;
   deleted_at?: string;
   created_at: string;
 }
