@@ -59,13 +59,31 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
 
     set({ user: session.user });
 
-    const [walletsRes, categoriesRes, txRes] = await Promise.all([
+    const txPromise = (async () => {
+      let allTxs: any[] = [];
+      let hasMore = true;
+      let page = 0;
+      const PAGE_SIZE = 1000;
+      while (hasMore) {
+        const { data } = await supabase.from('transactions')
+           .select('*')
+           .is('deleted_at', null)
+           .order('date', { ascending: false })
+           .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+        
+        if (!data || data.length === 0) break;
+        allTxs = allTxs.concat(data);
+        if (data.length < PAGE_SIZE) break;
+        page++;
+      }
+      return allTxs;
+    })();
+
+    const [walletsRes, categoriesRes, txs] = await Promise.all([
       supabase.from('wallets').select('*').order('created_at', { ascending: true }),
       supabase.from('categories').select('*').order('created_at', { ascending: true }),
-      supabase.from('transactions').select('*').is('deleted_at', null).order('date', { ascending: false }),
+      txPromise
     ]);
-
-    const txs = txRes.data || [];
     let accounts = (walletsRes.data || []).map((w: any) => ({
       id: w.id,
       name: w.name,

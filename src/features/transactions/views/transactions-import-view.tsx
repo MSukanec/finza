@@ -77,18 +77,39 @@ export function TransactionsImportView() {
   const addLog = (msg: string) => setLogs(prev => [...prev, msg]);
 
   const fetchBatches = async () => {
-     const { data } = await supabase.from('transactions')
-         .select('import_batch')
-         .not('import_batch', 'is', null)
-         .is('deleted_at', null);
+     let allData: any[] = [];
+     let hasMore = true;
+     let page = 0;
+     const PAGE_SIZE = 1000;
+     
+     while (hasMore) {
+       const { data } = await supabase.from('transactions')
+           .select('import_batch')
+           .not('import_batch', 'is', null)
+           .is('deleted_at', null)
+           .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+       
+       if (!data || data.length === 0) break;
+       allData = allData.concat(data);
+       if (data.length < PAGE_SIZE) break;
+       page++;
+     }
+
+     if (allData.length > 0) {
+         const counts = allData.reduce((acc: any, row: any) => {
+             const bid = row.import_batch;
+             acc[bid] = (acc[bid] || 0) + 1;
+             return acc;
+         }, {});
          
-     if(data) {
-        const counts = data.reduce((acc: any, row) => {
-           acc[row.import_batch] = (acc[row.import_batch] || 0) + 1;
-           return acc;
-        }, {});
-        // Sort batches newest first by parsing timestamp embedded in name
-        setBatches(Object.keys(counts).map(k => ({ id: k, count: counts[k] })).reverse());
+         const formatted = Object.keys(counts).map(key => ({
+             id: key,
+             count: counts[key]
+         })).sort((a,b) => b.id.localeCompare(a.id));
+         
+         setBatches(formatted);
+     } else {
+         setBatches([]);
      }
   };
 
