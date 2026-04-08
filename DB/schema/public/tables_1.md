@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-04-08T14:18:22.169Z
+> Generated: 2026-04-08T15:29:43.752Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -15,6 +15,7 @@
 | type | category_type | ✗ |  |  |
 | created_at | timestamptz | ✗ | now() |  |
 | updated_at | timestamptz | ✗ | now() |  |
+| group_name | text | ✗ | 'General'::text |  |
 
 ### `transactions`
 
@@ -33,6 +34,7 @@
 | related_transaction_id | uuid | ✓ |  | FK → transactions.id |
 | created_at | timestamptz | ✗ | now() |  |
 | updated_at | timestamptz | ✗ | now() |  |
+| invoiced_at | timestamptz | ✓ |  |  |
 
 ### `users`
 

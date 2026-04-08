@@ -20,8 +20,9 @@ interface FinanceState {
   logout: () => Promise<void>;
   
   addTransaction: (tx: any) => Promise<void>;
-  updateTransaction: (id: string, data: any) => Promise<void>;
+  updateTransaction: (id: string, data: Partial<Transaction>) => Promise<void>;
   removeTransaction: (id: string) => Promise<void>;
+  revertImportBatch: (batchId: string) => Promise<void>;
   
   addAccount: (acc: any) => Promise<void>;
   updateAccount: (id: string, data: Partial<Account>) => Promise<void>;
@@ -170,7 +171,11 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     await get().hydrate();
   },
   removeTransaction: async (id) => {
-    await supabase.from('transactions').delete().eq('id', id);
+    await supabase.from('transactions').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    await get().hydrate();
+  },
+  revertImportBatch: async (batchId) => {
+    await supabase.from('transactions').update({ deleted_at: new Date().toISOString() }).eq('import_batch', batchId);
     await get().hydrate();
   },
   updateTransaction: async (id, data) => {

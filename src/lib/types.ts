@@ -43,6 +43,8 @@ export interface Transaction {
   description: string;
   date: string;
   invoiced_at?: string;
+  import_batch?: string;
+  deleted_at?: string;
   created_at: string;
 }
 
