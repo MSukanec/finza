@@ -234,12 +234,20 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     await supabase.from('categories').insert({
        user_id: userData.id,
        name: cat.name,
-       type: cat.type
+       type: cat.type,
+       group_name: cat.group_name
     });
     await get().hydrate();
   },
   updateCategory: async (id, data) => {
-    await get().hydrate(); // Stub
+    const updateData: any = {};
+    if (data.name) updateData.name = data.name;
+    if (data.type) updateData.type = data.type;
+    if (data.group_name) updateData.group_name = data.group_name;
+    
+    const { error } = await supabase.from('categories').update(updateData).eq('id', id);
+    if (error) throw error;
+    await get().hydrate();
   },
   removeCategory: async (id) => {
     await supabase.from('categories').delete().eq('id', id);

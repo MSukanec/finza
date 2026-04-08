@@ -25,6 +25,7 @@ import { useUIStore } from '@/stores/ui-store';
 import { useFinanceStore } from '@/stores/finance-store';
 import { TransactionForm } from '@/features/transactions/components/transaction-form';
 import { AccountForm } from '@/features/accounts/components/account-form';
+import { CategoryForm } from '@/features/categories/components/category-form';
 import { UserProfile } from '@/components/user-profile';
 
 const mainNavItems = [
@@ -257,6 +258,7 @@ export default function DashboardLayout({
       {/* ===== GLOBAL MODALS ===== */}
       <TransactionForm />
       <AccountForm />
+      <CategoryForm />
     </div>
   );
 }
