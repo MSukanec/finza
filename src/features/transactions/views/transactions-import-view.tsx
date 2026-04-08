@@ -210,8 +210,13 @@ export function TransactionsImportView() {
                  uWallets.set(id, { original: rawW, currency: cur });
              }
           }
-          const cVal = r.CATEGORIA?.trim() || '';
-          const sVal = r.SUBCATEGORIA?.trim() || '';
+          let cVal = r.CATEGORIA?.trim() || '';
+          let sVal = r.SUBCATEGORIA?.trim() || '';
+          
+          if (!cVal && sVal) {
+             cVal = sVal;
+             sVal = '';
+          }
           
           if (cVal && cVal.toUpperCase() !== 'MOVIMIENTOS') {
              const t = r.TIPO?.toUpperCase() === 'INGRESO' ? 'income' : 'expense';
@@ -409,8 +414,14 @@ export function TransactionsImportView() {
         }
 
         // --- NORMAL LOGIC ---
-        const cVal = row.CATEGORIA?.trim() || '';
-        const sVal = row.SUBCATEGORIA?.trim() || '';
+        let cVal = row.CATEGORIA?.trim() || '';
+        let sVal = row.SUBCATEGORIA?.trim() || '';
+        
+        if (!cVal && sVal) {
+           cVal = sVal;
+           sVal = '';
+        }
+
         const groupName = sVal ? cVal : 'General';
         const catName = sVal ? sVal : cVal;
         const mapKey = `${type}-${groupName}-${catName}`;
