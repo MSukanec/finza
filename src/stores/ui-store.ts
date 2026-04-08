@@ -1,12 +1,14 @@
 import { create } from 'zustand';
 
+type SheetType = 'new-transaction' | 'edit-transaction' | 'new-account' | 'edit-account' | 'new-category' | 'edit-category' | 'new-budget' | 'edit-budget' | 'new-debt' | 'edit-debt' | null;
+
 interface UIState {
   // Modals / Sheets
-  activeSheet: string | null;
+  activeSheet: SheetType;
   sheetData: Record<string, unknown> | undefined;
 
   // Actions
-  openSheet: (id: string, data?: Record<string, unknown>) => void;
+  openSheet: (id: SheetType, data?: Record<string, unknown>) => void;
   closeSheet: () => void;
 }
 

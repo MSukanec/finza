@@ -22,14 +22,30 @@ export interface Account {
   created_at: string;
 }
 
+export interface CategoryGroup {
+  id: string;
+  name: string;
+  is_system: boolean;
+}
+
 export interface Category {
   id: string;
   name: string;
   type: 'income' | 'expense';
-  group_name: string;
+  group_id?: string;
+  group_name: string; // Keep for retro-compatibility until fully migrated
   color?: string;
   icon?: string;
   is_default: boolean;
+  created_at: string;
+}
+
+export interface Debt {
+  id: string;
+  category_id: string;
+  total_amount: number;
+  currency_code: string;
+  description?: string;
   created_at: string;
 }
 

@@ -1,12 +1,13 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase/client';
-import type { Account, Category, Transaction, Budget, Currency } from '@/lib/types';
+import type { Account, Category, Transaction, Budget, Currency, Debt } from '@/lib/types';
 import { CURRENCIES, EXCHANGE_RATES } from '@/lib/mock-data';
 
 interface FinanceState {
   currencies: Currency[];
   accounts: Account[];
   categories: Category[];
+  debts: Debt[];
   transactions: Transaction[];
   budgets: Budget[];
   exchangeRates: Record<string, number>;
@@ -43,6 +44,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   currencies: CURRENCIES,
   accounts: [],
   categories: [],
+  debts: [],
   transactions: [],
   budgets: [],
   exchangeRates: EXCHANGE_RATES,
@@ -53,7 +55,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   hydrate: async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      set({ isHydrated: true, user: null, accounts: [], categories: [], transactions: [] });
+      set({ isHydrated: true, user: null, accounts: [], categories: [], debts: [], transactions: [] });
       return;
     }
 
@@ -79,9 +81,10 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       return allTxs;
     })();
 
-    const [walletsRes, categoriesRes, txs] = await Promise.all([
+    const [walletsRes, categoriesRes, debtsRes, txs] = await Promise.all([
       supabase.from('wallets').select('*').order('created_at', { ascending: true }),
-      supabase.from('categories').select('*').order('created_at', { ascending: true }),
+      supabase.from('categories').select('*, category_groups(name)').order('created_at', { ascending: true }),
+      supabase.from('debts').select('*').order('created_at', { ascending: true }),
       txPromise
     ]);
     let accounts = (walletsRes.data || []).map((w: any) => ({
@@ -111,11 +114,20 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         id: c.id,
         name: c.name,
         type: c.type,
-        group_name: c.group_name || 'General',
+        group_id: c.group_id,
+        group_name: c.category_groups?.name || c.group_name || 'General',
         color: '#6366f1',
         icon: 'folder',
         is_default: false,
         created_at: c.created_at
+      })),
+      debts: (debtsRes.data || []).map((d: any) => ({
+        id: d.id,
+        category_id: d.category_id,
+        total_amount: Number(d.total_amount),
+        currency_code: d.currency_code,
+        description: d.description,
+        created_at: d.created_at
       })),
       transactions: txs.map((t: any) => ({
         id: t.id,

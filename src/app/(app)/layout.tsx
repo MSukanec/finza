@@ -17,6 +17,7 @@ import {
   Sun,
   X,
   FileSpreadsheet,
+  Landmark,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useTheme } from 'next-themes';
@@ -27,6 +28,7 @@ import { useFinanceStore } from '@/stores/finance-store';
 import { TransactionForm } from '@/features/transactions/components/transaction-form';
 import { AccountForm } from '@/features/accounts/components/account-form';
 import { CategoryForm } from '@/features/categories/components/category-form';
+import { DebtForm } from '@/features/debts/components/debt-form';
 import { UserProfile } from '@/components/user-profile';
 
 const mainNavItems = [
@@ -36,6 +38,7 @@ const mainNavItems = [
   { href: '/budgets', label: 'Presupuestos', icon: Target },
   { href: '/reports', label: 'Reportes', icon: BarChart3 },
   { href: '/categories', label: 'Categorías', icon: Tags },
+  { href: '/debts', label: 'Deudas', icon: Landmark },
   { href: '/importar', label: 'Importar Historial', icon: FileSpreadsheet },
 ];
 
@@ -240,7 +243,9 @@ export default function DashboardLayout({
               {[
                 { href: '/accounts', label: 'Cuentas', icon: Wallet },
                 { href: '/categories', label: 'Categorías', icon: Tags },
+                { href: '/debts', label: 'Deudas', icon: Landmark },
                 { href: '/reports', label: 'Reportes', icon: BarChart3 },
+                { href: '/importar', label: 'Importar', icon: FileSpreadsheet },
               ].map((item) => (
                 <Link
                   key={item.href}
@@ -261,6 +266,7 @@ export default function DashboardLayout({
       <TransactionForm />
       <AccountForm />
       <CategoryForm />
+      <DebtForm />
     </div>
   );
 }
