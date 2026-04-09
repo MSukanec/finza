@@ -107,8 +107,8 @@ export function ReportsView() {
 
   const tooltipStyle = {
     contentStyle: {
-      background: 'hsl(var(--card))',
-      border: '1px solid hsl(var(--border))',
+      background: 'var(--card)',
+      border: '1px solid var(--border)',
       borderRadius: '8px',
       padding: '8px 12px',
       fontSize: '12px',
@@ -130,12 +130,12 @@ export function ReportsView() {
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
-                <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} />
+                <YAxis tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} />
                 <Tooltip {...tooltipStyle} formatter={(value) => [`$${Number(value).toLocaleString('es-AR')}`, '']} />
-                <Bar dataKey="income" fill="hsl(var(--income))" radius={[4, 4, 0, 0]} name="Ingresos" />
-                <Bar dataKey="expense" fill="hsl(var(--expense))" radius={[4, 4, 0, 0]} name="Gastos" />
+                <Bar dataKey="income" fill="var(--income)" radius={[4, 4, 0, 0]} name="Ingresos" />
+                <Bar dataKey="expense" fill="var(--expense)" radius={[4, 4, 0, 0]} name="Gastos" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -207,16 +207,16 @@ export function ReportsView() {
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={dailyTrend}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="day" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
-                  <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="day" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} />
+                  <YAxis tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} />
                   <Tooltip {...tooltipStyle} formatter={(value) => [`$${Number(value).toLocaleString('es-AR')}`, '']} />
                   <Line
                     type="monotone"
                     dataKey="amount"
-                    stroke="hsl(var(--primary))"
+                    stroke="var(--primary)"
                     strokeWidth={2}
-                    dot={{ fill: 'hsl(var(--primary))', r: 3 }}
+                    dot={{ fill: 'var(--primary)', r: 3 }}
                     name="Gasto diario"
                   />
                 </LineChart>

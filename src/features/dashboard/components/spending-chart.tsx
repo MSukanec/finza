@@ -79,8 +79,8 @@ export function SpendingChart() {
                 </Pie>
                 <Tooltip
                   contentStyle={{
-                    background: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
+                    background: 'var(--card)',
+                    border: '1px solid var(--border)',
                     borderRadius: '8px',
                     padding: '8px 12px',
                     fontSize: '12px',
