@@ -5,43 +5,25 @@ import { useUIStore } from '@/stores/ui-store';
 import { getIcon } from '@/lib/icons';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight, Repeat, Tags } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { formatMoney } from '@/lib/money';
-
-// Native UI Accordion Helper Component
-function SimpleAccordion({ title, summary, children, defaultOpen = false }: { title: React.ReactNode, summary: React.ReactNode, children: React.ReactNode, defaultOpen?: boolean }) {
-    const [isOpen, setIsOpen] = useState(defaultOpen);
-    
-    return (
-        <div className="border border-border/50 rounded-xl overflow-hidden mb-3 bg-card">
-            <button 
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center justify-between p-4 bg-accent/20 hover:bg-accent/40 transition-colors text-left"
-            >
-                <div className="flex items-center gap-3">
-                   {isOpen ? <ChevronDown className="w-5 h-5 text-muted-foreground" /> : <ChevronRight className="w-5 h-5 text-muted-foreground" />}
-                   {title}
-                </div>
-                <div>
-                   {summary}
-                </div>
-            </button>
-            {isOpen && (
-                <div className="p-2 border-t border-border/50">
-                    {children}
-                </div>
-            )}
-        </div>
-    );
-}
+import { useRouter } from 'next/navigation';
+import { SimpleAccordion } from '@/components/ui/simple-accordion';
+import { useGlobalDialog } from '@/components/providers/dialog-provider';
+import { PageLayout } from '@/components/layout/page-layout';
 
 export function CategoriesView() {
   const categories = useFinanceStore((s) => s.categories);
   const transactions = useFinanceStore((s) => s.transactions);
   const removeCategory = useFinanceStore((s) => s.removeCategory);
+  const renameCategoryGroup = useFinanceStore((s) => s.renameCategoryGroup);
   const openSheet = useUIStore((s) => s.openSheet);
+  const router = useRouter();
+  const dialog = useGlobalDialog();
+
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
 
   // Group and enrich data
   const { incomes, expenses } = useMemo(() => {
@@ -109,11 +91,41 @@ export function CategoriesView() {
 
 
   const renderGroup = (group: any, type: 'income' | 'expense') => {
+      const gId = `${type}-${group.groupName}`;
       return (
           <SimpleAccordion 
-             key={group.groupName}
-             defaultOpen={true}
-             title={<span className="font-bold text-sm tracking-wide uppercase">{group.groupName}</span>}
+             key={gId}
+             isOpen={openGroup === gId}
+             onToggle={() => setOpenGroup(prev => prev === gId ? null : gId)}
+             title={
+                 <div className="flex items-center gap-2">
+                     <span className="font-bold text-sm tracking-wide">{group.groupName}</span>
+                     <div 
+                         role="button"
+                         tabIndex={0}
+                         onClick={async (e) => {
+                             e.stopPropagation();
+                             const newName = await dialog.prompt('Renombrar Macrogrupo', 'Nuevo nombre para el macrogrupo:', group.groupName);
+                             if (newName && newName.trim() !== '' && newName.trim() !== group.groupName) {
+                                 renameCategoryGroup(group.groupName, newName.trim());
+                             }
+                         }}
+                         onKeyDown={async (e) => {
+                             if(e.key === 'Enter' || e.key === ' ') {
+                                 e.stopPropagation();
+                                 const newName = await dialog.prompt('Renombrar Macrogrupo', 'Nuevo nombre para el macrogrupo:', group.groupName);
+                                 if (newName && newName.trim() !== '' && newName.trim() !== group.groupName) {
+                                     renameCategoryGroup(group.groupName, newName.trim());
+                                 }
+                             }
+                         }}
+                         className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary transition-all cursor-pointer"
+                         title="Editar nombre del grupo"
+                     >
+                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                     </div>
+                 </div>
+             }
              summary={
                 <div className="flex items-center gap-4 text-xs text-muted-foreground mr-2">
                     <span className="bg-background px-2 py-1 rounded-md border font-mono">Usos: {group.totalUses}</span>
@@ -137,7 +149,7 @@ export function CategoriesView() {
                       return (
                           <div 
                               key={cat.id}
-                              onClick={() => openSheet('edit-category', { category: cat })}
+                              onClick={() => router.push(`/transactions?category=${cat.id}`)}
                               className="group flex items-center justify-between p-3 rounded-lg hover:bg-accent/40 cursor-pointer transition-colors border border-transparent hover:border-border/50"
                           >
                               <div className="flex items-center gap-4 min-w-0 flex-1">
@@ -145,10 +157,21 @@ export function CategoriesView() {
                                      className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110"
                                      style={{ backgroundColor: `${cat.color || (type === 'income' ? '#10b981' : '#8b5cf6')}20` }}
                                    >
-                                     <Icon className="w-5 h-5" style={{ color: cat.color || (type === 'income' ? '#10b981' : '#8b5cf6') }} />
+                                     {cat.is_recurring ? (
+                                         <Repeat className="w-5 h-5 opacity-90" style={{ color: cat.color || (type === 'income' ? '#10b981' : '#8b5cf6') }} />
+                                     ) : (
+                                         <Icon className="w-5 h-5" style={{ color: cat.color || (type === 'income' ? '#10b981' : '#8b5cf6') }} />
+                                     )}
                                    </div>
                                    <div className="min-w-0">
-                                       <p className="font-semibold text-sm truncate text-foreground">{cat.name}</p>
+                                       <div className="flex items-center gap-2">
+                                           <p className="font-semibold text-sm truncate text-foreground">{cat.name}</p>
+                                           {cat.is_recurring && (
+                                                <Badge variant="outline" className="text-[10px] h-5 bg-primary/5 text-primary border-primary/20 shrink-0 uppercase tracking-widest px-1.5">
+                                                    Recurrente
+                                                </Badge>
+                                           )}
+                                       </div>
                                        <p className="text-xs text-muted-foreground/70 truncate">{cat.is_default ? 'Categoría de Sistema' : 'Categoría Personalizada'}</p>
                                    </div>
                               </div>
@@ -166,18 +189,42 @@ export function CategoriesView() {
                                       )}
                                   </div>
                                   {!cat.is_default && (
-                                      <button
-                                          onClick={(e) => {
-                                              e.stopPropagation();
-                                              removeCategory(cat.id);
-                                          }}
-                                          className="opacity-0 group-hover:opacity-100 p-2 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
-                                      >
-                                          <Trash2 className="w-4 h-4" />
-                                      </button>
+                                      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-all">
+                                          <button
+                                              onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  openSheet('edit-category', { category: cat });
+                                              }}
+                                              className="p-2 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary transition-all"
+                                              title="Editar categoría"
+                                          >
+                                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                                          </button>
+                                          <button
+                                              onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  dialog.deleteCategory(cat);
+                                              }}
+                                              className="p-2 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
+                                              title="Eliminar categoría"
+                                          >
+                                              <Trash2 className="w-4 h-4" />
+                                          </button>
+                                      </div>
                                   )}
                                   {cat.is_default && (
-                                      <div className="w-8" /> /* placeholder for alignment */
+                                      <div className="w-16 flex justify-end opacity-0 group-hover:opacity-100 transition-all">
+                                          <button
+                                              onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  openSheet('edit-category', { category: cat });
+                                              }}
+                                              className="p-2 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary transition-all"
+                                              title="Ver/Editar"
+                                          >
+                                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                                          </button>
+                                      </div> /* placeholder for alignment */
                                   )}
                               </div>
                           </div>
@@ -189,14 +236,27 @@ export function CategoriesView() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Listado de Categorías</h1>
-        <Button size="sm" className="gap-2" onClick={() => openSheet('new-category')}>
-          <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">Nueva Categoría</span>
-        </Button>
-      </div>
+    <PageLayout
+      title="Gestión de Categorías"
+      icon={Tags}
+      actions={
+        <>
+          <Button size="sm" variant="outline" className="gap-2" onClick={async () => {
+             const newName = await dialog.prompt('Nuevo Macrogrupo', 'Ingresa el nombre del nuevo grupo:');
+             if (newName && newName.trim() !== '') {
+                 useFinanceStore.getState().addCategory({ name: 'General', type: 'expense', group_name: newName.trim() });
+             }
+          }}>
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Nuevo Grupo</span>
+          </Button>
+          <Button size="sm" className="gap-2" onClick={() => openSheet('new-category')}>
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Nueva Categoría</span>
+          </Button>
+        </>
+      }
+    >
 
       {/* Expense Categories */}
       <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 delay-100 pb-2">
@@ -225,6 +285,6 @@ export function CategoriesView() {
              {incomes.map(g => renderGroup(g, 'income'))}
         </div>
       </div>
-    </div>
+    </PageLayout>
   );
 }

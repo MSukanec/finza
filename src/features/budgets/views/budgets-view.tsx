@@ -6,9 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Plus, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, parseLocalDate } from '@/lib/utils';
 import { getIcon } from '@/lib/icons';
 import { useMemo } from 'react';
+import { Target } from 'lucide-react';
+import { PageLayout } from '@/components/layout/page-layout';
 
 export function BudgetsView() {
   const budgets = useFinanceStore((s) => s.budgets);
@@ -22,7 +24,7 @@ export function BudgetsView() {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const monthExpenses = transactions.filter(
-      (t) => t.type === 'expense' && new Date(t.date) >= startOfMonth
+      (t) => t.type === 'expense' && parseLocalDate(t.date) >= startOfMonth
     );
 
     return budgets.map((budget) => ({
@@ -37,14 +39,16 @@ export function BudgetsView() {
   }, [budgets, transactions]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Presupuestos</h1>
+    <PageLayout
+      title="Presupuestos"
+      icon={Target}
+      actions={
         <Button size="sm" className="gap-2">
           <Plus className="w-4 h-4" />
           <span className="hidden sm:inline">Nuevo</span>
         </Button>
-      </div>
+      }
+    >
 
       {budgetWithRealSpent.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -133,6 +137,6 @@ export function BudgetsView() {
           );
         })
       )}
-    </div>
+    </PageLayout>
   );
 }

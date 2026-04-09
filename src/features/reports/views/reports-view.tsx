@@ -10,6 +10,9 @@ import {
   PieChart, Pie, Cell,
   LineChart, Line,
 } from 'recharts';
+import { BarChart3 } from 'lucide-react';
+import { PageLayout } from '@/components/layout/page-layout';
+import { parseLocalDate } from '@/lib/utils';
 
 export function ReportsView() {
   const transactions = useFinanceStore((s) => s.transactions);
@@ -29,7 +32,7 @@ export function ReportsView() {
       const label = d.toLocaleDateString('es-AR', { month: 'short' });
 
       const monthTxs = transactions.filter((t) => {
-        const td = new Date(t.date);
+        const td = parseLocalDate(t.date);
         return td >= d && td <= end;
       });
 
@@ -59,7 +62,7 @@ export function ReportsView() {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const expenses = transactions.filter(
-      (t) => t.type === 'expense' && new Date(t.date) >= startOfMonth
+      (t) => t.type === 'expense' && parseLocalDate(t.date) >= startOfMonth
     );
 
     const byCat: Record<string, number> = {};
@@ -89,7 +92,7 @@ export function ReportsView() {
       const d = new Date(now.getFullYear(), now.getMonth(), i);
       const dayExpenses = transactions
         .filter((t) => {
-          const td = new Date(t.date);
+          const td = parseLocalDate(t.date);
           return t.type === 'expense' && td.getDate() === i && td.getMonth() === now.getMonth();
         })
         .reduce((s, t) => {
@@ -113,8 +116,10 @@ export function ReportsView() {
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-bold">Reportes</h1>
+    <PageLayout
+      title="Reportes"
+      icon={BarChart3}
+    >
 
       {/* Income vs Expense Bar Chart */}
       <Card className="border-border/50">
@@ -220,6 +225,6 @@ export function ReportsView() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageLayout>
   );
 }

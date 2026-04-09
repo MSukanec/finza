@@ -6,8 +6,8 @@ import { useUIStore } from '@/stores/ui-store';
 import { SimpleAccordion } from '@/components/ui/simple-accordion';
 import { Button } from '@/components/ui/button';
 import { Plus, Landmark, Pencil } from 'lucide-react';
-
-import { cn } from '@/lib/utils';
+import { cn, parseLocalDate } from '@/lib/utils';
+import { PageLayout } from '@/components/layout/page-layout';
 
 export function DebtsView() {
   const openSheet = useUIStore((s) => s.openSheet);
@@ -18,17 +18,16 @@ export function DebtsView() {
   const currencies = useFinanceStore((s) => s.currencies);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Deudas</h1>
-          <p className="text-muted-foreground">Gestiona tus pasivos y progreso de pagos</p>
-        </div>
+    <PageLayout
+      title="Deudas"
+      icon={Landmark}
+      actions={
         <Button onClick={() => openSheet('new-debt')} className="gap-2">
           <Plus className="w-4 h-4" />
           <span className="hidden sm:inline">Nueva Deuda</span>
         </Button>
-      </div>
+      }
+    >
 
       {debts.length === 0 ? (
         <div className="text-center py-12 border rounded-xl bg-card/50">
@@ -115,11 +114,11 @@ export function DebtsView() {
                           </div>
                       ) : (
                           <div className="space-y-2">
-                             {txs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(tx => (
+                             {txs.sort((a,b) => parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime()).map(tx => (
                                  <div key={tx.id} className="flex items-center justify-between p-3 rounded-lg border bg-background/50 hover:bg-accent/50 transition-colors">
                                      <div className="flex flex-col">
                                          <span className="text-sm font-medium">{tx.description || 'Abono general'}</span>
-                                         <span className="text-xs text-muted-foreground">{new Intl.DateTimeFormat('es-AR', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(tx.date))}</span>
+                                         <span className="text-xs text-muted-foreground">{new Intl.DateTimeFormat('es-AR', { year: 'numeric', month: 'long', day: 'numeric' }).format(parseLocalDate(tx.date))}</span>
                                      </div>
                                      <span className="font-semibold text-sm">
                                          {currencies.find(c => c.id.toUpperCase() === tx.currency_id.toUpperCase())?.symbol || '$'} {tx.amount.toLocaleString('es-AR')}
@@ -134,6 +133,6 @@ export function DebtsView() {
           })}
         </div>
       )}
-    </div>
+    </PageLayout>
   );
 }

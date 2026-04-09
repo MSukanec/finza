@@ -2,7 +2,7 @@
 
 import { useUIStore } from '@/stores/ui-store';
 import { useFinanceStore } from '@/stores/finance-store';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ResponsiveModal, ResponsiveModalContent, ResponsiveModalHeader, ResponsiveModalTitle } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,10 +33,12 @@ export function AccountForm() {
   const [replacementWalletId, setReplacementWalletId] = useState('');
 
   const accounts = useFinanceStore((s) => s.accounts);
-  const compatibleAccounts = accounts.filter(a => 
-      a.id !== (sheetData?.account as any)?.id && 
-      a.currency_id === currencyId
-  );
+  const compatibleAccounts = [...accounts]
+      .filter(a => 
+          a.id !== (sheetData?.account as any)?.id && 
+          a.currency_id === currencyId
+      )
+      .sort((a,b) => a.name.localeCompare(b.name));
 
   useEffect(() => {
     if (isOpen) {
@@ -119,16 +121,16 @@ export function AccountForm() {
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && closeSheet()}>
-      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-md p-6">
-        <DialogHeader className="pb-4">
-          <DialogTitle className="text-lg text-center sm:text-left">
+    <ResponsiveModal open={isOpen} onOpenChange={(open) => !open && closeSheet()}>
+      <ResponsiveModalContent>
+        <ResponsiveModalHeader>
+          <ResponsiveModalTitle className="text-xl sm:text-lg text-center sm:text-left">
             {isEdit ? 'Editar Cuenta' : 'Nueva Cuenta'}
-          </DialogTitle>
-        </DialogHeader>
+          </ResponsiveModalTitle>
+        </ResponsiveModalHeader>
 
         {deleteMode === 'idle' && (
-        <div className="space-y-4 pb-6">
+        <div className="space-y-6 pb-6 mt-2">
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Nombre de la cuenta</Label>
             <Input
@@ -143,7 +145,7 @@ export function AccountForm() {
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Tipo de Cuenta</Label>
             <Select value={type} onValueChange={(v) => v && setType(v)}>
-              <SelectTrigger className="bg-accent/30 border-border/50">
+              <SelectTrigger className="h-12 bg-accent/30 border-border/50 text-base">
                 <SelectValue>
                   {type === 'bank' ? 'Banco Tradicional' : type === 'cash' ? 'Efectivo' : type === 'digital' ? 'Billetera Digital / Crypto' : 'Seleccionar tipo'}
                 </SelectValue>
@@ -159,7 +161,7 @@ export function AccountForm() {
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Moneda Principal</Label>
             <Select value={currencyId} onValueChange={(v) => v && setCurrencyId(v)}>
-              <SelectTrigger className="bg-accent/30 border-border/50">
+              <SelectTrigger className="h-12 bg-accent/30 border-border/50 text-base">
                 <SelectValue placeholder="Seleccionar moneda" />
               </SelectTrigger>
               <SelectContent>
@@ -274,7 +276,7 @@ export function AccountForm() {
               </div>
            </div>
         )}
-      </DialogContent>
-    </Dialog>
+      </ResponsiveModalContent>
+    </ResponsiveModal>
   );
 }

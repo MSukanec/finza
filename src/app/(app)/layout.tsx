@@ -18,6 +18,7 @@ import {
   X,
   FileSpreadsheet,
   Landmark,
+  Repeat,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useTheme } from 'next-themes';
@@ -30,6 +31,7 @@ import { AccountForm } from '@/features/accounts/components/account-form';
 import { CategoryForm } from '@/features/categories/components/category-form';
 import { DebtForm } from '@/features/debts/components/debt-form';
 import { UserProfile } from '@/components/user-profile';
+import { DialogProvider } from '@/components/providers/dialog-provider';
 
 const mainNavItems = [
   { href: '/dashboard', label: 'Inicio', icon: LayoutDashboard },
@@ -38,6 +40,7 @@ const mainNavItems = [
   { href: '/budgets', label: 'Presupuestos', icon: Target },
   { href: '/reports', label: 'Reportes', icon: BarChart3 },
   { href: '/categories', label: 'Categorías', icon: Tags },
+  { href: '/recurrentes', label: 'Recurrentes', icon: Repeat },
   { href: '/debts', label: 'Deudas', icon: Landmark },
   { href: '/importar', label: 'Importar Historial', icon: FileSpreadsheet },
 ];
@@ -94,7 +97,8 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex h-dvh overflow-hidden">
+    <DialogProvider>
+      <div className="flex h-dvh overflow-hidden">
       {/* ===== SIDEBAR (Desktop) ===== */}
       <aside className="hidden md:flex flex-col w-64 border-r border-border bg-sidebar">
         {/* Logo */}
@@ -164,7 +168,7 @@ export default function DashboardLayout({
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-          <div className="max-w-5xl mx-auto px-4 md:px-8 py-4 md:py-8 pb-24 md:pb-8">
+          <div className="w-full px-4 md:px-6 py-4 md:py-8 pb-24 md:pb-8">
             {children}
           </div>
         </div>
@@ -243,6 +247,7 @@ export default function DashboardLayout({
               {[
                 { href: '/accounts', label: 'Cuentas', icon: Wallet },
                 { href: '/categories', label: 'Categorías', icon: Tags },
+                { href: '/recurrentes', label: 'Recurrentes', icon: Repeat },
                 { href: '/debts', label: 'Deudas', icon: Landmark },
                 { href: '/reports', label: 'Reportes', icon: BarChart3 },
                 { href: '/importar', label: 'Importar', icon: FileSpreadsheet },
@@ -268,5 +273,6 @@ export default function DashboardLayout({
       <CategoryForm />
       <DebtForm />
     </div>
+    </DialogProvider>
   );
 }

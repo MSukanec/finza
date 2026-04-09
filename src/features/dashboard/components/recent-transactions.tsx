@@ -6,7 +6,7 @@ import { getIcon } from '@/lib/icons';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowRight, ArrowDownLeft, ArrowUpRight, ArrowLeftRight } from 'lucide-react';
 import Link from 'next/link';
-import { cn } from '@/lib/utils';
+import { cn, parseLocalDate } from '@/lib/utils';
 
 export function RecentTransactions() {
   const transactions = useFinanceStore((s) => s.transactions);
@@ -25,7 +25,7 @@ export function RecentTransactions() {
   };
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+    const date = parseLocalDate(dateStr);
     const now = new Date();
     const diff = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
 
@@ -71,15 +71,20 @@ export function RecentTransactions() {
                   />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{tx.description}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {category?.name || 'Transferencia'} · {formatDate(tx.date)}
+                  <p className="text-[15px] sm:text-base font-medium truncate text-foreground">
+                    {category ? `${category.group_name || 'General'} > ${category.name}` : 'Transferencia'}
+                  </p>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 truncate">
+                    {tx.description}
                   </p>
                 </div>
-                <p className={cn('text-sm font-semibold', getAmountColorClass(0, tx.type))}>
-                  {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}
-                  {formatMoney(tx.amount, currency)}
-                </p>
+                <div className="text-right flex-shrink-0 ml-3">
+                  <p className={cn('text-[15px] sm:text-base font-semibold', getAmountColorClass(0, tx.type))}>
+                    {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}
+                    {formatMoney(tx.amount, currency)}
+                  </p>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{formatDate(tx.date)}</p>
+                </div>
               </div>
             );
           })

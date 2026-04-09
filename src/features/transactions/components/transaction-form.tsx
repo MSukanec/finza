@@ -2,7 +2,7 @@
 
 import { useUIStore } from '@/stores/ui-store';
 import { useFinanceStore } from '@/stores/finance-store';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ResponsiveModal, ResponsiveModalContent, ResponsiveModalHeader, ResponsiveModalTitle } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,6 +35,7 @@ export function TransactionForm() {
   
   const [groupName, setGroupName] = useState('General');
   const [categoryId, setCategoryId] = useState('');
+  const [periodMonth, setPeriodMonth] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -58,6 +59,7 @@ export function TransactionForm() {
         setAmount('');
         setDescription('');
         setDate(new Date().toISOString().split('T')[0]);
+        setPeriodMonth('');
         setCategoryId('');
         setGroupName('General');
       }
@@ -76,20 +78,31 @@ export function TransactionForm() {
 
   const availableGroups = useMemo(() => {
     const groups = new Set(filteredCategories.map(c => c.group_name || 'General'));
-    return Array.from(groups);
+    return Array.from(groups).sort((a, b) => a.localeCompare(b));
   }, [filteredCategories]);
 
   const categoriesInGroup = useMemo(() => {
-    return filteredCategories.filter(c => (c.group_name || 'General') === groupName);
+    return filteredCategories
+       .filter(c => (c.group_name || 'General') === groupName)
+       .sort((a, b) => a.name.localeCompare(b.name));
   }, [filteredCategories, groupName]);
 
   // Si cambiamos de grupo, resetear categoría
   useEffect(() => {
     if (isOpen && categoryId) {
        const isValid = categoriesInGroup.find(c => c.id === categoryId);
-       if (!isValid) setCategoryId('');
+       if (!isValid) {
+         setCategoryId('');
+         setPeriodMonth('');
+       }
     }
   }, [groupName, categoriesInGroup, isOpen]);
+
+  const selectedCategory = useMemo(() => {
+    return categoriesInGroup.find(c => c.id === categoryId);
+  }, [categoriesInGroup, categoryId]);
+
+  const isRecurring = selectedCategory?.is_recurring || false;
 
   const handleSubmit = async () => {
     const numAmount = parseFloat(amount);
@@ -108,6 +121,7 @@ export function TransactionForm() {
         destination_account_id: type === 'transfer' ? destinationAccountId || null : null,
         description: description || getDefaultDescription(type),
         date: new Date(date).toISOString(),
+        period_month: type !== 'transfer' && isRecurring && periodMonth ? periodMonth : undefined,
       };
 
       if (isEdit && sheetData?.transaction) {
@@ -120,6 +134,7 @@ export function TransactionForm() {
       setAmount('');
       setDescription('');
       setCategoryId('');
+      setPeriodMonth('');
       setDestinationAccountId('');
       closeSheet();
     } catch (e: any) {
@@ -134,15 +149,15 @@ export function TransactionForm() {
   ];
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && closeSheet()}>
-      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-md p-6">
-        <DialogHeader className="pb-2">
-          <DialogTitle className="text-lg text-center sm:text-left">
+    <ResponsiveModal open={isOpen} onOpenChange={(open) => !open && closeSheet()}>
+      <ResponsiveModalContent>
+        <ResponsiveModalHeader>
+          <ResponsiveModalTitle className="text-xl sm:text-lg text-center sm:text-left">
             {isEdit ? 'Editar Movimiento' : 'Nuevo Movimiento'}
-          </DialogTitle>
-        </DialogHeader>
+          </ResponsiveModalTitle>
+        </ResponsiveModalHeader>
 
-        <div className="space-y-5 pb-6">
+        <div className="space-y-6 pb-6">
           {/* Type selector */}
           <div className="grid grid-cols-3 gap-2">
             {typeOptions.map((opt) => (
@@ -203,13 +218,13 @@ export function TransactionForm() {
               {type === 'transfer' ? 'Cuenta Origen' : 'Cuenta'}
             </Label>
             <Select value={accountId} onValueChange={(v) => v && setAccountId(v)}>
-              <SelectTrigger className="bg-accent/30 border-border/50">
+              <SelectTrigger className="h-12 bg-accent/30 border-border/50 text-base">
                 <SelectValue>
                   {accountId ? accounts.find(a => a.id === accountId)?.name : 'Seleccionar cuenta'}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {accounts.map((acc) => {
+                {[...accounts].sort((a, b) => a.name.localeCompare(b.name)).map((acc) => {
                   const cur = currencies.find((c) => c.id === acc.currency_id);
                   return (
                     <SelectItem key={acc.id} value={acc.id}>
@@ -226,14 +241,15 @@ export function TransactionForm() {
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Cuenta Destino</Label>
               <Select value={destinationAccountId} onValueChange={(v) => v && setDestinationAccountId(v)}>
-                <SelectTrigger className="bg-accent/30 border-border/50">
+                <SelectTrigger className="h-12 bg-accent/30 border-border/50 text-base">
                   <SelectValue>
                     {destinationAccountId ? accounts.find(a => a.id === destinationAccountId)?.name : 'Seleccionar destino'}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {accounts
+                  {[...accounts]
                     .filter((a) => a.id !== accountId)
+                    .sort((a, b) => a.name.localeCompare(b.name))
                     .map((acc) => {
                       const cur = currencies.find((c) => c.id === acc.currency_id);
                       return (
@@ -253,7 +269,7 @@ export function TransactionForm() {
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground">Macrogrupo</Label>
                 <Select value={groupName} onValueChange={(v) => v && setGroupName(v)}>
-                  <SelectTrigger className="bg-accent/30 border-border/50">
+                  <SelectTrigger className="h-12 bg-accent/30 border-border/50 text-base">
                     <SelectValue>{groupName}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -267,7 +283,7 @@ export function TransactionForm() {
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground">Categoría</Label>
                 <Select value={categoryId} onValueChange={(v) => v && setCategoryId(v)}>
-                  <SelectTrigger className="bg-accent/30 border-border/50">
+                  <SelectTrigger className="h-12 bg-accent/30 border-border/50 text-base">
                     <SelectValue>
                       {categoryId ? categoriesInGroup.find(c => c.id === categoryId)?.name : 'Seleccionar...'}
                     </SelectValue>
@@ -290,6 +306,19 @@ export function TransactionForm() {
             </div>
           )}
 
+            {/* Period if recurring */}
+            {type !== 'transfer' && isRecurring && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                <Label className="text-xs text-muted-foreground">Período de Facturación (Mes/Año)</Label>
+                <Input
+                  type="month"
+                  value={periodMonth}
+                  onChange={(e) => setPeriodMonth(e.target.value)}
+                  className="h-12 bg-primary/10 border-primary/30 font-medium"
+                />
+              </div>
+            )}
+
           {/* Submit */}
           <Button
             onClick={handleSubmit}
@@ -299,8 +328,8 @@ export function TransactionForm() {
             {isEdit ? 'Guardar Cambios' : 'Guardar Movimiento'}
           </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveModalContent>
+    </ResponsiveModal>
   );
 }
 

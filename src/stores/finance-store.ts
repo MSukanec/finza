@@ -35,6 +35,8 @@ interface FinanceState {
   addCategory: (cat: any) => Promise<void>;
   updateCategory: (id: string, data: Partial<Category>) => Promise<void>;
   removeCategory: (id: string) => Promise<void>;
+  removeCategoryAndTransfer: (oldId: string, newId: string) => Promise<void>;
+  renameCategoryGroup: (oldName: string, newName: string) => Promise<void>;
   
   addBudget: (budget: Omit<Budget, 'id' | 'created_at'>) => Promise<void>;
   updateBudget: (id: string, data: Partial<Budget>) => Promise<void>;
@@ -125,6 +127,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         color: '#6366f1',
         icon: 'folder',
         is_default: false,
+        is_recurring: c.is_recurring || false,
         created_at: c.created_at
       })),
       debts: (debtsRes.data || []).map((d: any) => ({
@@ -145,6 +148,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         destination_account_id: t.related_transaction_id ? t.related_transaction_id : null,
         description: t.description,
         date: t.date,
+        period_month: t.period_month,
         invoiced_at: t.invoiced_at,
         import_batch: t.import_batch,
         is_checkpoint: t.is_checkpoint,
@@ -187,6 +191,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
        currency_code: tx.currency_id.toUpperCase(),
        description: tx.description,
        date: tx.date || new Date().toISOString(),
+       period_month: tx.period_month || null,
        invoiced_at: tx.invoiced_at || null
     };
 
@@ -232,6 +237,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     if (data.account_id) updatePayload.wallet_id = data.account_id;
     if (data.description !== undefined) updatePayload.description = data.description;
     if (data.date) updatePayload.date = data.date;
+    if (data.period_month !== undefined) updatePayload.period_month = data.period_month;
 
     const { error } = await supabase.from('transactions').update(updatePayload).eq('id', id);
     if (error) {
@@ -329,26 +335,122 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     const { data: userData } = await supabase.from('users').select('id').eq('auth_id', state.user?.id).single();
     if (!userData) return;
 
-    await supabase.from('categories').insert({
+    // Optimistic UI
+    const tempId = 'temp-' + Date.now();
+    set(s => ({
+      categories: [...s.categories, {
+        id: tempId,
+        name: cat.name,
+        type: cat.type,
+        group_id: undefined,
+        group_name: cat.group_name,
+        color: '#6366f1',
+        icon: 'folder',
+        is_default: false,
+        is_recurring: cat.is_recurring || false,
+        created_at: new Date().toISOString()
+      }]
+    }));
+
+    let groupId = null;
+    const groupNameStr = cat.group_name || 'General';
+    const group = get().categoryGroups.find((g: any) => g.name === groupNameStr);
+    
+    if (group) {
+        groupId = group.id;
+    } else {
+        const { data: newGroup } = await supabase.from('category_groups')
+            .insert({ name: groupNameStr, user_id: userData.id, is_system: false })
+            .select()
+            .single();
+        if (newGroup) groupId = newGroup.id;
+    }
+
+    const { error } = await supabase.from('categories').insert({
        user_id: userData.id,
        name: cat.name,
        type: cat.type,
-       group_name: cat.group_name
+       group_name: groupNameStr,
+       group_id: groupId,
+       is_recurring: cat.is_recurring || false
     });
+    
+    if (error) {
+       console.error("Error adding category:", error);
+       // Revert
+       set(s => ({ categories: s.categories.filter(c => c.id !== tempId) }));
+    }
     await get().hydrate();
   },
   updateCategory: async (id, data) => {
+    // Optimistic UI
+    const prevCategories = get().categories;
+    set(s => ({
+       categories: s.categories.map(c => c.id === id ? { ...c, ...data } : c)
+    }));
+
+    let groupId = null;
+    if (data.group_name) {
+        const group = get().categoryGroups.find((g: any) => g.name === data.group_name);
+        if (group) {
+            groupId = group.id;
+        } else {
+            const userData = get().user;
+            if (userData) {
+                const { data: newGroup } = await supabase.from('category_groups')
+                    .insert({ name: data.group_name, user_id: userData.id, is_system: false })
+                    .select()
+                    .single();
+                if (newGroup) groupId = newGroup.id;
+            }
+        }
+    }
+
     const updateData: any = {};
     if (data.name) updateData.name = data.name;
     if (data.type) updateData.type = data.type;
-    if (data.group_name) updateData.group_name = data.group_name;
+    if (data.group_name) {
+       updateData.group_name = data.group_name;
+       if (groupId) updateData.group_id = groupId;
+    }
+    if (data.is_recurring !== undefined) updateData.is_recurring = data.is_recurring;
     
     const { error } = await supabase.from('categories').update(updateData).eq('id', id);
-    if (error) throw error;
-    await get().hydrate();
+    if (error) {
+       console.error("Error updating category:", error);
+       set({ categories: prevCategories });
+       throw error;
+    }
+    // Fire and forget refetch for long term consistency
+    get().hydrate();
   },
   removeCategory: async (id) => {
-    await supabase.from('categories').delete().eq('id', id);
+    // Optimistic UI
+    const prevCategories = get().categories;
+    set(s => ({ categories: s.categories.filter(c => c.id !== id) }));
+    
+    const { error } = await supabase.from('categories').delete().eq('id', id);
+    if (error) {
+       console.error("Error removing category:", error);
+       set({ categories: prevCategories });
+    }
+    // hydrate later
+    get().hydrate();
+  },
+  removeCategoryAndTransfer: async (oldId: string, newId: string) => {
+    // Update transactions
+    await supabase.from('transactions').update({ category_id: newId }).eq('category_id', oldId);
+    // Update debts
+    await supabase.from('debts').update({ category_id: newId }).eq('category_id', oldId);
+    // Delete old category
+    await supabase.from('categories').delete().eq('id', oldId);
+    
+    await get().hydrate();
+  },
+  renameCategoryGroup: async (oldName: string, newName: string) => {
+    // We update both category_groups (if exists) and categories tables to keep them in sync
+    await supabase.from('category_groups').update({ name: newName }).eq('name', oldName);
+    await supabase.from('categories').update({ group_name: newName }).eq('group_name', oldName);
     await get().hydrate();
   },
 

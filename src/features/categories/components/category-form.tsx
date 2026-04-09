@@ -2,7 +2,7 @@
 
 import { useUIStore } from '@/stores/ui-store';
 import { useFinanceStore } from '@/stores/finance-store';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ResponsiveModal, ResponsiveModalContent, ResponsiveModalHeader, ResponsiveModalTitle } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,6 +26,7 @@ export function CategoryForm() {
   const [name, setName] = useState('');
   const [type, setType] = useState<'expense' | 'income'>('expense');
   const [groupName, setGroupName] = useState('General');
+  const [isRecurring, setIsRecurring] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -34,10 +35,12 @@ export function CategoryForm() {
         setName(cat.name);
         setType(cat.type);
         setGroupName(cat.group_name || 'General');
+        setIsRecurring(cat.is_recurring || false);
       } else {
         setName('');
         setType('expense');
         setGroupName('General');
+        setIsRecurring(false);
       }
     }
   }, [isOpen, isEdit, sheetData]);
@@ -50,6 +53,7 @@ export function CategoryForm() {
         name: name.trim(),
         type,
         group_name: groupName.trim() || 'General',
+        is_recurring: isRecurring,
       };
 
       if (isEdit && sheetData?.category) {
@@ -63,25 +67,25 @@ export function CategoryForm() {
     }
   };
 
-  const existingGroups = Array.from(new Set(categories.map(c => c.group_name || 'General')));
+  const existingGroups = Array.from(new Set(categories.filter(c => c.type === type).map(c => c.group_name || 'General'))).sort((a, b) => a.localeCompare(b));
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && closeSheet()}>
-      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-md p-6">
-        <DialogHeader className="pb-4">
-          <DialogTitle className="text-lg text-center sm:text-left">
+    <ResponsiveModal open={isOpen} onOpenChange={(open) => !open && closeSheet()}>
+      <ResponsiveModalContent>
+        <ResponsiveModalHeader>
+          <ResponsiveModalTitle className="text-xl sm:text-lg text-center sm:text-left">
             {isEdit ? 'Editar Categoría' : 'Nueva Categoría'}
-          </DialogTitle>
-        </DialogHeader>
+          </ResponsiveModalTitle>
+        </ResponsiveModalHeader>
 
-        <div className="space-y-4 pb-6">
+        <div className="space-y-6 pb-6 mt-2">
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Nombre</Label>
             <Input
               placeholder="Ej: Suscripciones, Cursos, etc."
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="bg-accent/30 border-border/50"
+              className="h-12 bg-accent/30 border-border/50"
               autoFocus
             />
           </div>
@@ -89,7 +93,7 @@ export function CategoryForm() {
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Tipo</Label>
             <Select value={type} onValueChange={(v) => v && setType(v as 'expense' | 'income')}>
-              <SelectTrigger className="bg-accent/30 border-border/50">
+              <SelectTrigger className="h-12 bg-accent/30 border-border/50 text-base">
                 <SelectValue>{type === 'expense' ? 'Gasto' : 'Ingreso'}</SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -101,16 +105,29 @@ export function CategoryForm() {
 
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Macrogrupo</Label>
-            <Input
-              placeholder="Ej: General, Sincel, Entretenimiento"
-              value={groupName}
-              onChange={(e) => setGroupName(e.target.value)}
-              className="bg-accent/30 border-border/50"
-              list="existing-groups"
+            <Select value={groupName} onValueChange={(v) => v && setGroupName(v)}>
+              <SelectTrigger className="h-12 bg-accent/30 border-border/50 text-base">
+                <SelectValue placeholder="Selecciona un macrogrupo..." />
+              </SelectTrigger>
+              <SelectContent>
+                {existingGroups.map(g => (
+                    <SelectItem key={g} value={g}>{g}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center justify-between p-4 rounded-xl border border-border/50 bg-accent/10">
+            <div className="space-y-0.5">
+               <Label className="text-sm font-medium">¿Es Recurrente?</Label>
+               <p className="text-xs text-muted-foreground">Esta categoría se paga periódicamente (ej: alquiler, internet).</p>
+            </div>
+            <input 
+              type="checkbox" 
+              checked={isRecurring} 
+              onChange={e => setIsRecurring(e.target.checked)} 
+              className="w-5 h-5 accent-primary" 
             />
-            <datalist id="existing-groups">
-              {existingGroups.map(g => <option key={g} value={g} />)}
-            </datalist>
           </div>
 
           <Button
@@ -121,7 +138,7 @@ export function CategoryForm() {
             {isEdit ? 'Guardar Cambios' : 'Crear Categoría'}
           </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveModalContent>
+    </ResponsiveModal>
   );
 }

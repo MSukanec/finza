@@ -101,7 +101,7 @@ export function TransactionFilters({
                 </span>
             )}
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-[340px] p-4 space-y-4 shadow-xl border-border/50">
+        <PopoverContent side="left" align="start" className="w-[340px] p-4 space-y-4 shadow-xl border-border/50">
            
            <div className="flex items-center justify-between border-b pb-3">
               <h4 className="font-semibold text-sm">Filtros Avanzados</h4>
@@ -142,7 +142,7 @@ export function TransactionFilters({
               </div>
 
               {/* Grupo y Categoría */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-4">
                  <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><CheckSquare className="w-3.5 h-3.5" /> Grupo</Label>
                     <Select value={filterGroupId} onValueChange={(val) => { if (val) { onGroupChange(val); onCategoryChange('all'); } }}>
@@ -171,15 +171,18 @@ export function TransactionFilters({
               </div>
 
               {/* Rango de Fechas */}
-              <div className="space-y-1.5">
-                 <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Rango de Fechas</Label>
-                 <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-4">
+                 <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Fecha Desde</Label>
                     <Input 
                        type="date" 
                        value={dateFrom} 
                        onChange={(e) => onDateFromChange(e.target.value)} 
                        className="h-9 text-xs" 
                     />
+                 </div>
+                 <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Fecha Hasta</Label>
                     <Input 
                        type="date" 
                        value={dateTo} 

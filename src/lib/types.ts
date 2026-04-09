@@ -37,6 +37,7 @@ export interface Category {
   color?: string;
   icon?: string;
   is_default: boolean;
+  is_recurring: boolean;
   created_at: string;
 }
 
@@ -60,6 +61,7 @@ export interface Transaction {
   description: string;
   status: 'draft' | 'warning' | 'reviewed';
   date: string;
+  period_month?: string;
   invoiced_at?: string;
   import_batch?: string;
   is_checkpoint?: boolean;

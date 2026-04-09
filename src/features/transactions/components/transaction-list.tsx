@@ -4,9 +4,10 @@ import type { Transaction } from '@/lib/types';
 import { useFinanceStore } from '@/stores/finance-store';
 import { formatMoney, getAmountColorClass } from '@/lib/money';
 import { getIcon } from '@/lib/icons';
-import { cn } from '@/lib/utils';
+import { cn, parseLocalDate } from '@/lib/utils';
 import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Trash2, CheckCircle2, CheckSquare, Flag, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
+import { useGlobalDialog } from '@/components/providers/dialog-provider';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -21,6 +22,7 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
   const toggleCheckpoint = useFinanceStore((s) => s.toggleCheckpoint);
   const toggleTransactionStatus = useFinanceStore((s) => s.toggleTransactionStatus);
   const [swipedId, setSwipedId] = useState<string | null>(null);
+  const dialog = useGlobalDialog();
 
   const grouped = groupByDate(transactions);
 
@@ -100,19 +102,21 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
                         />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{tx.description}</p>
-                        <div className="flex flex-col mt-0.5">
-                          <p className="text-[11px] text-muted-foreground leading-snug truncate whitespace-normal break-words">
-                            {category ? `${category.group_name || 'General'} > ${category.name}` : 'Transferencia'}
+                        <p className="text-[15px] sm:text-base font-medium leading-tight truncate text-foreground">
+                          {category ? `${category.group_name || 'General'} > ${category.name}` : 'Transferencia'}
+                        </p>
+                        <div className="flex flex-col mt-1">
+                          <p className="text-xs sm:text-sm text-muted-foreground leading-snug truncate whitespace-normal break-words">
+                            {tx.description}
                           </p>
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0 ml-4">
-                        <p className={cn('text-sm font-semibold', getAmountColorClass(0, tx.type))}>
+                        <p className={cn('text-[15px] sm:text-base font-semibold leading-tight', getAmountColorClass(0, tx.type))}>
                           {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}
                           {formatMoney(tx.amount, currency)}
                         </p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">{account?.name || '---'}</p>
+                        <p className="text-xs sm:text-sm text-muted-foreground mt-1 leading-snug">{account?.name || '---'}</p>
                       </div>
 
                       {/* Hover Actions */}
@@ -142,9 +146,10 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
                           <Flag className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation();
-                            removeTransaction(tx.id);
+                            const ok = await dialog.confirm('Eliminar Transacción', '¿Estás seguro de que deseas eliminar este movimiento permanentemente?');
+                            if (ok) removeTransaction(tx.id);
                           }}
                           className={cn("p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all", (isReviewed || isWarning) ? "opacity-0 group-hover:opacity-100" : "")}
                           title="Eliminar"
@@ -172,7 +177,7 @@ function groupByDate(transactions: Transaction[]): Record<string, Transaction[]>
   yesterday.setDate(yesterday.getDate() - 1);
 
   transactions.forEach((tx) => {
-    const d = new Date(tx.date);
+    const d = parseLocalDate(tx.date);
     const txDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
     let label: string;

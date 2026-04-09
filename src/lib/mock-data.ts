@@ -13,22 +13,22 @@ export const CURRENCIES: Currency[] = [
 
 export const DEFAULT_CATEGORIES: Category[] = [
   // Gastos
-  { id: 'cat-food', name: 'Comida', type: 'expense', icon: 'UtensilsCrossed', color: '#f97316', is_default: true, created_at: '2026-01-01T00:00:00Z' },
-  { id: 'cat-transport', name: 'Transporte', type: 'expense', icon: 'Car', color: '#3b82f6', is_default: true, created_at: '2026-01-01T00:00:00Z' },
-  { id: 'cat-entertainment', name: 'Entretenimiento', type: 'expense', icon: 'Gamepad2', color: '#a855f7', is_default: true, created_at: '2026-01-01T00:00:00Z' },
-  { id: 'cat-health', name: 'Salud', type: 'expense', icon: 'Heart', color: '#ef4444', is_default: true, created_at: '2026-01-01T00:00:00Z' },
-  { id: 'cat-services', name: 'Servicios', type: 'expense', icon: 'Zap', color: '#eab308', is_default: true, created_at: '2026-01-01T00:00:00Z' },
-  { id: 'cat-home', name: 'Hogar', type: 'expense', icon: 'Home', color: '#14b8a6', is_default: true, created_at: '2026-01-01T00:00:00Z' },
-  { id: 'cat-education', name: 'Educación', type: 'expense', icon: 'GraduationCap', color: '#6366f1', is_default: true, created_at: '2026-01-01T00:00:00Z' },
-  { id: 'cat-shopping', name: 'Compras', type: 'expense', icon: 'ShoppingBag', color: '#ec4899', is_default: true, created_at: '2026-01-01T00:00:00Z' },
-  { id: 'cat-subscriptions', name: 'Suscripciones', type: 'expense', icon: 'CreditCard', color: '#8b5cf6', is_default: true, created_at: '2026-01-01T00:00:00Z' },
-  { id: 'cat-other-expense', name: 'Otros Gastos', type: 'expense', icon: 'MoreHorizontal', color: '#6b7280', is_default: true, created_at: '2026-01-01T00:00:00Z' },
+  { id: 'cat-food', name: 'Comida', type: 'expense', icon: 'UtensilsCrossed', color: '#f97316', is_default: true, is_recurring: false, created_at: '2026-01-01T00:00:00Z' },
+  { id: 'cat-transport', name: 'Transporte', type: 'expense', icon: 'Car', color: '#3b82f6', is_default: true, is_recurring: false, created_at: '2026-01-01T00:00:00Z' },
+  { id: 'cat-entertainment', name: 'Entretenimiento', type: 'expense', icon: 'Gamepad2', color: '#a855f7', is_default: true, is_recurring: false, created_at: '2026-01-01T00:00:00Z' },
+  { id: 'cat-health', name: 'Salud', type: 'expense', icon: 'Heart', color: '#ef4444', is_default: true, is_recurring: false, created_at: '2026-01-01T00:00:00Z' },
+  { id: 'cat-services', name: 'Servicios', type: 'expense', icon: 'Zap', color: '#eab308', is_default: true, is_recurring: false, created_at: '2026-01-01T00:00:00Z' },
+  { id: 'cat-home', name: 'Hogar', type: 'expense', icon: 'Home', color: '#14b8a6', is_default: true, is_recurring: false, created_at: '2026-01-01T00:00:00Z' },
+  { id: 'cat-education', name: 'Educación', type: 'expense', icon: 'GraduationCap', color: '#6366f1', is_default: true, is_recurring: false, created_at: '2026-01-01T00:00:00Z' },
+  { id: 'cat-shopping', name: 'Compras', type: 'expense', icon: 'ShoppingBag', color: '#ec4899', is_default: true, is_recurring: false, created_at: '2026-01-01T00:00:00Z' },
+  { id: 'cat-subscriptions', name: 'Suscripciones', type: 'expense', icon: 'CreditCard', color: '#8b5cf6', is_default: true, is_recurring: false, created_at: '2026-01-01T00:00:00Z' },
+  { id: 'cat-other-expense', name: 'Otros Gastos', type: 'expense', icon: 'MoreHorizontal', color: '#6b7280', is_default: true, is_recurring: false, created_at: '2026-01-01T00:00:00Z' },
   // Ingresos
-  { id: 'cat-salary', name: 'Salario', type: 'income', icon: 'Briefcase', color: '#22c55e', is_default: true, created_at: '2026-01-01T00:00:00Z' },
-  { id: 'cat-freelance', name: 'Freelance', type: 'income', icon: 'Laptop', color: '#06b6d4', is_default: true, created_at: '2026-01-01T00:00:00Z' },
-  { id: 'cat-investments', name: 'Inversiones', type: 'income', icon: 'TrendingUp', color: '#10b981', is_default: true, created_at: '2026-01-01T00:00:00Z' },
-  { id: 'cat-gifts', name: 'Regalos', type: 'income', icon: 'Gift', color: '#f472b6', is_default: true, created_at: '2026-01-01T00:00:00Z' },
-  { id: 'cat-other-income', name: 'Otros Ingresos', type: 'income', icon: 'Plus', color: '#84cc16', is_default: true, created_at: '2026-01-01T00:00:00Z' },
+  { id: 'cat-salary', name: 'Salario', type: 'income', icon: 'Briefcase', color: '#22c55e', is_default: true, is_recurring: false, created_at: '2026-01-01T00:00:00Z' },
+  { id: 'cat-freelance', name: 'Freelance', type: 'income', icon: 'Laptop', color: '#06b6d4', is_default: true, is_recurring: false, created_at: '2026-01-01T00:00:00Z' },
+  { id: 'cat-investments', name: 'Inversiones', type: 'income', icon: 'TrendingUp', color: '#10b981', is_default: true, is_recurring: false, created_at: '2026-01-01T00:00:00Z' },
+  { id: 'cat-gifts', name: 'Regalos', type: 'income', icon: 'Gift', color: '#f472b6', is_default: true, is_recurring: false, created_at: '2026-01-01T00:00:00Z' },
+  { id: 'cat-other-income', name: 'Otros Ingresos', type: 'income', icon: 'Plus', color: '#84cc16', is_default: true, is_recurring: false, created_at: '2026-01-01T00:00:00Z' },
 ];
 
 // ===== MOCK ACCOUNTS =====

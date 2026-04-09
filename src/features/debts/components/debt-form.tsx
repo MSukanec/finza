@@ -2,7 +2,7 @@
 
 import { useUIStore } from '@/stores/ui-store';
 import { useFinanceStore } from '@/stores/finance-store';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ResponsiveModal, ResponsiveModalContent, ResponsiveModalHeader, ResponsiveModalTitle } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -123,19 +123,20 @@ export function DebtForm() {
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(o) => !o && closeSheet()}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? 'Editar Deuda' : 'Nueva Deuda'}</DialogTitle>
-        </DialogHeader>
+    <ResponsiveModal open={isOpen} onOpenChange={(o) => !o && closeSheet()}>
+      <ResponsiveModalContent className="sm:max-w-[425px]">
+        <ResponsiveModalHeader>
+          <ResponsiveModalTitle>{isEdit ? 'Editar Deuda' : 'Nueva Deuda'}</ResponsiveModalTitle>
+        </ResponsiveModalHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-6 mt-2">
           <div className="space-y-2">
             <Label>Nombre (Reflejado como Subcategoría)</Label>
             <Input 
               value={name} 
               onChange={(e) => setName(e.target.value)} 
               placeholder="Ej: Préstamo Auto, Tarjeta Galicia, etc" 
+              className="h-12 bg-accent/30 border-border/50"
               required 
             />
           </div>
@@ -143,7 +144,7 @@ export function DebtForm() {
           <div className="space-y-2">
             <Label>Moneda de la Deuda</Label>
             <Select value={currencyCode} onValueChange={(val) => { if (val) setCurrencyCode(val) }} disabled={isEdit}>
-              <SelectTrigger>
+              <SelectTrigger className="h-12 bg-accent/30 border-border/50 text-base">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -162,7 +163,7 @@ export function DebtForm() {
                 type="number"
                 step="0.01"
                 min="0"
-                className="pl-7"
+                className="pl-7 h-12 bg-accent/30 border-border/50"
                 value={totalAmount}
                 onChange={(e) => setTotalAmount(e.target.value)}
                 required
@@ -177,6 +178,7 @@ export function DebtForm() {
               value={description} 
               onChange={(e) => setDescription(e.target.value)} 
               placeholder="Plazo, tasa de interés, entidad, etc" 
+              className="h-12 bg-accent/30 border-border/50"
             />
           </div>
 
@@ -188,16 +190,16 @@ export function DebtForm() {
             ) : <div/>}
 
             <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={closeSheet} disabled={loading}>
+                <Button type="button" variant="outline" className="h-12 w-full text-base" onClick={closeSheet} disabled={loading}>
                 Cancelar
                 </Button>
-                <Button type="submit" disabled={loading}>
-                {loading ? 'Guardando...' : (isEdit ? 'Actualizar' : 'Crear Deuda')}
+                <Button type="submit" className="h-12 w-full text-base" disabled={loading}>
+                {loading ? 'Guardando...' : (isEdit ? 'Actualizar' : 'Crear')}
                 </Button>
             </div>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveModalContent>
+    </ResponsiveModal>
   );
 }

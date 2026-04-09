@@ -10,6 +10,7 @@ import { Plus, TrendingUp, ChevronDown, ChevronRight, Wallet } from 'lucide-reac
 import { useMemo, useState } from 'react';
 import { useUIStore } from '@/stores/ui-store';
 import { cn } from '@/lib/utils';
+import { PageLayout } from '@/components/layout/page-layout';
 
 // Native UI Accordion Helper Component (Same pattern used in Categories)
 function SimpleAccordion({ title, summary, children, defaultOpen = false }: { title: React.ReactNode, summary: React.ReactNode, children: React.ReactNode, defaultOpen?: boolean }) {
@@ -99,14 +100,16 @@ export function AccountsView() {
   }, [accounts, currencies]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Cuentas y Billeteras</h1>
+    <PageLayout
+      title="Cuentas y Billeteras"
+      icon={Wallet}
+      actions={
         <Button size="sm" className="gap-2" onClick={() => openSheet('new-account')}>
           <Plus className="w-4 h-4" />
           <span className="hidden sm:inline">Nueva Cuenta</span>
         </Button>
-      </div>
+      }
+    >
 
       {/* Patrimonio Total Global */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/15 via-primary/5 to-transparent border border-primary/15 p-5">
@@ -184,6 +187,6 @@ export function AccountsView() {
              </div>
          )}
       </div>
-    </div>
+    </PageLayout>
   );
 }

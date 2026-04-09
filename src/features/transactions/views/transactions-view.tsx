@@ -3,18 +3,30 @@
 import { useFinanceStore } from '@/stores/finance-store';
 import { TransactionList } from '../components/transaction-list';
 import { TransactionFilters } from '../components/transaction-filters';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import type { TransactionType } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Plus } from 'lucide-react';
+import { Plus, ArrowLeftRight } from 'lucide-react';
 import { useUIStore } from '@/stores/ui-store';
+import { PageLayout } from '@/components/layout/page-layout';
 
 export function TransactionsView() {
   const transactions = useFinanceStore((s) => s.transactions);
   const [filterType, setFilterType] = useState<TransactionType | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterWalletId, setFilterWalletId] = useState<string>('all');
+  
+  const searchParams = useSearchParams();
   const [filterCategoryId, setFilterCategoryId] = useState<string>('all');
+  
+  useEffect(() => {
+    const categoryParam = searchParams.get('category');
+    if (categoryParam) {
+      setFilterCategoryId(categoryParam);
+    }
+  }, [searchParams]);
+
   const [filterGroupId, setFilterGroupId] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -58,14 +70,16 @@ export function TransactionsView() {
   }, [transactions, categories, filterType, searchQuery, filterWalletId, filterCategoryId, filterGroupId, dateFrom, dateTo]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Movimientos</h1>
-        <Button size="sm" className="gap-2" onClick={() => openSheet('new-transaction')}>
-          <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">Nuevo Registro</span>
-        </Button>
-      </div>
+    <PageLayout
+       title="Movimientos"
+       icon={ArrowLeftRight}
+       actions={
+            <Button size="sm" className="gap-2" onClick={() => openSheet('new-transaction')}>
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Nuevo Registro</span>
+            </Button>
+       }
+    >
       <TransactionFilters
         filterType={filterType}
         onFilterChange={setFilterType}
@@ -86,6 +100,6 @@ export function TransactionsView() {
         transactions={filtered} 
         onEdit={(tx) => openSheet('edit-transaction', { transaction: tx })}
       />
-    </div>
+    </PageLayout>
   );
 }
