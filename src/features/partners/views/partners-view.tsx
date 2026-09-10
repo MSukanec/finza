@@ -11,7 +11,7 @@ import { UserAvatar } from '@/components/ui/user-avatar';
 import { formatMoney } from '@/lib/money';
 import { parseLocalDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
-import type { PartnerPosition, Transaction } from '@/lib/types';
+import type { PartnerPosition, Transaction, Person } from '@/lib/types';
 import {
   Users,
   Plus,
@@ -179,6 +179,7 @@ export function PartnersView() {
                 key={p.id}
                 position={p}
                 currency={currency}
+                persona={p.user_id ? people[p.user_id] : undefined}
                 vinculado={!!p.user_id && !!people[p.user_id]}
                 movimientos={movimientosPorSocio.get(p.id) ?? []}
                 accounts={accounts}
@@ -197,6 +198,7 @@ export function PartnersView() {
 function PartnerRow({
   position: p,
   currency,
+  persona,
   vinculado,
   movimientos,
   accounts,
@@ -206,6 +208,8 @@ function PartnerRow({
 }: {
   position: PartnerPosition;
   currency: any;
+  /** La cuenta vinculada, si el socio ya se registró: de ahí sale la foto. */
+  persona?: Person;
   vinculado: boolean;
   movimientos: Transaction[];
   accounts: { id: string; name: string }[];
@@ -232,7 +236,12 @@ function PartnerRow({
           aria-label={`Ver los movimientos de ${p.name}`}
           className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <UserAvatar person={{ id: p.id, full_name: p.name, email: '', avatar_url: null }} />
+          {/* Si el socio está vinculado a una cuenta, la foto sale de ahí. El
+              objeto armado a mano es sólo para los que todavía no se
+              registraron: si no, un socio con foto salía con iniciales. */}
+          <UserAvatar
+            person={persona ?? { id: p.id, full_name: p.name, email: '', avatar_url: null }}
+          />
 
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-2">
