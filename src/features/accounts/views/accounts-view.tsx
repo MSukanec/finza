@@ -56,11 +56,21 @@ export function AccountsView() {
   const hasPending = (walletId: string) =>
     reconciliations.some((r) => r.wallet_id === walletId && r.status === 'pending');
 
+  /**
+   * El arqueo pendiente de una billetera, si lo hay.
+   *
+   * Se devuelve entero y no una etiqueta: la fila necesita los NÚMEROS. Antes
+   * sólo decía "Diferencia sin resolver", que avisa que algo no cierra y no
+   * dice ni cuánto contaste ni cuánto falta — justo los dos datos por los que
+   * uno mira esa fila.
+   */
+  const pendingOf = (walletId: string) =>
+    reconciliations.find((r) => r.wallet_id === walletId && r.status === 'pending') ?? null;
+
   const lastCountLabel = (walletId: string) => {
     const last = lastByWallet.get(walletId);
     if (!last) return 'Sin arquear';
     const days = Math.round((Date.now() - +new Date(last.counted_at)) / 86400000);
-    if (hasPending(walletId)) return 'Diferencia sin resolver';
     return days === 0 ? 'Arqueado hoy' : `Arqueado hace ${days} d`;
   };
 
@@ -178,7 +188,7 @@ export function AccountsView() {
                                   </div>
                              </div>
 
-                             <div className="flex items-center gap-3 sm:justify-end text-right">
+                             <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1.5 text-right">
                                  <div className="flex min-w-[80px] flex-col items-end text-sm font-semibold tabular-nums">
                                      <span className={cn(acc.balance < 0 ? "text-expense" : "")}>
                                          {formatMoney(acc.balance, group.currency)}
@@ -187,6 +197,29 @@ export function AccountsView() {
                                         {lastCountLabel(acc.id)}
                                      </span>
                                  </div>
+
+                                 {/* La diferencia con NÚMEROS. Antes la fila sólo decía
+                                     "Diferencia sin resolver": avisaba que algo no cerraba
+                                     y no decía ni cuánto contaste ni cuánto falta, que son
+                                     los dos datos por los que uno mira esa fila. */}
+                                 {(() => {
+                                     const pend = pendingOf(acc.id);
+                                     if (!pend) return null;
+                                     const diff = pend.counted_amount - pend.expected_amount;
+                                     return (
+                                         <span className={cn(
+                                             'shrink-0 rounded-lg px-2.5 py-1 text-xs tabular-nums',
+                                             diff < 0 ? 'bg-expense/12 text-expense' : 'bg-income/12 text-income'
+                                         )}>
+                                             Contaste {formatMoney(pend.counted_amount, group.currency)}
+                                             {' · '}
+                                             {diff < 0 ? 'faltan ' : 'sobran '}
+                                             <span className="font-semibold">
+                                                 {formatMoney(Math.abs(diff), group.currency)}
+                                             </span>
+                                         </span>
+                                     );
+                                 })()}
 
                                  {/* Arqueo es una acción propia y separada de editar la
                                      billetera: registrar cuánto hay hoy no es lo mismo que
