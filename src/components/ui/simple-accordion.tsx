@@ -1,56 +1,78 @@
-import { useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+'use client';
 
-export function SimpleAccordion({ 
-  title, 
-  summary, 
-  children, 
+import { useId, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+/**
+ * Sección plegable.
+ *
+ * El encabezado es un <button> de verdad y no un <div role="button">: así
+ * llegan gratis el foco, Enter, barra espaciadora y el anuncio correcto al
+ * lector de pantalla. La versión anterior simulaba todo eso a mano, sin estilo
+ * de foco —se podía tabular hasta el encabezado sin ver nada— y sin
+ * `aria-expanded`, así que no había forma de saber si estaba abierto.
+ */
+export function SimpleAccordion({
+  title,
+  summary,
+  children,
   defaultOpen = false,
   isOpen: controlledIsOpen,
-  onToggle
-}: { 
-  title: React.ReactNode, 
-  summary?: React.ReactNode, 
-  children: React.ReactNode, 
+  onToggle,
+}: {
+  title: React.ReactNode;
+  summary?: React.ReactNode;
+  children: React.ReactNode;
   defaultOpen?: boolean;
   isOpen?: boolean;
   onToggle?: () => void;
 }) {
   const [internalIsOpen, setInternalIsOpen] = useState(defaultOpen);
+  const panelId = useId();
 
   const isControlled = controlledIsOpen !== undefined;
   const isOpen = isControlled ? controlledIsOpen : internalIsOpen;
 
   const handleToggle = () => {
-    if (isControlled && onToggle) {
-        onToggle();
-    } else if (!isControlled) {
-        setInternalIsOpen(!isOpen);
-    }
+    if (isControlled) onToggle?.();
+    else setInternalIsOpen((prev) => !prev);
   };
 
   return (
-    <div className="border border-border/50 rounded-xl overflow-hidden mb-3 bg-card shadow-sm group">
-        <div 
-            role="button"
-            tabIndex={0}
-            onClick={handleToggle}
-            onKeyDown={(e) => { if(e.key === 'Enter' || e.key === ' ') handleToggle() }}
-            className="w-full flex items-center justify-between p-4 bg-accent/20 hover:bg-accent/40 transition-colors text-left cursor-pointer select-none"
-        >
-            <div className="flex items-center gap-3 w-full pr-4">
-                {isOpen ? <ChevronDown className="w-5 h-5 text-muted-foreground shrink-0" /> : <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />}
-                <div className="flex-1 w-full flex items-center justify-between min-w-0">
-                    {title}
-                    {summary && <div className="text-right shrink-0">{summary}</div>}
-                </div>
-            </div>
-        </div>
-        {isOpen && (
-            <div className="border-t border-border/50 bg-card">
-                {children}
-            </div>
+    <div className="mb-3 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-soft-xs">
+      <button
+        type="button"
+        onClick={handleToggle}
+        aria-expanded={isOpen}
+        aria-controls={panelId}
+        className={cn(
+          'flex w-full select-none items-center gap-3 bg-accent/20 p-4 text-left transition-colors',
+          'hover:bg-accent/40',
+          'outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring'
         )}
+      >
+        {/* Un solo ícono que gira. Cambiar de ChevronRight a ChevronDown hacía
+            saltar el ancho del encabezado al abrir y cerrar. */}
+        <ChevronDown
+          className={cn(
+            'size-5 shrink-0 text-muted-foreground transition-transform duration-200',
+            !isOpen && '-rotate-90'
+          )}
+          aria-hidden
+        />
+
+        <span className="flex min-w-0 flex-1 items-center justify-between gap-3">
+          {title}
+          {summary && <span className="shrink-0 text-right">{summary}</span>}
+        </span>
+      </button>
+
+      {isOpen && (
+        <div id={panelId} className="border-t border-border/60 bg-card">
+          {children}
+        </div>
+      )}
     </div>
   );
 }

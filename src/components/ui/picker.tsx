@@ -110,7 +110,10 @@ function Picker({
               </div>
             )}
 
-            <Combobox.Empty className="px-3 py-6 text-center text-sm text-muted-foreground">
+            {/* `empty:hidden` no es decorativo: Combobox.Empty SIEMPRE dibuja
+                su <div> y sólo anula los hijos, así que sin esto el padding
+                quedaba como una banda blanca fija arriba de la lista. */}
+            <Combobox.Empty className="empty:hidden px-3 py-6 text-center text-sm text-muted-foreground">
               {emptyMessage}
             </Combobox.Empty>
 

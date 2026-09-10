@@ -1,12 +1,13 @@
 'use client';
 
 import { useFinanceStore } from '@/stores/finance-store';
+import { SimpleAccordion } from '@/components/ui/simple-accordion';
 import { formatMoney } from '@/lib/money';
 import { getIcon } from '@/lib/icons';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { EXCHANGE_RATES } from '@/lib/mock-data';
-import { Plus, TrendingUp, ChevronDown, ChevronRight, Wallet, Scale } from 'lucide-react';
+import { Plus, TrendingUp, Wallet, Scale } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useUIStore } from '@/stores/ui-store';
 import { cn } from '@/lib/utils';
@@ -14,32 +15,6 @@ import { PageLayout } from '@/components/layout/page-layout';
 import { Kpi } from '@/components/ui/panel';
 
 // Native UI Accordion Helper Component (Same pattern used in Categories)
-function SimpleAccordion({ title, summary, children, defaultOpen = false }: { title: React.ReactNode, summary: React.ReactNode, children: React.ReactNode, defaultOpen?: boolean }) {
-    const [isOpen, setIsOpen] = useState(defaultOpen);
-    
-    return (
-        <div className="rounded-2xl overflow-hidden mb-3 bg-card shadow-soft-sm">
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center justify-between p-4 hover:bg-accent/40 transition-colors text-left"
-            >
-                <div className="flex items-center gap-3">
-                   {isOpen ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}
-                   {title}
-                </div>
-                <div>
-                   {summary}
-                </div>
-            </button>
-            {isOpen && (
-                <div className="p-2 border-t border-border/60 space-y-0.5">
-                    {children}
-                </div>
-            )}
-        </div>
-    );
-}
-
 export function AccountsView() {
   const reconciliations = useFinanceStore((s) => s.reconciliations);
 
@@ -182,6 +157,7 @@ export function AccountsView() {
                    </div>
                 }
              >
+               <div className="space-y-0.5 p-2">
                  {group.accounts.map(acc => {
                      const Icon = getIcon(acc.icon);
                      return (
@@ -281,6 +257,7 @@ export function AccountsView() {
                          </div>
                      );
                  })}
+               </div>
              </SimpleAccordion>
          ))}
 
