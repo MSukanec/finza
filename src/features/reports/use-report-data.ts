@@ -86,6 +86,12 @@ export interface Bucket {
   income: number;
   expense: number;
   net: number;
+  /**
+   * El mismo neto pero fechado por cuándo se movió la plata, no por cuándo
+   * ocurrió el hecho. Comparado contra `net` muestra el desfase: un mes puede
+   * cerrar en positivo y la caja recién verlo dos meses después.
+   */
+  cash: number;
   /** El valor de la métrica elegida, para los gráficos de una serie. */
   value: number;
   avg: number | null;
@@ -137,16 +143,28 @@ export function useReportData(filters: ReportFilters) {
 
     // ---- serie temporal ----
     const raw = new Map<number, { income: number; expense: number }>();
+    // Los mismos movimientos, fechados por cuándo se movió la plata. Es la
+    // otra mitad de la historia: `raw` dice si el negocio funcionó, `caja` dice
+    // cuándo se sintió en el banco.
+    const caja = new Map<number, number>();
+
     for (const t of filtered) {
+      const v = toPrimary(t.amount, t.currency_id);
+
       const key = bucketStart(parseLocalDate(t.date), filters.grain).getTime();
       const b = raw.get(key) ?? { income: 0, expense: 0 };
-      const v = toPrimary(t.amount, t.currency_id);
       if (t.type === 'income') b.income += v;
       else b.expense += v;
       raw.set(key, b);
+
+      const kCaja = bucketStart(parseLocalDate(t.settles_at ?? t.date), filters.grain).getTime();
+      caja.set(kCaja, (caja.get(kCaja) ?? 0) + (t.type === 'income' ? v : -v));
     }
 
-    const keys = [...raw.keys()].sort((a, b) => a - b);
+    // El eje tiene que llegar hasta el último movimiento de plata, no hasta el
+    // último hecho: si no, los cheques que vencen más adelante que la última
+    // compra quedarían fuera del gráfico.
+    const keys = [...new Set([...raw.keys(), ...caja.keys()])].sort((a, b) => a - b);
     const buckets: Bucket[] = [];
 
     if (keys.length) {
@@ -165,6 +183,7 @@ export function useReportData(filters: ReportFilters) {
           income: b.income,
           expense: b.expense,
           net,
+          cash: caja.get(cursor.getTime()) ?? 0,
           value: filters.metric === 'income' ? b.income : filters.metric === 'expense' ? b.expense : net,
           avg: null,
           cumulative: running,

@@ -13,6 +13,7 @@ import {
   EvolutionChart,
   IncomeVsExpenseChart,
   NetChart,
+  ResultVsCashChart,
   RankingChart,
 } from '../components/report-charts';
 
@@ -105,6 +106,10 @@ export function ReportsView() {
         <IncomeVsExpenseChart buckets={data.buckets} currency={data.currency} />
         <NetChart buckets={data.buckets} currency={data.currency} />
       </div>
+
+      {/* Va después del resultado y antes del acumulado: primero cuánto ganó
+          el negocio, después cuándo se sintió esa plata en el banco. */}
+      <ResultVsCashChart buckets={data.buckets} currency={data.currency} />
 
       <CumulativeChart buckets={data.buckets} currency={data.currency} />
 

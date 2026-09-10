@@ -268,6 +268,88 @@ export function NetChart({ buckets, currency }: { buckets: Bucket[]; currency: C
   );
 }
 
+// ==================================================== 3b. Resultado vs caja
+
+/**
+ * Las dos mitades de la misma historia.
+ *
+ * `Resultado` fecha cada movimiento cuando ocurrió: dice si el negocio
+ * funcionó ese mes. `Caja` lo fecha cuando se movió la plata: dice cuándo se
+ * sintió en el banco. Con pagos a plazo las dos curvas se separan, y esa
+ * distancia es exactamente el desfase que un cheque mete entre vender y cobrar.
+ *
+ * Cuando la de caja va por debajo, ya se gastó y todavía no se pagó: hay una
+ * deuda esperando. Cuando va por encima, se está pagando algo de meses
+ * anteriores.
+ *
+ * Las dos series son plata en la misma moneda, así que comparten el eje. Un
+ * gráfico con dos escalas distintas haría que cualquier par de curvas parezca
+ * relacionado.
+ */
+export function ResultVsCashChart({ buckets, currency }: { buckets: Bucket[]; currency: Currency }) {
+  const desfase = buckets.reduce((s, b) => s + Math.abs(b.net - b.cash), 0);
+  const separadas = desfase > 0;
+
+  return (
+    <ChartCard
+      title="Resultado vs caja"
+      subtitle={
+        separadas
+          ? 'Cuándo se generó la plata y cuándo se movió'
+          : 'Todo se paga al contado: las dos curvas coinciden'
+      }
+      icon={Scale}
+      legend={
+        <ChartLegend
+          items={[
+            { label: 'Resultado', color: TONE.neutral },
+            { label: 'Caja', color: 'var(--primary)' },
+          ]}
+        />
+      }
+    >
+      <div className="h-[260px] w-full">
+        {buckets.length === 0 ? (
+          <ChartEmpty />
+        ) : (
+          <ResponsiveContainer {...CHART_CONTAINER}>
+            <ComposedChart data={buckets} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
+              <CartesianGrid {...GRID} />
+              <XAxis dataKey="label" {...AXIS} interval="preserveStartEnd" minTickGap={28} />
+              <YAxis orientation="right" width={56} {...AXIS} tickFormatter={compactNumber} />
+              <ReferenceLine y={0} stroke="var(--border)" />
+              <Tooltip
+                cursor={CURSOR_BAR}
+                content={<ChartTooltip currency={currency} labelFormatter={bucketHeading} />}
+              />
+              <Line
+                type="monotone"
+                dataKey="net"
+                name="Resultado"
+                stroke={TONE.neutral}
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4, strokeWidth: 2, stroke: 'var(--card)' }}
+                isAnimationActive={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="cash"
+                name="Caja"
+                stroke="var(--primary)"
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4, strokeWidth: 2, stroke: 'var(--card)' }}
+                isAnimationActive={false}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </ChartCard>
+  );
+}
+
 // ============================================================ 4. Balance acumulado
 
 export function CumulativeChart({ buckets, currency }: { buckets: Bucket[]; currency: Currency }) {
