@@ -181,6 +181,36 @@ function optimistic(
   });
 }
 
+/**
+ * El recorte que aplica una vista previa de rol, copiado de las políticas de la
+ * base.
+ *
+ * Durante una vista previa la base NO se entera: la sesión sigue siendo la
+ * misma y responde con los permisos reales. Si el cliente no recortara, la
+ * pantalla mostraría el menú del colaborador con los datos del dueño — que es
+ * exactamente lo contrario de para lo que sirve la vista previa, y peor que no
+ * tenerla.
+ *
+ * Cada línea es el espejo de una política de DB/034. Están juntas a propósito:
+ * si se dispersaran por la función, una podría quedar sin actualizar y la vista
+ * previa mentiría de nuevo.
+ *
+ *   transactions, activity_log  →  can_see_all OR user_id = yo
+ *   wallets, partners, debts,
+ *   budgets, reconciliations    →  can_see_all
+ *   categories, category_groups →  sólo membresía (el colaborador las necesita
+ *                                  para clasificar lo que carga)
+ */
+export function recorteDeVistaPrevia(rol: WorkspaceRole | null) {
+  const veTodoElEspacio = rol === 'owner' || rol === 'member';
+  return {
+    /** Sólo los movimientos propios. */
+    soloLoMio: !veTodoElEspacio,
+    /** Nada de billeteras, socios, deudas, presupuestos ni arqueos. */
+    sinPatrimonio: !veTodoElEspacio,
+  };
+}
+
 const WS_KEY = 'finza:workspace';
 // Devuelve { workspace_id } solo si hay espacio activo (evita romper en modo legacy pre-migración)
 const wsPatch = (wsId: string | null) => (wsId ? { workspace_id: wsId } : {});
@@ -421,6 +451,11 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
 
     const soloLoSuyo = rolEfectivo === 'collaborator';
 
+    // El recorte del cliente sólo se aplica MIENTRAS SE PREVISUALIZA. Sin vista
+    // previa no hace falta: la base ya devolvió nada más que lo permitido, y
+    // filtrar de nuevo acá sólo escondería datos legítimos.
+    const recorte = preview ? recorteDeVistaPrevia(preview) : null;
+
     const [walletsRes, categoriesRes, debtsRes, groupsRes, txs] = await Promise.all([
       soloLoSuyo
         ? supabase.rpc('billeteras_para_cargar', { ws: currentWorkspaceId })
@@ -522,15 +557,15 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       currentWorkspaceId,
       currentRole: rolReal,
       people,
-      budgets,
-      reconciliations: ((reconciliationsRes as any).data || []).map((r: any) => ({
+      budgets: recorte?.sinPatrimonio ? [] : budgets,
+      reconciliations: (recorte?.sinPatrimonio ? [] : (reconciliationsRes as any).data || []).map((r: any) => ({
         ...r,
         counted_amount: Number(r.counted_amount),
         expected_amount: Number(r.expected_amount),
       })) as Reconciliation[],
       purges: ((purgesRes as any).data || []) as Purge[],
-      accounts: conSaldos,
-      partners: ((partnersRes as any).data || []).map((p: any) => ({
+      accounts: recorte?.sinPatrimonio ? [] : conSaldos,
+      partners: (recorte?.sinPatrimonio ? [] : (partnersRes as any).data || []).map((p: any) => ({
         ...p,
         ownership_pct: Number(p.ownership_pct ?? 0),
       })) as Partner[],
@@ -547,7 +582,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         is_recurring: c.is_recurring || false,
         created_at: c.created_at
       })),
-      debts: (debtsRes.data || []).map((d: any) => ({
+      debts: (recorte?.sinPatrimonio ? [] : debtsRes.data || []).map((d: any) => ({
         id: d.id,
         category_id: d.category_id,
         total_amount: Number(d.total_amount),
@@ -555,7 +590,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         description: d.description,
         created_at: d.created_at
       })),
-      transactions: txs.map((t: any) => ({
+      transactions: (recorte?.soloLoMio ? txs.filter((t: any) => t.user_id === appUserId) : txs).map((t: any) => ({
         user_id: t.user_id ?? null,
         id: t.id,
         type: t.type,
