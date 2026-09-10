@@ -134,6 +134,9 @@ export function TransactionForm() {
   const isTransfer = type === 'transfer';
   // Aporte y retiro: la plata es de un socio, no del negocio.
   const isEquity = type === 'contribution' || type === 'withdrawal';
+  // Sólo un gasto o un ingreso pueden cobrarse o pagarse otro día: hay un
+  // tercero de por medio. Lo demás mueve plata en el acto.
+  const aplazable = type === 'income' || type === 'expense';
 
   const typeCategories = useMemo(
     () => (isTransfer || isEquity ? [] : categories.filter((c) => c.type === type)),
@@ -249,7 +252,8 @@ export function TransactionForm() {
         category_id: isTransfer || isEquity ? null : category!.id,
         partner_id: isEquity ? partnerId : null,
         // Mediodía local, igual que `date`, para que no se corra un día.
-        settles_at: settlesAt ? new Date(`${settlesAt}T12:00:00`).toISOString() : null,
+        settles_at:
+          aplazable && settlesAt ? new Date(`${settlesAt}T12:00:00`).toISOString() : null,
         account_id: account.id,
         destination_account_id: isTransfer ? destination!.id : null,
         description: description.trim() || defaultDescription(type),
@@ -294,6 +298,7 @@ export function TransactionForm() {
                   setCategoryId('');
                 }
                 if (nuevo !== 'contribution' && nuevo !== 'withdrawal') setPartnerId('');
+                if (nuevo !== 'income' && nuevo !== 'expense') setSettlesAt('');
               }}
               options={TYPES}
               searchable={false}
@@ -309,34 +314,38 @@ export function TransactionForm() {
             />
           </Field>
 
-          {/* La segunda fecha, la del cheque o el pago a plazo. Vacía significa
-              contado, que es la enorme mayoría de los casos: por eso el campo
-              está pero no molesta. */}
-          <Field
-            label="Se paga"
-            htmlFor="tx-pago"
-            hint={
-              settlesAt ? (
-                <button
-                  type="button"
-                  onClick={() => setSettlesAt('')}
-                  className="font-medium text-primary hover:underline"
-                >
-                  contado
-                </button>
-              ) : (
-                'contado'
-              )
-            }
-          >
-            <Input
-              id="tx-pago"
-              type="date"
-              value={settlesAt}
-              min={date}
-              onChange={(e) => setSettlesAt(e.target.value)}
-            />
-          </Field>
+          {/* La segunda fecha: la del cheque o el pago a plazo.
+              Sólo donde tiene sentido. Un gasto se paga y un ingreso se cobra,
+              y las dos cosas pueden caer otro día. Una transferencia entre
+              billeteras propias, un aporte y un retiro no: esa plata se mueve
+              cuando se mueve, no hay un tercero que la difiera. */}
+          {aplazable && (
+            <Field
+              label={type === 'income' ? 'Se cobra' : 'Se paga'}
+              htmlFor="tx-pago"
+              hint={
+                settlesAt ? (
+                  <button
+                    type="button"
+                    onClick={() => setSettlesAt('')}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    contado
+                  </button>
+                ) : (
+                  'contado'
+                )
+              }
+            >
+              <Input
+                id="tx-pago"
+                type="date"
+                value={settlesAt}
+                min={date}
+                onChange={(e) => setSettlesAt(e.target.value)}
+              />
+            </Field>
+          )}
 
           {isEquity && (
             <Field

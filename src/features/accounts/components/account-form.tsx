@@ -114,7 +114,7 @@ export function AccountForm() {
         </ResponsiveModalHeader>
 
         <ResponsiveModalBody className="space-y-3">
-          <Field label="Nombre de la billetera" htmlFor="acc-nombre">
+          <Field label="Nombre" htmlFor="acc-nombre">
             <Input
               id="acc-nombre"
               placeholder="Ej: Banco Galicia, Billetera Mágica…"
@@ -143,7 +143,8 @@ export function AccountForm() {
             </Field>
 
           <Field
-            label={isEdit ? 'Saldo con el que arrancaste' : '¿Cuánto tenés ahora?'}
+            label="Saldo inicial"
+            hint={isEdit ? 'punto de partida' : 'lo que hay hoy'}
             htmlFor="acc-saldo"
           >
             <Input

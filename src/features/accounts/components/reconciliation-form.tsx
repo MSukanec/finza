@@ -158,8 +158,10 @@ export function ReconciliationForm() {
         <ResponsiveModalBody className="space-y-3">
           {!result ? (
             <>
+              {/* La billetera ya está en el título del modal: repetirla acá
+                  hacía una etiqueta tan larga que se comía la fila entera. */}
               <Field
-                label={`¿Cuánto hay realmente en ${wallet?.name ?? 'la billetera'}?`}
+                label="Contás"
                 htmlFor="arqueo-monto"
                 hint={parsed !== null ? formatMoney(parsed, currency) : currency?.code}
               >
