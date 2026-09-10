@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T20:25:24.331Z
+> Generated: 2026-09-10T20:31:49.982Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -46,7 +46,7 @@
 - `invite_to_workspace(ws uuid, invitee_email text, invitee_role text DEFAULT 'member'::text)` → text 🔐 *(public/functions_1.md)*
 - `is_workspace_member(ws uuid)` → boolean 🔐 *(public/functions_1.md)*
 - `is_workspace_owner(ws uuid)` → boolean 🔐 *(public/functions_1.md)*
-- `list_workspace_members(ws uuid)` → TABLE(id uuid, user_id uuid, email text, full_name text, role text, pending boolean) 🔐 *(public/functions_1.md)*
+- `list_workspace_members(ws uuid)` → TABLE(id uuid, user_id uuid, email text, full_name text, role text, pending boolean, last_sign_in timestamp with time zone) 🔐 *(public/functions_1.md)*
 - `list_workspace_people(ws uuid)` → TABLE(id uuid, full_name text, email text, avatar_url text) 🔐 *(public/functions_2.md)*
 - `log_activity()` → trigger 🔐 *(public/functions_2.md)*
 - `normalizar_texto(t text)` → text *(public/functions_2.md)*

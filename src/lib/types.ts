@@ -198,6 +198,8 @@ export interface ActivityEntry {
 }
 
 export interface WorkspaceMember {
+  /** Último ingreso a la app. NULL si nunca entró o si no aceptó la invitación. */
+  last_sign_in?: string | null;
   id: string;
   user_id: string;
   email: string;

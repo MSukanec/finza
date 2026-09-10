@@ -7,6 +7,7 @@ import { Panel } from '@/components/ui/panel';
 import { Button } from '@/components/ui/button';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { cn } from '@/lib/utils';
+import { haceCuanto, esDeHoy } from '@/lib/tiempo';
 import { ROLE_LABEL, ROLE_HINT, type WorkspaceRole } from '@/lib/types';
 import { Settings, Users, Eye, ShieldCheck, Info } from 'lucide-react';
 import { LogoUploader } from '../components/logo-uploader';
@@ -76,9 +77,21 @@ export function SettingsView() {
                     {m.pending ? 'Invitación sin aceptar' : m.email}
                   </p>
                 </div>
-                <span className="shrink-0 rounded-md bg-accent px-2 py-1 text-xs font-medium">
-                  {ROLE_LABEL[m.role]}
-                </span>
+                {/* La última conexión dice quién está mirando las cuentas y
+                    quién no. Entre socios eso es información de trabajo. */}
+                <div className="shrink-0 text-right">
+                  <span className="block rounded-md bg-accent px-2 py-1 text-xs font-medium">
+                    {ROLE_LABEL[m.role]}
+                  </span>
+                  <span
+                    className={cn(
+                      'mt-1 block text-[11px]',
+                      esDeHoy(m.last_sign_in) ? 'text-income' : 'text-muted-foreground'
+                    )}
+                  >
+                    {m.pending ? 'sin aceptar' : haceCuanto(m.last_sign_in)}
+                  </span>
+                </div>
               </li>
             ))}
           </ul>

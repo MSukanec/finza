@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T20:25:24.331Z
+> Generated: 2026-09-10T20:31:49.982Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -634,14 +634,14 @@ $function$
 
 ### `list_workspace_members(ws uuid)` 🔐
 
-- **Returns**: TABLE(id uuid, user_id uuid, email text, full_name text, role text, pending boolean)
+- **Returns**: TABLE(id uuid, user_id uuid, email text, full_name text, role text, pending boolean, last_sign_in timestamp with time zone)
 - **Kind**: function | STABLE | SECURITY DEFINER
 
 <details><summary>Source</summary>
 
 ```sql
 CREATE OR REPLACE FUNCTION public.list_workspace_members(ws uuid)
- RETURNS TABLE(id uuid, user_id uuid, email text, full_name text, role text, pending boolean)
+ RETURNS TABLE(id uuid, user_id uuid, email text, full_name text, role text, pending boolean, last_sign_in timestamp with time zone)
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'public', 'pg_temp'
@@ -652,14 +652,17 @@ BEGIN
     END IF;
 
     RETURN QUERY
-        SELECT m.id, m.user_id, u.email, u.full_name, m.role, false
+        SELECT m.id, m.user_id, u.email, u.full_name, m.role, false, au.last_sign_in_at
           FROM public.workspace_members m
           JOIN public.users u ON u.id = m.user_id
+          LEFT JOIN auth.users au ON au.id = u.auth_id
          WHERE m.workspace_id = ws
 
         UNION ALL
 
-        SELECT i.id, NULL::uuid, i.email, NULL::text, i.role, true
+        -- Una invitación sin aceptar no tiene cuenta todavía: no hay conexión
+        -- que mostrar y la pantalla lo dice como "sin aceptar".
+        SELECT i.id, NULL::uuid, i.email, NULL::text, i.role, true, NULL::timestamptz
           FROM public.workspace_invitations i
          WHERE i.workspace_id = ws AND i.accepted_at IS NULL
 

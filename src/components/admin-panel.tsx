@@ -12,23 +12,11 @@ import {
 } from '@/components/ui/responsive-modal';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { cn } from '@/lib/utils';
+import { haceCuanto, esDeHoy } from '@/lib/tiempo';
 import type { RegisteredUser } from '@/lib/types';
 import { Shield, Eye, RefreshCw } from 'lucide-react';
 
-/** "hace 3 horas", "hace 2 días". Para saber si alguien entró recién. */
-function haceCuanto(iso: string | null): string {
-  if (!iso) return 'nunca entró';
-  const min = Math.floor((Date.now() - +new Date(iso)) / 60000);
-  if (min < 1) return 'recién';
-  if (min < 60) return `hace ${min} min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `hace ${h} h`;
-  const d = Math.floor(h / 24);
-  if (d < 30) return `hace ${d} ${d === 1 ? 'día' : 'días'}`;
-  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-const esReciente = (iso: string) => Date.now() - +new Date(iso) < 24 * 3600 * 1000;
+const esReciente = esDeHoy;
 
 /**
  * Quién se registró en la app.

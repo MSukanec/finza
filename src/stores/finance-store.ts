@@ -740,6 +740,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         full_name: m.full_name,
         role: m.role as WorkspaceRole,
         pending: m.pending,
+        last_sign_in: m.last_sign_in ?? null,
       })),
     });
   },
