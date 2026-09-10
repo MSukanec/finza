@@ -199,15 +199,21 @@ export function TransactionForm() {
     isTransfer && !!destination && !!account && destination.currency_id !== account.currency_id;
 
   // Las listas del formulario, ya con la moneda como texto secundario.
-  const walletOptions = useMemo(
-    () =>
-      sortedAccounts.map((acc) => ({
+  // Sólo las hojas: una billetera que agrupa subcuentas no recibe movimientos,
+  // y la base lo rechaza. El nombre del padre va como contexto para distinguir
+  // "Caja fuerte" de cualquier otra caja.
+  const walletOptions = useMemo(() => {
+    const nombrePadre = new Map(accounts.map((a) => [a.id, a.name]));
+    return sortedAccounts
+      .filter((acc) => !acc.isGroup)
+      .map((acc) => ({
         value: acc.id,
-        label: acc.name,
+        label: acc.parent_id
+          ? `${nombrePadre.get(acc.parent_id) ?? ''} › ${acc.name}`
+          : acc.name,
         hint: currencies.find((c) => c.id === acc.currency_id)?.code,
-      })),
-    [sortedAccounts, currencies]
-  );
+      }));
+  }, [sortedAccounts, accounts, currencies]);
 
   const groupOptions = useMemo(() => groups.map((g) => ({ value: g, label: g })), [groups]);
 

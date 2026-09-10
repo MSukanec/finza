@@ -1,9 +1,9 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T19:16:28.638Z
+> Generated: 2026-09-10T19:29:15.251Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Functions (chunk 1: activity_authors — protect_is_admin)
+## [PUBLIC] Functions (chunk 1: activity_authors — log_activity)
 
 ### `activity_authors(ws uuid)` 🔐
 
@@ -20,8 +20,8 @@ CREATE OR REPLACE FUNCTION public.activity_authors(ws uuid)
  SET search_path TO 'public', 'pg_temp'
 AS $function$
 BEGIN
-    IF NOT public.is_workspace_member(ws) THEN
-        RAISE EXCEPTION 'No sos miembro de este espacio';
+    IF NOT public.can_see_all(ws) THEN
+        RAISE EXCEPTION 'No tenés acceso a esta información en este espacio';
     END IF;
 
     RETURN QUERY
@@ -116,8 +116,8 @@ DECLARE
     v_pattern text := public.normalizar_texto(p_pattern);
     v_id      uuid;
 BEGIN
-    IF NOT public.is_workspace_member(ws) THEN
-        RAISE EXCEPTION 'No sos miembro de este espacio';
+    IF NOT public.can_see_all(ws) THEN
+        RAISE EXCEPTION 'No tenés acceso a esta información en este espacio';
     END IF;
     IF v_pattern = '' THEN
         RAISE EXCEPTION 'La regla necesita un texto que reconocer';
@@ -161,6 +161,110 @@ $function$
 ```
 </details>
 
+### `billeteras_para_cargar(ws uuid)` 🔐
+
+- **Returns**: TABLE(id uuid, name text, type text, currency_code text)
+- **Kind**: function | STABLE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.billeteras_para_cargar(ws uuid)
+ RETURNS TABLE(id uuid, name text, type text, currency_code text)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+    IF NOT public.is_workspace_member(ws) THEN
+        RAISE EXCEPTION 'No sos miembro de este espacio';
+    END IF;
+
+    RETURN QUERY
+        SELECT w.id, w.name, w.type::text, w.currency_code
+          FROM public.wallets w
+         WHERE w.workspace_id = ws AND w.deleted_at IS NULL
+         ORDER BY w.name;
+END;
+$function$
+```
+</details>
+
+### `can_see_all(ws uuid)` 🔐
+
+- **Returns**: boolean
+- **Kind**: function | STABLE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.can_see_all(ws uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+    SELECT coalesce(public.workspace_role(ws) IN ('owner', 'member'), false)
+$function$
+```
+</details>
+
+### `check_wallet_depth()`
+
+- **Returns**: trigger
+- **Kind**: function | VOLATILE | SECURITY INVOKER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.check_wallet_depth()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+    IF NEW.parent_id IS NOT NULL THEN
+        IF NEW.parent_id = NEW.id THEN
+            RAISE EXCEPTION 'Una billetera no puede ser su propia cuenta madre';
+        END IF;
+        IF EXISTS (SELECT 1 FROM public.wallets w WHERE w.id = NEW.parent_id AND w.parent_id IS NOT NULL) THEN
+            RAISE EXCEPTION 'Sólo se permite un nivel de subcuentas';
+        END IF;
+        IF EXISTS (SELECT 1 FROM public.wallets w WHERE w.parent_id = NEW.id) THEN
+            RAISE EXCEPTION 'Esta billetera ya tiene subcuentas: no puede colgar de otra';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$function$
+```
+</details>
+
+### `check_wallet_is_leaf()`
+
+- **Returns**: trigger
+- **Kind**: function | VOLATILE | SECURITY INVOKER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.check_wallet_is_leaf()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+    IF NEW.wallet_id IS NOT NULL
+       AND EXISTS (SELECT 1 FROM public.wallets w WHERE w.parent_id = NEW.wallet_id AND w.deleted_at IS NULL)
+    THEN
+        RAISE EXCEPTION 'Esa billetera agrupa subcuentas: el movimiento va en una de ellas';
+    END IF;
+    RETURN NEW;
+END;
+$function$
+```
+</details>
+
 ### `clone_workspace(source_ws uuid, new_name text)`
 
 - **Returns**: uuid
@@ -181,7 +285,7 @@ BEGIN
     v_user := public.current_user_id();
     IF v_user IS NULL THEN RAISE EXCEPTION 'Usuario no encontrado'; END IF;
 
-    IF NOT public.is_workspace_member(source_ws) THEN
+    IF NOT public.can_see_all(source_ws) THEN
         RAISE EXCEPTION 'Espacio de origen no encontrado';
     END IF;
 
@@ -406,7 +510,7 @@ BEGIN
     IF NOT public.is_workspace_owner(ws) THEN
         RAISE EXCEPTION 'Solo el dueno del espacio puede invitar';
     END IF;
-    IF invitee_role NOT IN ('owner','member') THEN
+    IF invitee_role NOT IN ('owner','member','collaborator') THEN
         RAISE EXCEPTION 'Rol invalido: %', invitee_role;
     END IF;
     IF v_email IS NULL OR v_email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' THEN
@@ -499,8 +603,8 @@ CREATE OR REPLACE FUNCTION public.list_workspace_members(ws uuid)
  SET search_path TO 'public', 'pg_temp'
 AS $function$
 BEGIN
-    IF NOT public.is_workspace_member(ws) THEN
-        RAISE EXCEPTION 'No sos miembro de este espacio';
+    IF NOT public.can_see_all(ws) THEN
+        RAISE EXCEPTION 'No tenés acceso a esta información en este espacio';
     END IF;
 
     RETURN QUERY
@@ -536,8 +640,8 @@ CREATE OR REPLACE FUNCTION public.list_workspace_people(ws uuid)
  SET search_path TO 'public', 'pg_temp'
 AS $function$
 BEGIN
-    IF NOT public.is_workspace_member(ws) THEN
-        RAISE EXCEPTION 'No sos miembro de este espacio';
+    IF NOT public.can_see_all(ws) THEN
+        RAISE EXCEPTION 'No tenés acceso a esta información en este espacio';
     END IF;
 
     RETURN QUERY
@@ -649,148 +753,6 @@ BEGIN
     VALUES (v_ws, v_actor, v_action, TG_TABLE_NAME, (v_rec->>'id')::uuid, v_summary, v_changes);
 
     RETURN COALESCE(NEW, OLD);
-END;
-$function$
-```
-</details>
-
-### `normalizar_texto(t text)`
-
-- **Returns**: text
-- **Kind**: function | IMMUTABLE | SECURITY INVOKER
-
-<details><summary>Source</summary>
-
-```sql
-CREATE OR REPLACE FUNCTION public.normalizar_texto(t text)
- RETURNS text
- LANGUAGE sql
- IMMUTABLE PARALLEL SAFE
-AS $function$
-    SELECT btrim(regexp_replace(
-        translate(
-            lower(coalesce(t, '')),
-            'áàäâãéèëêíìïîóòöôõúùüûñç' || chr(65279),
-            'aaaaaeeeeiiiiooooouuuunc'
-        ),
-        '\s+', ' ', 'g'
-    ))
-$function$
-```
-</details>
-
-### `partner_positions(ws uuid)` 🔐
-
-- **Returns**: TABLE(id uuid, name text, user_id uuid, ownership_pct numeric, aportes numeric, retiros numeric, saldo numeric, retiros_pct numeric, ultimo_mov timestamp with time zone)
-- **Kind**: function | STABLE | SECURITY DEFINER
-
-<details><summary>Source</summary>
-
-```sql
-CREATE OR REPLACE FUNCTION public.partner_positions(ws uuid)
- RETURNS TABLE(id uuid, name text, user_id uuid, ownership_pct numeric, aportes numeric, retiros numeric, saldo numeric, retiros_pct numeric, ultimo_mov timestamp with time zone)
- LANGUAGE plpgsql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-BEGIN
-    IF NOT public.is_workspace_member(ws) THEN
-        RAISE EXCEPTION 'No sos miembro de este espacio';
-    END IF;
-
-    RETURN QUERY
-    WITH movs AS (
-        SELECT t.partner_id,
-               COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'contribution'), 0) AS aportes,
-               COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'withdrawal'), 0)   AS retiros,
-               MAX(t.date) AS ultimo
-          FROM public.transactions t
-         WHERE t.workspace_id = ws
-           AND t.deleted_at IS NULL
-           AND t.partner_id IS NOT NULL
-         GROUP BY t.partner_id
-    ),
-    total AS (SELECT NULLIF(SUM(m.retiros), 0) AS retirado FROM movs m)
-    SELECT p.id,
-           p.name,
-           p.user_id,
-           p.ownership_pct,
-           COALESCE(m.aportes, 0),
-           COALESCE(m.retiros, 0),
-           COALESCE(m.aportes, 0) - COALESCE(m.retiros, 0),
-           ROUND(100 * COALESCE(m.retiros, 0) / total.retirado, 2),
-           m.ultimo
-      FROM public.partners p
-      LEFT JOIN movs m ON m.partner_id = p.id
-      CROSS JOIN total
-     WHERE p.workspace_id = ws
-       AND p.deleted_at IS NULL
-     ORDER BY p.ownership_pct DESC, p.name;
-END;
-$function$
-```
-</details>
-
-### `pending_settlements(ws uuid)` 🔐
-
-- **Returns**: TABLE(id uuid, settles_at timestamp with time zone, date timestamp with time zone, type text, amount numeric, description text, wallet_id uuid, wallet_name text, category_id uuid, dias integer)
-- **Kind**: function | STABLE | SECURITY DEFINER
-
-<details><summary>Source</summary>
-
-```sql
-CREATE OR REPLACE FUNCTION public.pending_settlements(ws uuid)
- RETURNS TABLE(id uuid, settles_at timestamp with time zone, date timestamp with time zone, type text, amount numeric, description text, wallet_id uuid, wallet_name text, category_id uuid, dias integer)
- LANGUAGE plpgsql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-BEGIN
-    IF NOT public.is_workspace_member(ws) THEN
-        RAISE EXCEPTION 'No sos miembro de este espacio';
-    END IF;
-
-    RETURN QUERY
-    SELECT t.id,
-           t.settles_at,
-           t.date,
-           t.type::text,
-           t.amount,
-           t.description,
-           t.wallet_id,
-           w.name,
-           t.category_id,
-           (t.settles_at::date - CURRENT_DATE)::int
-      FROM public.transactions t
-      LEFT JOIN public.wallets w ON w.id = t.wallet_id
-     WHERE t.workspace_id = ws
-       AND t.deleted_at IS NULL
-       AND t.settles_at IS NOT NULL
-       AND t.settles_at > now()
-     ORDER BY t.settles_at;
-END;
-$function$
-```
-</details>
-
-### `protect_is_admin()`
-
-- **Returns**: trigger
-- **Kind**: function | VOLATILE | SECURITY INVOKER
-
-<details><summary>Source</summary>
-
-```sql
-CREATE OR REPLACE FUNCTION public.protect_is_admin()
- RETURNS trigger
- LANGUAGE plpgsql
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-BEGIN
-    IF NEW.is_admin IS DISTINCT FROM OLD.is_admin AND auth.uid() IS NOT NULL THEN
-        RAISE EXCEPTION 'is_admin solo puede cambiarse desde el servidor';
-    END IF;
-    RETURN NEW;
 END;
 $function$
 ```

@@ -1,9 +1,9 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T19:16:28.638Z
+> Generated: 2026-09-10T19:29:15.251Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Indexes (34, excluding PKs)
+## [PUBLIC] Indexes (35, excluding PKs)
 
 | Table | Index | Definition |
 |-------|-------|------------|
@@ -36,6 +36,7 @@
 | wallet_reconciliations | reconciliations_wallet_idx | `CREATE INDEX reconciliations_wallet_idx ON public.wallet_reconciliations USIN...` |
 | wallets | idx_wallets_workspace | `CREATE INDEX idx_wallets_workspace ON public.wallets USING btree (workspace_id)` |
 | wallets | wallets_alive_idx | `CREATE INDEX wallets_alive_idx ON public.wallets USING btree (workspace_id) W...` |
+| wallets | wallets_parent_idx | `CREATE INDEX wallets_parent_idx ON public.wallets USING btree (parent_id) WHE...` |
 | workspace_invitations | workspace_invitations_email_idx | `CREATE INDEX workspace_invitations_email_idx ON public.workspace_invitations ...` |
 | workspace_invitations | workspace_invitations_workspace_id_email_key | `CREATE UNIQUE INDEX workspace_invitations_workspace_id_email_key ON public.wo...` |
 | workspace_members | workspace_members_user_idx | `CREATE INDEX workspace_members_user_idx ON public.workspace_members USING btr...` |

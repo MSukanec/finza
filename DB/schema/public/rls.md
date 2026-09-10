@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T19:16:28.638Z
+> Generated: 2026-09-10T19:29:15.251Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -13,7 +13,7 @@
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+(is_workspace_member(workspace_id) AND (can_see_all(workspace_id) OR (user_id = current_user_id())))
 ```
 
 ### `budget_categories` (1 policies)
@@ -26,13 +26,13 @@ is_workspace_member(workspace_id)
 ```sql
 (EXISTS ( SELECT 1
    FROM budgets b
-  WHERE ((b.id = budget_categories.budget_id) AND is_workspace_member(b.workspace_id))))
+  WHERE ((b.id = budget_categories.budget_id) AND can_see_all(b.workspace_id))))
 ```
 - **WITH CHECK**:
 ```sql
 (EXISTS ( SELECT 1
    FROM budgets b
-  WHERE ((b.id = budget_categories.budget_id) AND is_workspace_member(b.workspace_id))))
+  WHERE ((b.id = budget_categories.budget_id) AND can_see_all(b.workspace_id))))
 ```
 
 ### `budgets` (4 policies)
@@ -43,7 +43,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 #### budgets_insert
@@ -52,7 +52,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **WITH CHECK**:
 ```sql
-(is_workspace_member(workspace_id) AND (user_id = current_user_id()))
+can_see_all(workspace_id)
 ```
 
 #### budgets_select
@@ -61,7 +61,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 #### budgets_update
@@ -70,11 +70,11 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 - **WITH CHECK**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 ### `categories` (4 policies)
@@ -85,7 +85,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 #### categories_insert
@@ -94,7 +94,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **WITH CHECK**:
 ```sql
-(is_workspace_member(workspace_id) AND (user_id = current_user_id()))
+can_see_all(workspace_id)
 ```
 
 #### categories_select
@@ -112,11 +112,11 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 - **WITH CHECK**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 ### `category_groups` (4 policies)
@@ -127,7 +127,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-(is_workspace_member(workspace_id) AND (NOT COALESCE(is_system, false)))
+can_see_all(workspace_id)
 ```
 
 #### category_groups_insert
@@ -136,7 +136,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **WITH CHECK**:
 ```sql
-(is_workspace_member(workspace_id) AND (user_id = current_user_id()))
+can_see_all(workspace_id)
 ```
 
 #### category_groups_select
@@ -154,11 +154,11 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-(is_workspace_member(workspace_id) AND (NOT COALESCE(is_system, false)))
+can_see_all(workspace_id)
 ```
 - **WITH CHECK**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 ### `debts` (4 policies)
@@ -169,7 +169,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 #### debts_insert
@@ -178,7 +178,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **WITH CHECK**:
 ```sql
-(is_workspace_member(workspace_id) AND (user_id = current_user_id()))
+can_see_all(workspace_id)
 ```
 
 #### debts_select
@@ -187,7 +187,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 #### debts_update
@@ -196,11 +196,11 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 - **WITH CHECK**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 ### `import_batches` (3 policies)
@@ -211,7 +211,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **WITH CHECK**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 #### import_batches_select
@@ -220,7 +220,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 #### import_batches_update
@@ -229,11 +229,11 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 - **WITH CHECK**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 ### `import_rules` (3 policies)
@@ -244,7 +244,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **WITH CHECK**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 #### import_rules_select
@@ -253,7 +253,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 #### import_rules_update
@@ -262,11 +262,11 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 - **WITH CHECK**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 ### `partners` (3 policies)
@@ -277,7 +277,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **WITH CHECK**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 #### partners_select
@@ -286,7 +286,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 #### partners_update
@@ -295,11 +295,11 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 - **WITH CHECK**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 ### `purges` (1 policies)
@@ -310,7 +310,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 ### `transactions` (4 policies)
@@ -321,7 +321,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+(is_workspace_member(workspace_id) AND (can_see_all(workspace_id) OR (user_id = current_user_id())))
 ```
 
 #### transactions_insert
@@ -339,7 +339,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+(is_workspace_member(workspace_id) AND (can_see_all(workspace_id) OR (user_id = current_user_id())))
 ```
 
 #### transactions_update
@@ -348,11 +348,11 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+(is_workspace_member(workspace_id) AND (can_see_all(workspace_id) OR (user_id = current_user_id())))
 ```
 - **WITH CHECK**:
 ```sql
-is_workspace_member(workspace_id)
+(is_workspace_member(workspace_id) AND (can_see_all(workspace_id) OR (user_id = current_user_id())))
 ```
 
 ### `users` (2 policies)
@@ -386,15 +386,6 @@ is_workspace_member(workspace_id)
 (is_workspace_member(workspace_id) AND (user_id = current_user_id()))
 ```
 
-#### reconciliations_select
-
-- **Command**: SELECT | **Permissive**: PERMISSIVE
-- **Roles**: {authenticated}
-- **USING**:
-```sql
-is_workspace_member(workspace_id)
-```
-
 #### reconciliations_update
 
 - **Command**: UPDATE | **Permissive**: PERMISSIVE
@@ -408,6 +399,15 @@ is_workspace_member(workspace_id)
 is_workspace_member(workspace_id)
 ```
 
+#### wallet_reconciliations_select
+
+- **Command**: SELECT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+can_see_all(workspace_id)
+```
+
 ### `wallets` (4 policies)
 
 #### wallets_delete
@@ -416,7 +416,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 #### wallets_insert
@@ -425,7 +425,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **WITH CHECK**:
 ```sql
-(is_workspace_member(workspace_id) AND (user_id = current_user_id()))
+(can_see_all(workspace_id) AND (user_id = current_user_id()))
 ```
 
 #### wallets_select
@@ -434,7 +434,7 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 #### wallets_update
@@ -443,11 +443,11 @@ is_workspace_member(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 - **WITH CHECK**:
 ```sql
-is_workspace_member(workspace_id)
+can_see_all(workspace_id)
 ```
 
 ### `workspace_invitations` (1 policies)
@@ -491,7 +491,7 @@ is_workspace_owner(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-is_workspace_member(workspace_id)
+((user_id = current_user_id()) OR can_see_all(workspace_id))
 ```
 
 #### members_update

@@ -100,11 +100,33 @@ function withBalances(accounts: Account[], transactions: Transaction[]): Account
     delta.set(tx.account_id, (delta.get(tx.account_id) ?? 0) + d);
   }
 
-  return accounts.map((a) => ({
+  const propio = accounts.map((a) => ({
     ...a,
     balance: Number(a.initial_balance ?? 0) + (delta.get(a.id) ?? 0),
     committed: pendiente.get(a.id) ?? 0,
   }));
+
+  // Una billetera que agrupa no tiene movimientos propios: su saldo es la suma
+  // de sus subcuentas. Es lo que significa "cuánto efectivo hay" cuando el
+  // efectivo está repartido en tres cajas.
+  const hijas = new Map<string, typeof propio>();
+  for (const a of propio) {
+    if (!a.parent_id) continue;
+    const g = hijas.get(a.parent_id);
+    if (g) g.push(a);
+    else hijas.set(a.parent_id, [a]);
+  }
+
+  return propio.map((a) => {
+    const sub = hijas.get(a.id);
+    if (!sub) return a;
+    return {
+      ...a,
+      isGroup: true,
+      balance: a.balance + sub.reduce((s, h) => s + h.balance, 0),
+      committed: (a.committed ?? 0) + sub.reduce((s, h) => s + (h.committed ?? 0), 0),
+    };
+  });
 }
 
 const byDateDesc = <T extends { date: string }>(list: T[]) =>
@@ -420,6 +442,8 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       currency_id: w.currency_code.toLowerCase(),
       initial_balance: Number(w.initial_balance || 0),
       balance: Number(w.initial_balance || 0),
+      parent_id: w.parent_id ?? null,
+      is_default: w.is_default === true,
       color: '#3b82f6',
       icon: 'wallet',
       created_at: w.created_at
@@ -1343,6 +1367,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
           type: acc.type,
           initial_balance: acc.initial_balance || 0,
           currency_code: acc.currency_id.toUpperCase(),
+          parent_id: acc.parent_id || null,
         });
         if (error) throw error;
       },
@@ -1359,6 +1384,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     if (data.type) patch.type = data.type;
     if (data.currency_id) patch.currency_code = data.currency_id.toUpperCase();
     if (data.initial_balance !== undefined) patch.initial_balance = data.initial_balance;
+    if (data.parent_id !== undefined) patch.parent_id = data.parent_id || null;
 
     optimistic(
       'accounts',

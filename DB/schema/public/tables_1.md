@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T19:16:28.638Z
+> Generated: 2026-09-10T19:29:15.251Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -228,6 +228,8 @@
 | initial_balance | numeric | ✗ | 0 |  |
 | workspace_id | uuid | ✗ |  | FK → workspaces.id |
 | deleted_at | timestamptz | ✓ |  |  |
+| parent_id | uuid | ✓ |  | FK → wallets.id |
+| is_default | bool | ✗ | false |  |
 
 ### `workspace_invitations`
 

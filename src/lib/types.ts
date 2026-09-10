@@ -34,6 +34,18 @@ export interface Account {
   balance: number;
   /** Lo que ya está comprometido y va a salir: cheques, pagos a plazo. */
   committed?: number;
+  /**
+   * De qué billetera cuelga, si es una subcuenta.
+   *
+   * El efectivo de un local vive en varios lugares —la caja del mostrador, la
+   * caja fuerte, lo que alguien se lleva—. Cada uno es una cuenta que se
+   * arquea sola; el padre sólo agrupa y su saldo es la suma.
+   */
+  parent_id?: string | null;
+  /** La que el formulario propone cuando hay varias hermanas. */
+  is_default?: boolean;
+  /** Tiene subcuentas: agrupa y no recibe movimientos. */
+  isGroup?: boolean;
   color: string;
   icon: string;
   created_at: string;

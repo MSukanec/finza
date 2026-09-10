@@ -110,9 +110,21 @@ export function AccountsView() {
          }
          
          const group = groupsMap.get(acc.currency_id)!;
-         group.total += acc.balance;
+         // El saldo de una billetera que agrupa YA incluye a sus subcuentas:
+         // sumar las dos cosas contaría el efectivo dos veces.
+         if (!acc.parent_id) group.total += acc.balance;
          group.accounts.push(acc);
      });
+
+     // Cada subcuenta queda debajo de su madre, en vez de suelta en la lista.
+     for (const group of groupsMap.values()) {
+         const raiz = group.accounts.filter((a) => !a.parent_id);
+         const hijas = group.accounts.filter((a) => a.parent_id);
+         group.accounts = raiz.flatMap((madre) => [
+             madre,
+             ...hijas.filter((h) => h.parent_id === madre.id),
+         ]);
+     }
 
      const groupsArray = Array.from(groupsMap.values());
      
@@ -176,7 +188,12 @@ export function AccountsView() {
                          <div
                              key={acc.id}
                              onClick={() => openSheet('edit-account', { account: acc })}
-                             className="group flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl hover:bg-accent/50 cursor-pointer transition-colors"
+                             className={cn(
+                                 "group flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl hover:bg-accent/50 cursor-pointer transition-colors",
+                                 // La subcuenta se sangra para que se lea que
+                                 // cuelga de la de arriba y no es una más.
+                                 acc.parent_id && "ml-5 border-l border-border/60 rounded-l-none pl-4"
+                             )}
                          >
                              <div className="flex items-center gap-3.5 min-w-0 flex-1 mb-2 sm:mb-0">
                                  <div className="flex size-10 items-center justify-center rounded-xl shrink-0 bg-accent text-accent-foreground transition-transform group-hover:scale-105">
@@ -184,7 +201,11 @@ export function AccountsView() {
                                   </div>
                                   <div className="min-w-0">
                                       <p className="font-medium text-sm truncate text-foreground">{acc.name}</p>
-                                      <p className="text-xs text-muted-foreground truncate">{accountTypeLabels[acc.type]} · {group.currency.code}</p>
+                                      <p className="text-xs text-muted-foreground truncate">
+                                        {acc.isGroup
+                                          ? `Suma de ${group.accounts.filter((h: any) => h.parent_id === acc.id).length} cajas`
+                                          : `${accountTypeLabels[acc.type]} · ${group.currency.code}`}
+                                      </p>
                                   </div>
                              </div>
 
@@ -194,7 +215,7 @@ export function AccountsView() {
                                          {formatMoney(acc.balance, group.currency)}
                                      </span>
                                      <span className="text-[10px] font-normal text-muted-foreground">
-                                        {lastCountLabel(acc.id)}
+                                        {acc.isGroup ? 'Se arquea por caja' : lastCountLabel(acc.id)}
                                      </span>
                                  </div>
 
@@ -223,7 +244,10 @@ export function AccountsView() {
 
                                  {/* Arqueo es una acción propia y separada de editar la
                                      billetera: registrar cuánto hay hoy no es lo mismo que
-                                     cambiar con cuánto se arrancó. */}
+                                     cambiar con cuánto se arrancó.
+                                     Una billetera que agrupa no se arquea: no hay
+                                     una caja que contar, hay tres. */}
+                                 {!acc.isGroup && (
                                  <button
                                      onClick={(e) => {
                                          e.stopPropagation();
@@ -242,6 +266,7 @@ export function AccountsView() {
                                         {hasPending(acc.id) ? 'Resolver' : 'Arquear'}
                                      </span>
                                  </button>
+                                 )}
                              </div>
                          </div>
                      );

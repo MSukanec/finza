@@ -36,6 +36,9 @@ export function ReconciliationAlert() {
     }
 
     const stale = accounts.filter((a) => {
+      // Una billetera que agrupa no se arquea: no hay una caja que contar, hay
+      // varias. Sin esto aparecería siempre como "nunca arqueada".
+      if (a.isGroup) return false;
       const last = lastByWallet.get(a.id);
       if (!last) return true; // nunca se arqueó
       return (Date.now() - +new Date(last)) / 86400000 > DIAS_SIN_ARQUEO;

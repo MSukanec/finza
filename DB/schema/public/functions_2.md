@@ -1,9 +1,151 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T19:16:28.638Z
+> Generated: 2026-09-10T19:29:15.251Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Functions (chunk 2: reconciliation_summary — wallet_expected_balance)
+## [PUBLIC] Functions (chunk 2: normalizar_texto — workspace_role)
+
+### `normalizar_texto(t text)`
+
+- **Returns**: text
+- **Kind**: function | IMMUTABLE | SECURITY INVOKER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.normalizar_texto(t text)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE PARALLEL SAFE
+AS $function$
+    SELECT btrim(regexp_replace(
+        translate(
+            lower(coalesce(t, '')),
+            'áàäâãéèëêíìïîóòöôõúùüûñç' || chr(65279),
+            'aaaaaeeeeiiiiooooouuuunc'
+        ),
+        '\s+', ' ', 'g'
+    ))
+$function$
+```
+</details>
+
+### `partner_positions(ws uuid)` 🔐
+
+- **Returns**: TABLE(id uuid, name text, user_id uuid, ownership_pct numeric, aportes numeric, retiros numeric, saldo numeric, retiros_pct numeric, ultimo_mov timestamp with time zone)
+- **Kind**: function | STABLE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.partner_positions(ws uuid)
+ RETURNS TABLE(id uuid, name text, user_id uuid, ownership_pct numeric, aportes numeric, retiros numeric, saldo numeric, retiros_pct numeric, ultimo_mov timestamp with time zone)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+    IF NOT public.can_see_all(ws) THEN
+        RAISE EXCEPTION 'No tenés acceso a esta información en este espacio';
+    END IF;
+
+    RETURN QUERY
+    WITH movs AS (
+        SELECT t.partner_id,
+               COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'contribution'), 0) AS aportes,
+               COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'withdrawal'), 0)   AS retiros,
+               MAX(t.date) AS ultimo
+          FROM public.transactions t
+         WHERE t.workspace_id = ws
+           AND t.deleted_at IS NULL
+           AND t.partner_id IS NOT NULL
+         GROUP BY t.partner_id
+    ),
+    total AS (SELECT NULLIF(SUM(m.retiros), 0) AS retirado FROM movs m)
+    SELECT p.id,
+           p.name,
+           p.user_id,
+           p.ownership_pct,
+           COALESCE(m.aportes, 0),
+           COALESCE(m.retiros, 0),
+           COALESCE(m.aportes, 0) - COALESCE(m.retiros, 0),
+           ROUND(100 * COALESCE(m.retiros, 0) / total.retirado, 2),
+           m.ultimo
+      FROM public.partners p
+      LEFT JOIN movs m ON m.partner_id = p.id
+      CROSS JOIN total
+     WHERE p.workspace_id = ws
+       AND p.deleted_at IS NULL
+     ORDER BY p.ownership_pct DESC, p.name;
+END;
+$function$
+```
+</details>
+
+### `pending_settlements(ws uuid)` 🔐
+
+- **Returns**: TABLE(id uuid, settles_at timestamp with time zone, date timestamp with time zone, type text, amount numeric, description text, wallet_id uuid, wallet_name text, category_id uuid, dias integer)
+- **Kind**: function | STABLE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.pending_settlements(ws uuid)
+ RETURNS TABLE(id uuid, settles_at timestamp with time zone, date timestamp with time zone, type text, amount numeric, description text, wallet_id uuid, wallet_name text, category_id uuid, dias integer)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+    IF NOT public.can_see_all(ws) THEN
+        RAISE EXCEPTION 'No tenés acceso a esta información en este espacio';
+    END IF;
+
+    RETURN QUERY
+    SELECT t.id,
+           t.settles_at,
+           t.date,
+           t.type::text,
+           t.amount,
+           t.description,
+           t.wallet_id,
+           w.name,
+           t.category_id,
+           (t.settles_at::date - CURRENT_DATE)::int
+      FROM public.transactions t
+      LEFT JOIN public.wallets w ON w.id = t.wallet_id
+     WHERE t.workspace_id = ws
+       AND t.deleted_at IS NULL
+       AND t.settles_at IS NOT NULL
+       AND t.settles_at > now()
+     ORDER BY t.settles_at;
+END;
+$function$
+```
+</details>
+
+### `protect_is_admin()`
+
+- **Returns**: trigger
+- **Kind**: function | VOLATILE | SECURITY INVOKER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.protect_is_admin()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+    IF NEW.is_admin IS DISTINCT FROM OLD.is_admin AND auth.uid() IS NOT NULL THEN
+        RAISE EXCEPTION 'is_admin solo puede cambiarse desde el servidor';
+    END IF;
+    RETURN NEW;
+END;
+$function$
+```
+</details>
 
 ### `reconciliation_summary(rec jsonb, op text)` 🔐
 
@@ -72,8 +214,8 @@ DECLARE
 BEGIN
     SELECT workspace_id INTO v_ws FROM public.wallets WHERE id = w AND deleted_at IS NULL;
     IF v_ws IS NULL THEN RAISE EXCEPTION 'La billetera no existe'; END IF;
-    IF NOT public.is_workspace_member(v_ws) THEN
-        RAISE EXCEPTION 'No sos miembro de este espacio';
+    IF NOT public.can_see_all(v_ws) THEN
+        RAISE EXCEPTION 'No tenés acceso a esta información en este espacio';
     END IF;
     IF v_me IS NULL THEN RAISE EXCEPTION 'No hay sesión activa'; END IF;
 
@@ -111,8 +253,8 @@ CREATE OR REPLACE FUNCTION public.registrar_uso_reglas(ws uuid, ids uuid[])
  SET search_path TO 'public', 'pg_temp'
 AS $function$
 BEGIN
-    IF NOT public.is_workspace_member(ws) THEN
-        RAISE EXCEPTION 'No sos miembro de este espacio';
+    IF NOT public.can_see_all(ws) THEN
+        RAISE EXCEPTION 'No tenés acceso a esta información en este espacio';
     END IF;
 
     UPDATE public.import_rules
@@ -144,8 +286,8 @@ DECLARE
 BEGIN
     SELECT workspace_id, restored_at INTO v_ws, v_hecho FROM public.purges WHERE id = purga;
 
-    IF v_ws IS NULL OR NOT public.is_workspace_member(v_ws) THEN
-        RAISE EXCEPTION 'El vaciado no existe o no tenés acceso';
+    IF v_ws IS NULL OR NOT public.is_workspace_owner(v_ws) THEN
+        RAISE EXCEPTION 'El vaciado no existe, o solo el administrador puede deshacerlo';
     END IF;
     IF v_hecho IS NOT NULL THEN
         RAISE EXCEPTION 'Ese vaciado ya se restauró el %', v_hecho::date;
@@ -262,8 +404,8 @@ DECLARE
     v_saldos jsonb;
     v_filas  integer;
 BEGIN
-    IF NOT public.is_workspace_member(ws) THEN
-        RAISE EXCEPTION 'No sos miembro de este espacio';
+    IF NOT public.is_workspace_owner(ws) THEN
+        RAISE EXCEPTION 'Solo el administrador del espacio puede vaciarlo';
     END IF;
 
     PERFORM set_config('app.silenciar_historial', 'on', true);
@@ -316,24 +458,54 @@ BEGIN
 
     -- Mismo mensaje para "no existe" y "no sos miembro": distinguirlos
     -- convertiría la función en un detector de billeteras ajenas.
-    IF v_ws IS NULL OR NOT public.is_workspace_member(v_ws) THEN
+    IF v_ws IS NULL OR NOT public.can_see_all(v_ws) THEN
         RAISE EXCEPTION 'La billetera no existe o no tenés acceso';
     END IF;
 
-    SELECT COALESCE((SELECT initial_balance FROM public.wallets WHERE id = w), 0)
+    WITH alcance AS (
+        -- La propia más sus subcuentas. Para una hoja, sólo la propia.
+        SELECT id, initial_balance FROM public.wallets
+         WHERE (id = w OR parent_id = w) AND deleted_at IS NULL
+    )
+    SELECT COALESCE(SUM(a.initial_balance), 0)
          + COALESCE((
              SELECT SUM(
                  CASE WHEN t.type IN ('income', 'contribution') THEN t.amount ELSE -t.amount END
              )
                FROM public.transactions t
-              WHERE t.wallet_id = w
+              WHERE t.wallet_id IN (SELECT id FROM alcance)
                 AND t.deleted_at IS NULL
                 AND COALESCE(t.settles_at, t.date) <= at_time
            ), 0)
-      INTO v_bal;
+      INTO v_bal
+      FROM alcance a;
 
     RETURN v_bal;
 END;
+$function$
+```
+</details>
+
+### `workspace_role(ws uuid)` 🔐
+
+- **Returns**: text
+- **Kind**: function | STABLE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.workspace_role(ws uuid)
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+    SELECT m.role
+      FROM public.workspace_members m
+      JOIN public.workspaces w ON w.id = m.workspace_id
+     WHERE m.workspace_id = ws
+       AND m.user_id = public.current_user_id()
+       AND w.deleted_at IS NULL
 $function$
 ```
 </details>
