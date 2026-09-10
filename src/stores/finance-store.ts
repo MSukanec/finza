@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase/client';
-import type { Account, Category, Transaction, Budget, Currency, Debt, Workspace, WorkspaceRole, WorkspaceMember, Person, ActivityEntry, Reconciliation } from '@/lib/types';
+import type { Account, Category, Transaction, Budget, Currency, Debt, Workspace, WorkspaceRole, WorkspaceMember, Person, ActivityEntry, Reconciliation, Partner, PartnerPosition } from '@/lib/types';
 import { CURRENCIES, EXCHANGE_RATES } from '@/lib/mock-data';
 import { toast } from '@/stores/toast-store';
+import { signoEnCaja } from '@/lib/money';
 
 // Todo borrado es lógico: se marca `deleted_at` y la fila queda. Ver DB/021.
 const nowIso = () => new Date().toISOString();
@@ -76,8 +77,9 @@ function withBalances(accounts: Account[], transactions: Transaction[]): Account
   const delta = new Map<string, number>();
   for (const tx of transactions) {
     if (!tx.account_id) continue;
-    // Solo los ingresos suman; gastos, transferencias y cambios restan.
-    const d = tx.type === 'income' ? Number(tx.amount) : -Number(tx.amount);
+    // Ingresos y aportes suman; gastos, retiros, transferencias y cambios
+    // restan. Un aporte mueve caja aunque no sea resultado.
+    const d = signoEnCaja(tx.type) * Number(tx.amount);
     delta.set(tx.account_id, (delta.get(tx.account_id) ?? 0) + d);
   }
   return accounts.map((a) => ({
@@ -89,7 +91,14 @@ function withBalances(accounts: Account[], transactions: Transaction[]): Account
 const byDateDesc = <T extends { date: string }>(list: T[]) =>
   [...list].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-type ListKey = 'transactions' | 'accounts' | 'categories' | 'categoryGroups' | 'debts' | 'budgets';
+type ListKey =
+  | 'transactions'
+  | 'accounts'
+  | 'categories'
+  | 'categoryGroups'
+  | 'debts'
+  | 'budgets'
+  | 'partners';
 
 /**
  * Escritura optimista: el cambio se aplica en memoria YA y la escritura se
@@ -159,6 +168,8 @@ interface FinanceState {
   people: Record<string, Person>;
   /** Arqueos del espacio, del más reciente al más viejo. */
   reconciliations: Reconciliation[];
+  /** Socios del espacio. Existen aunque todavía no tengan cuenta en la app. */
+  partners: Partner[];
 
   primaryCurrencyId: string;
   isHydrated: boolean;
@@ -198,6 +209,11 @@ interface FinanceState {
   toggleCheckpoint: (id: string, current: boolean) => Promise<void>;
   toggleTransactionStatus: (id: string, status: 'draft' | 'warning' | 'reviewed') => Promise<void>;
   
+  addPartner: (p: { name: string; ownership_pct: number; notes?: string }) => Promise<void>;
+  updatePartner: (id: string, data: Partial<Pick<Partner, 'name' | 'ownership_pct' | 'notes' | 'user_id'>>) => Promise<void>;
+  removePartner: (id: string) => Promise<void>;
+  /** Cuenta corriente de cada socio. La calcula la base, no el cliente. */
+  loadPartnerPositions: (workspaceId: string) => Promise<PartnerPosition[]>;
   addDebt: (debt: { name: string; description: string; total_amount: number; currency_code: string }) => Promise<void>;
   updateDebt: (id: string, data: { name: string; description: string; total_amount: number; currency_code: string }) => Promise<void>;
   removeDebt: (id: string) => Promise<void>;
@@ -234,6 +250,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   members: [],
   people: {},
   reconciliations: [],
+  partners: [],
   primaryCurrencyId: 'ars',
   isHydrated: false,
   user: null,
@@ -343,6 +360,15 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
           .order('counted_at', { ascending: false })
       : { data: [] as any[] };
 
+    const partnersRes = currentWorkspaceId
+      ? await supabase
+          .from('partners')
+          .select('*')
+          .eq('workspace_id', currentWorkspaceId)
+          .is('deleted_at', null)
+          .order('ownership_pct', { ascending: false })
+      : { data: [] as any[] };
+
     const budgetsRes = await withWs(
       supabase
         .from('budgets')
@@ -395,6 +421,10 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         counted_amount: Number(r.counted_amount),
         expected_amount: Number(r.expected_amount),
       })) as Reconciliation[],
+      partners: ((partnersRes as any).data || []).map((p: any) => ({
+        ...p,
+        ownership_pct: Number(p.ownership_pct ?? 0),
+      })) as Partner[],
       categoryGroups: groupsRes.data || [],
       categories: (categoriesRes.data || []).map((c: any) => ({
         id: c.id,
@@ -423,6 +453,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         amount: Number(t.amount),
         currency_id: t.currency_code.toLowerCase(),
         category_id: t.category_id,
+        partner_id: t.partner_id ?? null,
         account_id: t.wallet_id,
         destination_account_id: t.related_transaction_id ? t.related_transaction_id : null,
         description: t.description,
@@ -725,6 +756,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       members: [],
       people: {},
       reconciliations: [],
+      partners: [],
       isHydrated: true,
     });
   },
@@ -749,6 +781,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       amount: tx.amount,
       currency_id: tx.currency_id,
       category_id: tx.category_id || null,
+      partner_id: tx.partner_id ?? null,
       account_id: tx.account_id,
       destination_account_id: tx.destination_account_id ?? null,
       description: tx.description,
@@ -777,6 +810,8 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       user_id: appUserId,
       ...wsPatch(currentWorkspaceId),
       category_id: tx.category_id || null,
+      // Sólo los aportes y retiros llevan socio. La base lo exige con un CHECK.
+      partner_id: tx.partner_id ?? null,
       currency_code: tx.currency_id.toUpperCase(),
       date,
     };
@@ -824,6 +859,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     if (data.amount) patch.amount = data.amount;
     if (data.currency_id) patch.currency_code = data.currency_id.toUpperCase();
     if (data.category_id !== undefined) patch.category_id = data.category_id;
+    if (data.partner_id !== undefined) patch.partner_id = data.partner_id;
     if (data.account_id) patch.wallet_id = data.account_id;
     if (data.description !== undefined) patch.description = data.description;
     if (data.date) patch.date = data.date;
@@ -927,6 +963,95 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         )
       }));
     }
+  },
+
+  // === SOCIOS ===
+  // El socio es del negocio, no de la app: se carga con nombre y participación
+  // mucho antes de que la persona se registre. Cuando se registra se vincula
+  // con `user_id` y recién ahí el socio y el usuario son la misma entidad.
+  addPartner: async (p) => {
+    const { currentWorkspaceId } = get();
+    if (!currentWorkspaceId) throw new Error('No hay un espacio activo.');
+
+    const id = crypto.randomUUID();
+    const local: Partner = {
+      id,
+      name: p.name,
+      user_id: null,
+      ownership_pct: p.ownership_pct,
+      notes: p.notes ?? null,
+      created_at: nowIso(),
+    };
+
+    optimistic(
+      'partners',
+      (list) => [...list, local].sort((a, b) => b.ownership_pct - a.ownership_pct),
+      (list) => list.filter((x: Partner) => x.id !== id),
+      async () => {
+        const { error } = await supabase.from('partners').insert({
+          id,
+          workspace_id: currentWorkspaceId,
+          name: p.name,
+          ownership_pct: p.ownership_pct,
+          notes: p.notes ?? null,
+        });
+        if (error) throw error;
+      },
+      'No se pudo agregar el socio.'
+    );
+  },
+
+  updatePartner: async (id, data) => {
+    const before = get().partners.find((p) => p.id === id);
+    if (!before) return;
+
+    optimistic(
+      'partners',
+      (list) =>
+        list
+          .map((p: Partner) => (p.id === id ? { ...p, ...data } : p))
+          .sort((a: Partner, b: Partner) => b.ownership_pct - a.ownership_pct),
+      (list) => list.map((p: Partner) => (p.id === id ? before : p)),
+      async () => {
+        const { error } = await supabase.from('partners').update(data).eq('id', id);
+        if (error) throw error;
+      },
+      'No se pudo guardar el socio.'
+    );
+  },
+
+  removePartner: async (id) => {
+    const before = get().partners.find((p) => p.id === id);
+    if (!before) return;
+
+    // Los aportes y retiros ya cargados NO se borran: son plata que se movió de
+    // verdad. El socio queda de baja y su historial sigue existiendo.
+    optimistic(
+      'partners',
+      (list) => list.filter((p: Partner) => p.id !== id),
+      (list) => [...list, before],
+      async () => {
+        const { error } = await supabase
+          .from('partners')
+          .update({ deleted_at: nowIso() })
+          .eq('id', id);
+        if (error) throw error;
+      },
+      'No se pudo eliminar el socio.'
+    );
+  },
+
+  loadPartnerPositions: async (workspaceId: string) => {
+    const { data, error } = await supabase.rpc('partner_positions', { ws: workspaceId });
+    if (error) throw error;
+    return (data || []).map((p: any) => ({
+      ...p,
+      ownership_pct: Number(p.ownership_pct ?? 0),
+      aportes: Number(p.aportes ?? 0),
+      retiros: Number(p.retiros ?? 0),
+      saldo: Number(p.saldo ?? 0),
+      retiros_pct: p.retiros_pct === null ? null : Number(p.retiros_pct),
+    })) as PartnerPosition[];
   },
 
   // === DEBTS ===

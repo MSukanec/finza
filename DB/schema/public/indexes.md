@@ -1,9 +1,9 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T14:41:35.436Z
+> Generated: 2026-09-10T17:01:12.340Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Indexes (21, excluding PKs)
+## [PUBLIC] Indexes (25, excluding PKs)
 
 | Table | Index | Definition |
 |-------|-------|------------|
@@ -16,7 +16,11 @@
 | categories | idx_categories_workspace | `CREATE INDEX idx_categories_workspace ON public.categories USING btree (works...` |
 | category_groups | idx_category_groups_workspace | `CREATE INDEX idx_category_groups_workspace ON public.category_groups USING bt...` |
 | debts | idx_debts_workspace | `CREATE INDEX idx_debts_workspace ON public.debts USING btree (workspace_id)` |
+| partners | partners_espacio_idx | `CREATE INDEX partners_espacio_idx ON public.partners USING btree (workspace_id)` |
+| partners | partners_espacio_nombre_uniq | `CREATE UNIQUE INDEX partners_espacio_nombre_uniq ON public.partners USING btr...` |
+| partners | partners_espacio_usuario_uniq | `CREATE UNIQUE INDEX partners_espacio_usuario_uniq ON public.partners USING bt...` |
 | transactions | idx_transactions_workspace | `CREATE INDEX idx_transactions_workspace ON public.transactions USING btree (w...` |
+| transactions | transactions_partner_idx | `CREATE INDEX transactions_partner_idx ON public.transactions USING btree (par...` |
 | users | users_auth_id_key | `CREATE UNIQUE INDEX users_auth_id_key ON public.users USING btree (auth_id)` |
 | users | users_email_key | `CREATE UNIQUE INDEX users_email_key ON public.users USING btree (email)` |
 | wallet_reconciliations | reconciliations_pending_idx | `CREATE INDEX reconciliations_pending_idx ON public.wallet_reconciliations USI...` |

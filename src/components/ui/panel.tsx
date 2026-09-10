@@ -122,7 +122,7 @@ export function Kpi({
   label: string;
   value: string;
   hint?: string;
-  tone?: 'income' | 'expense' | 'neutral';
+  tone?: 'income' | 'expense' | 'neutral' | 'warning';
   delta?: number | null;
   /** En egresos, subir es malo. */
   deltaInverted?: boolean;
@@ -142,6 +142,7 @@ export function Kpi({
                 'flex size-9 shrink-0 items-center justify-center rounded-xl',
                 tone === 'income' && 'bg-income/10 text-income',
                 tone === 'expense' && 'bg-expense/10 text-expense',
+                tone === 'warning' && 'bg-warning/10 text-warning',
                 tone === 'neutral' && 'bg-accent text-accent-foreground'
               )}
             >

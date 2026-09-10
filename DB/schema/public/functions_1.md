@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T14:41:35.436Z
+> Generated: 2026-09-10T17:01:12.340Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -117,16 +117,18 @@ CREATE OR REPLACE FUNCTION public.entity_label(tabla text)
  RETURNS text
  LANGUAGE sql
  IMMUTABLE
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
     SELECT CASE tabla
-        WHEN 'transactions'      THEN 'movimiento'
-        WHEN 'wallets'           THEN 'billetera'
-        WHEN 'categories'        THEN 'categoría'
-        WHEN 'category_groups'   THEN 'grupo de categorías'
-        WHEN 'debts'             THEN 'deuda'
-        WHEN 'budgets'           THEN 'presupuesto'
-        WHEN 'workspaces'        THEN 'espacio'
-        WHEN 'workspace_members' THEN 'miembro'
+        WHEN 'transactions'           THEN 'movimiento'
+        WHEN 'wallets'                THEN 'billetera'
+        WHEN 'categories'             THEN 'categoría'
+        WHEN 'category_groups'        THEN 'grupo de categorías'
+        WHEN 'debts'                  THEN 'deuda'
+        WHEN 'budgets'                THEN 'presupuesto'
+        WHEN 'workspaces'             THEN 'espacio'
+        WHEN 'workspace_members'      THEN 'miembro'
+        WHEN 'wallet_reconciliations' THEN 'arqueo'
         ELSE tabla
     END
 $function$
@@ -207,6 +209,7 @@ CREATE OR REPLACE FUNCTION public.handle_updated_at()
  RETURNS trigger
  LANGUAGE plpgsql
  SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 BEGIN
     NEW.updated_at = NOW();
@@ -421,32 +424,34 @@ BEGIN
 
     v_actor := public.current_user_id();
 
-    -- Un UPDATE que enciende deleted_at es, para el usuario, un borrado.
-    -- Y si lo apaga, es una restauración.
     v_action := lower(TG_OP);
     IF TG_OP = 'UPDATE' THEN
         IF v_old->>'deleted_at' IS NULL AND v_rec->>'deleted_at' IS NOT NULL THEN
             v_action := 'delete';
         ELSIF v_old->>'deleted_at' IS NOT NULL AND v_rec->>'deleted_at' IS NULL THEN
-            v_action := 'insert'; -- se muestra como "Restauró"
+            v_action := 'insert';
         END IF;
     END IF;
 
-    v_nombre := COALESCE(
-        NULLIF(v_rec->>'description', ''),
-        NULLIF(v_rec->>'name', ''),
-        NULLIF(v_rec->>'email', '')
-    );
+    IF TG_TABLE_NAME = 'wallet_reconciliations' THEN
+        v_summary := public.reconciliation_summary(v_rec, TG_OP);
+    ELSE
+        v_nombre := COALESCE(
+            NULLIF(v_rec->>'description', ''),
+            NULLIF(v_rec->>'name', ''),
+            NULLIF(v_rec->>'email', '')
+        );
 
-    v_verbo := CASE
-        WHEN v_action = 'delete' THEN 'Eliminó'
-        WHEN TG_OP = 'INSERT' THEN 'Creó'
-        WHEN v_action = 'insert' THEN 'Restauró'
-        ELSE 'Editó'
-    END;
+        v_verbo := CASE
+            WHEN v_action = 'delete' THEN 'Eliminó'
+            WHEN TG_OP = 'INSERT' THEN 'Creó'
+            WHEN v_action = 'insert' THEN 'Restauró'
+            ELSE 'Editó'
+        END;
 
-    v_summary := v_verbo || ' ' || public.entity_label(TG_TABLE_NAME)
-        || COALESCE(' «' || left(v_nombre, 80) || '»', '');
+        v_summary := v_verbo || ' ' || public.entity_label(TG_TABLE_NAME)
+            || COALESCE(' «' || left(v_nombre, 80) || '»', '');
+    END IF;
 
     IF TG_OP = 'UPDATE' THEN
         v_changes := '{}'::jsonb;
@@ -463,8 +468,6 @@ BEGIN
             RETURN COALESCE(NEW, OLD);
         END IF;
 
-        -- En un borrado o una restauración, el cambio de deleted_at ya está
-        -- dicho por el verbo; listarlo como campo es ruido.
         IF v_action IN ('delete', 'insert') THEN
             v_changes := v_changes - 'deleted_at';
             IF v_changes = '{}'::jsonb THEN v_changes := NULL; END IF;
@@ -476,6 +479,58 @@ BEGIN
     VALUES (v_ws, v_actor, v_action, TG_TABLE_NAME, (v_rec->>'id')::uuid, v_summary, v_changes);
 
     RETURN COALESCE(NEW, OLD);
+END;
+$function$
+```
+</details>
+
+### `partner_positions(ws uuid)` 🔐
+
+- **Returns**: TABLE(id uuid, name text, user_id uuid, ownership_pct numeric, aportes numeric, retiros numeric, saldo numeric, retiros_pct numeric, ultimo_mov timestamp with time zone)
+- **Kind**: function | STABLE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.partner_positions(ws uuid)
+ RETURNS TABLE(id uuid, name text, user_id uuid, ownership_pct numeric, aportes numeric, retiros numeric, saldo numeric, retiros_pct numeric, ultimo_mov timestamp with time zone)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+    IF NOT public.is_workspace_member(ws) THEN
+        RAISE EXCEPTION 'No sos miembro de este espacio';
+    END IF;
+
+    RETURN QUERY
+    WITH movs AS (
+        SELECT t.partner_id,
+               COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'contribution'), 0) AS aportes,
+               COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'withdrawal'), 0)   AS retiros,
+               MAX(t.date) AS ultimo
+          FROM public.transactions t
+         WHERE t.workspace_id = ws
+           AND t.deleted_at IS NULL
+           AND t.partner_id IS NOT NULL
+         GROUP BY t.partner_id
+    ),
+    total AS (SELECT NULLIF(SUM(m.retiros), 0) AS retirado FROM movs m)
+    SELECT p.id,
+           p.name,
+           p.user_id,
+           p.ownership_pct,
+           COALESCE(m.aportes, 0),
+           COALESCE(m.retiros, 0),
+           COALESCE(m.aportes, 0) - COALESCE(m.retiros, 0),
+           ROUND(100 * COALESCE(m.retiros, 0) / total.retirado, 2),
+           m.ultimo
+      FROM public.partners p
+      LEFT JOIN movs m ON m.partner_id = p.id
+      CROSS JOIN total
+     WHERE p.workspace_id = ws
+       AND p.deleted_at IS NULL
+     ORDER BY p.ownership_pct DESC, p.name;
 END;
 $function$
 ```
@@ -499,6 +554,51 @@ BEGIN
         RAISE EXCEPTION 'is_admin solo puede cambiarse desde el servidor';
     END IF;
     RETURN NEW;
+END;
+$function$
+```
+</details>
+
+### `reconciliation_summary(rec jsonb, op text)` 🔐
+
+- **Returns**: text
+- **Kind**: function | STABLE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.reconciliation_summary(rec jsonb, op text)
+ RETURNS text
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+    v_wallet text;
+    v_diff   numeric;
+BEGIN
+    SELECT name INTO v_wallet FROM public.wallets WHERE id = (rec->>'wallet_id')::uuid;
+    v_diff := (rec->>'counted_amount')::numeric - (rec->>'expected_amount')::numeric;
+
+    IF op = 'INSERT' THEN
+        RETURN 'Arqueó ' || COALESCE(v_wallet, 'una billetera') || ': ' ||
+            CASE
+                WHEN abs(v_diff) < 0.01 THEN 'cuadra'
+                WHEN v_diff < 0 THEN 'faltan ' || to_char(abs(v_diff), 'FM999,999,999,990.00')
+                ELSE 'sobran ' || to_char(v_diff, 'FM999,999,999,990.00')
+            END;
+    END IF;
+
+    IF rec->>'status' = 'resolved' THEN
+        RETURN 'Cerró la diferencia del arqueo de ' || COALESCE(v_wallet, 'una billetera') ||
+            CASE rec->>'resolution'
+                WHEN 'adjusted'  THEN ' asentando un ajuste'
+                WHEN 'explained' THEN ' dándola por explicada'
+                ELSE ''
+            END;
+    END IF;
+
+    RETURN 'Editó el arqueo de ' || COALESCE(v_wallet, 'una billetera');
 END;
 $function$
 ```
@@ -560,24 +660,34 @@ $function$
 ```sql
 CREATE OR REPLACE FUNCTION public.wallet_expected_balance(w uuid, at_time timestamp with time zone DEFAULT now())
  RETURNS numeric
- LANGUAGE sql
+ LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'public', 'pg_temp'
 AS $function$
+DECLARE
+    v_ws  uuid;
+    v_bal numeric;
+BEGIN
+    SELECT workspace_id INTO v_ws FROM public.wallets WHERE id = w;
+
+    -- Mismo mensaje para "no existe" y "no sos miembro": distinguirlos
+    -- convertiría la función en un detector de billeteras ajenas.
+    IF v_ws IS NULL OR NOT public.is_workspace_member(v_ws) THEN
+        RAISE EXCEPTION 'La billetera no existe o no tenés acceso';
+    END IF;
+
     SELECT COALESCE((SELECT initial_balance FROM public.wallets WHERE id = w), 0)
          + COALESCE((
-             SELECT SUM(
-                 CASE
-                     WHEN t.type = 'income' THEN t.amount
-                     -- Gastos y transferencias salientes restan.
-                     ELSE -t.amount
-                 END
-             )
-             FROM public.transactions t
-            WHERE t.wallet_id = w
-              AND t.deleted_at IS NULL
-              AND t.date <= at_time
+             SELECT SUM(CASE WHEN t.type = 'income' THEN t.amount ELSE -t.amount END)
+               FROM public.transactions t
+              WHERE t.wallet_id = w
+                AND t.deleted_at IS NULL
+                AND t.date <= at_time
            ), 0)
+      INTO v_bal;
+
+    RETURN v_bal;
+END;
 $function$
 ```
 </details>

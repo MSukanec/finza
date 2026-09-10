@@ -17,6 +17,7 @@ import {
   Repeat,
   History,
   Eye,
+  Users,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -28,6 +29,7 @@ import { CategoryForm } from '@/features/categories/components/category-form';
 import { DebtForm } from '@/features/debts/components/debt-form';
 import { BudgetForm } from '@/features/budgets/components/budget-form';
 import { ReconciliationForm } from '@/features/accounts/components/reconciliation-form';
+import { PartnerForm } from '@/features/partners/components/partner-form';
 import { UserProfile } from '@/components/user-profile';
 import { WorkspaceSwitcher } from '@/components/workspace-switcher';
 import { DialogProvider } from '@/components/providers/dialog-provider';
@@ -48,6 +50,7 @@ const NAV_ITEMS = [
   { href: '/reports', label: 'Reportes', icon: BarChart3 },
   { href: '/categories', label: 'Categorías', icon: Tags },
   { href: '/recurrentes', label: 'Recurrentes', icon: Repeat },
+  { href: '/socios', label: 'Socios', icon: Users },
   { href: '/actividad', label: 'Actividad', icon: History },
   { href: '/budgets', label: 'Presupuestos', icon: Target, adminOnly: true },
   { href: '/debts', label: 'Deudas', icon: Landmark, adminOnly: true },
@@ -269,6 +272,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <DebtForm />
         <BudgetForm />
         <ReconciliationForm />
+        <PartnerForm />
 
         {/* Las escrituras son optimistas: si el servidor rechaza una, el cambio
             se deshace y el aviso sale por aca. */}

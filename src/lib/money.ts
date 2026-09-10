@@ -1,3 +1,4 @@
+import type { TransactionType } from '@/lib/types';
 import type { Currency } from './types';
 
 /**
@@ -92,4 +93,38 @@ export function parseAmount(value: string): number | null {
 /** @deprecated Usar parseAmount, que distingue vacío de cero. */
 export function parseMoneyInput(value: string): number {
   return parseAmount(value) ?? 0;
+}
+
+// ============================================================ Resultado vs caja
+
+/**
+ * Si el movimiento entra en el estado de resultados.
+ *
+ * Los aportes y los retiros mueven la caja pero NO son resultado: no dicen
+ * nada sobre si el negocio generó o consumió plata, sólo sobre quién la puso o
+ * se la llevó. Contarlos como ingreso o egreso infla las ventas y falsea el
+ * margen: en Samurai, ocho aportes cargados como ingreso inflaban enero un
+ * 5,1%.
+ *
+ * Toda pantalla que sume ingresos, egresos o resultado tiene que filtrar por
+ * acá. Las transferencias tampoco son resultado: mueven plata entre billeteras
+ * propias.
+ */
+export function afectaResultado(t: { type: TransactionType }): boolean {
+  return t.type === 'income' || t.type === 'expense';
+}
+
+/** Si el movimiento es plata de un socio, y no del negocio. */
+export function esMovimientoDeSocio(t: { type: TransactionType }): boolean {
+  return t.type === 'contribution' || t.type === 'withdrawal';
+}
+
+/**
+ * Cómo pega el movimiento en el saldo de su billetera.
+ *
+ * Un aporte suma igual que un ingreso: la plata entró a la caja. Todo lo demás
+ * resta. Es la misma regla que usa la base para calcular saldos.
+ */
+export function signoEnCaja(type: TransactionType): 1 | -1 {
+  return type === 'income' || type === 'contribution' ? 1 : -1;
 }

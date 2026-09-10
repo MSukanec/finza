@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type SheetType = 'new-transaction' | 'edit-transaction' | 'new-account' | 'edit-account' | 'new-category' | 'edit-category' | 'new-budget' | 'edit-budget' | 'new-debt' | 'edit-debt' | 'reconcile-wallet' | null;
+type SheetType = 'new-transaction' | 'edit-transaction' | 'new-account' | 'edit-account' | 'new-category' | 'edit-category' | 'new-budget' | 'edit-budget' | 'new-debt' | 'edit-debt' | 'reconcile-wallet' | 'new-partner' | 'edit-partner' | null;
 
 interface UIState {
   // Modals / Sheets

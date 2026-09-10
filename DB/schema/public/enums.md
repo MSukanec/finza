@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T14:41:35.436Z
+> Generated: 2026-09-10T17:01:12.340Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -8,5 +8,5 @@
 | Enum | Values |
 |------|--------|
 | category_type | income, expense |
-| transaction_type | income, expense, transfer, exchange |
+| transaction_type | income, expense, transfer, exchange, contribution, withdrawal |
 | wallet_type | cash, bank, digital |

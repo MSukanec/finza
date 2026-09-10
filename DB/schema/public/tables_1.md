@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T14:41:35.436Z
+> Generated: 2026-09-10T17:01:12.340Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -85,6 +85,21 @@
 | workspace_id | uuid | ✗ |  | FK → workspaces.id |
 | deleted_at | timestamptz | ✓ |  |  |
 
+### `partners`
+
+| Column | Type | Nullable | Default | Constraints |
+|--------|------|----------|---------|-------------|
+| id | uuid | ✗ | gen_random_uuid() | PK |
+| workspace_id | uuid | ✗ |  | FK → workspaces.id |
+| user_id | uuid | ✓ |  | FK → users.id |
+| name | text | ✗ |  |  |
+| ownership_pct | numeric | ✗ | 0 |  |
+| notes | text | ✓ |  |  |
+| joined_at | date | ✗ | CURRENT_DATE |  |
+| created_at | timestamptz | ✗ | now() |  |
+| updated_at | timestamptz | ✗ | now() |  |
+| deleted_at | timestamptz | ✓ |  |  |
+
 ### `transactions`
 
 | Column | Type | Nullable | Default | Constraints |
@@ -109,6 +124,7 @@
 | status | varchar(20) | ✗ | 'draft'::character varying |  |
 | period_month | varchar(7) | ✓ |  |  |
 | workspace_id | uuid | ✗ |  | FK → workspaces.id |
+| partner_id | uuid | ✓ |  | FK → partners.id |
 
 ### `users`
 

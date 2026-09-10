@@ -4,25 +4,33 @@ import Link from 'next/link';
 import { useFinanceStore } from '@/stores/finance-store';
 import { formatMoney } from '@/lib/money';
 import { cn, parseLocalDate } from '@/lib/utils';
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Receipt } from 'lucide-react';
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Receipt, HandCoins, Landmark } from 'lucide-react';
 import { Panel } from '@/components/ui/panel';
 
 const TYPE_ICON = {
   income: ArrowDownLeft,
   expense: ArrowUpRight,
   transfer: ArrowLeftRight,
+  // Los movimientos de socio llevan ícono y color propios: no son ni venta ni
+  // costo, y leerlos como ingreso o gasto es el error que se quiso corregir.
+  contribution: HandCoins,
+  withdrawal: Landmark,
 } as const;
 
 const TYPE_CHIP = {
   income: 'bg-income/10 text-income',
   expense: 'bg-muted text-muted-foreground',
   transfer: 'bg-transfer/10 text-transfer',
+  contribution: 'bg-primary/10 text-primary',
+  withdrawal: 'bg-primary/10 text-primary',
 } as const;
 
 const AMOUNT_TONE = {
   income: 'text-income',
   expense: 'text-foreground',
   transfer: 'text-transfer',
+  contribution: 'text-primary',
+  withdrawal: 'text-primary',
 } as const;
 
 export function RecentTransactions() {
@@ -66,7 +74,13 @@ export function RecentTransactions() {
             const account = accounts.find((a) => a.id === tx.account_id);
             const currency = currencies.find((c) => c.id === tx.currency_id) || currencies[0];
             const title = tx.description?.trim() || category?.name || 'Transferencia';
-            const sign = type === 'income' ? '+' : type === 'expense' ? '−' : '';
+            // El signo sigue a la caja: un aporte entra, un retiro sale.
+            const sign =
+              type === 'income' || type === 'contribution'
+                ? '+'
+                : type === 'expense' || type === 'withdrawal'
+                  ? '−'
+                  : '';
 
             return (
               <Link

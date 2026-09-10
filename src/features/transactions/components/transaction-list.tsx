@@ -2,6 +2,7 @@
 
 import type { Transaction } from '@/lib/types';
 import { useFinanceStore } from '@/stores/finance-store';
+import { esMovimientoDeSocio } from '@/lib/money';
 import { formatMoney } from '@/lib/money';
 import { cn, parseLocalDate } from '@/lib/utils';
 import {
@@ -13,6 +14,8 @@ import {
   Flag,
   AlertTriangle,
   Receipt,
+  HandCoins,
+  Landmark,
 } from 'lucide-react';
 import { useGlobalDialog } from '@/components/providers/dialog-provider';
 import { UserAvatar, personName } from '@/components/ui/user-avatar';
@@ -26,6 +29,11 @@ const TYPE_ICON = {
   income: ArrowDownLeft,
   expense: ArrowUpRight,
   transfer: ArrowLeftRight,
+  // Los movimientos de socio llevan ícono propio: no son ni venta ni costo, y
+  // confundirlos visualmente con un ingreso o un gasto es justo el error que se
+  // quiso sacar del sistema.
+  contribution: HandCoins,
+  withdrawal: Landmark,
 } as const;
 
 /** El chip del ícono: neutro y discreto, el color fuerte lo lleva el monto. */
@@ -33,6 +41,8 @@ const TYPE_CHIP = {
   income: 'bg-income/10 text-income',
   expense: 'bg-muted text-muted-foreground',
   transfer: 'bg-transfer/10 text-transfer',
+  contribution: 'bg-primary/10 text-primary',
+  withdrawal: 'bg-primary/10 text-primary',
 } as const;
 
 /** Colores semánticos: verde entra, rojo sale. Antes el egreso iba en tinta. */
@@ -40,6 +50,10 @@ const AMOUNT_TONE = {
   income: 'text-income',
   expense: 'text-expense',
   transfer: 'text-transfer',
+  // Patrimonio, no resultado: se pintan con el color de marca para que no se
+  // lean como si el negocio hubiera ganado o perdido plata.
+  contribution: 'text-primary',
+  withdrawal: 'text-primary',
 } as const;
 
 export function TransactionList({ transactions, onEdit }: TransactionListProps) {
@@ -85,7 +99,13 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
 
               // Arriba el "qué": la descripción si existe, si no la categoría.
               const title = tx.description?.trim() || category?.name || 'Transferencia';
-              const sign = type === 'income' ? '+' : type === 'expense' ? '−' : '';
+              // El signo sigue a la caja: un aporte entra, un retiro sale.
+              const sign =
+                type === 'income' || type === 'contribution'
+                  ? '+'
+                  : type === 'expense' || type === 'withdrawal'
+                    ? '−'
+                    : '';
 
               const nextStatus =
                 tx.status === 'draft' ? 'reviewed' : tx.status === 'reviewed' ? 'warning' : 'draft';

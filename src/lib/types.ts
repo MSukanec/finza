@@ -1,6 +1,20 @@
 // ===== CORE TYPES =====
 
-export type TransactionType = 'income' | 'expense' | 'transfer';
+/**
+ * Un aporte NO es un ingreso y un retiro NO es un egreso.
+ *
+ * Los cuatro mueven la caja, pero sólo `income` y `expense` son RESULTADO: lo
+ * que el negocio generó y consumió. Un aporte es plata que pone un socio de su
+ * bolsillo y un retiro es plata que se lleva; ninguno dice nada sobre si el
+ * negocio funcionó. Por eso el saldo de la billetera los cuenta y el resultado
+ * del mes no. Ver `afectaResultado` en lib/money.
+ */
+export type TransactionType =
+  | 'income'
+  | 'expense'
+  | 'transfer'
+  | 'contribution'
+  | 'withdrawal';
 
 export interface Currency {
   id: string;
@@ -20,6 +34,30 @@ export interface Account {
   color: string;
   icon: string;
   created_at: string;
+}
+
+/** Un socio del negocio. Existe aunque todavía no tenga cuenta en la app. */
+export interface Partner {
+  id: string;
+  name: string;
+  /** public.users.id, cuando el socio ya se registró y lo vinculaste. */
+  user_id: string | null;
+  /** Participación en el negocio, 0 a 100. */
+  ownership_pct: number;
+  notes?: string | null;
+  joined_at?: string;
+  created_at: string;
+}
+
+/** Situación de un socio contra el negocio. La calcula la base. */
+export interface PartnerPosition extends Partner {
+  aportes: number;
+  retiros: number;
+  /** aportes − retiros. Positivo: el negocio le debe. */
+  saldo: number;
+  /** Qué % del total retirado se llevó. Se compara contra ownership_pct. */
+  retiros_pct: number | null;
+  ultimo_mov: string | null;
 }
 
 export type WorkspaceRole = 'owner' | 'member';
@@ -116,6 +154,8 @@ export interface Transaction {
   amount: number;
   currency_id: string;
   category_id: string | null;
+  /** Sólo en aportes y retiros: de qué socio es la plata. */
+  partner_id?: string | null;
   account_id: string;
   destination_account_id: string | null; // For transfers
   description: string;

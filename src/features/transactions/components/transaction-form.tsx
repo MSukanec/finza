@@ -18,13 +18,27 @@ import { Field, FieldRow } from '@/components/ui/field';
 import { Picker } from '@/components/ui/picker';
 import { cn } from '@/lib/utils';
 import { parseAmount, formatMoney } from '@/lib/money';
-import { TrendingUp, TrendingDown, ArrowLeftRight, AlertTriangle } from 'lucide-react';
+import { TrendingUp, TrendingDown, ArrowLeftRight, AlertTriangle, HandCoins, Landmark } from 'lucide-react';
 import type { TransactionType } from '@/lib/types';
 
+/** Lo que el negocio generó, consumió o movió entre billeteras propias. */
 const TYPES = [
   { value: 'income' as const, label: 'Ingreso', icon: TrendingUp, active: 'border-income bg-income/10 text-income' },
   { value: 'expense' as const, label: 'Gasto', icon: TrendingDown, active: 'border-expense bg-expense/10 text-expense' },
   { value: 'transfer' as const, label: 'Transferencia', icon: ArrowLeftRight, active: 'border-transfer bg-transfer/10 text-transfer' },
+];
+
+/**
+ * Plata de los socios, no del negocio.
+ *
+ * Van en una fila aparte a propósito: un aporte no es una venta y un retiro no
+ * es un costo. Mueven la caja pero no entran al resultado, y separarlos acá es
+ * lo que evita que alguien los cargue como ingreso o gasto —que es justo como
+ * estaban cargados antes.
+ */
+const EQUITY_TYPES = [
+  { value: 'contribution' as const, label: 'Aporte', icon: HandCoins, active: 'border-primary bg-primary/10 text-primary' },
+  { value: 'withdrawal' as const, label: 'Retiro', icon: Landmark, active: 'border-primary bg-primary/10 text-primary' },
 ];
 
 const today = () => {
@@ -56,6 +70,7 @@ export function TransactionForm() {
   const [groupName, setGroupName] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [periodMonth, setPeriodMonth] = useState('');
+  const [partnerId, setPartnerId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -92,12 +107,14 @@ export function TransactionForm() {
       setDestinationAccountId(editing.destination_account_id || '');
       setPeriodMonth(editing.period_month || '');
       setCategoryId(editing.category_id || '');
+      setPartnerId(editing.partner_id || '');
       setGroupName(
         categories.find((c) => c.id === editing.category_id)?.group_name || ''
       );
     } else {
       const d = sheetData ?? {};
       setType((d.type as TransactionType) || 'expense');
+      setPartnerId((d.partner_id as string) || '');
       setAmount(d.amount != null ? String(d.amount) : '');
       setDescription((d.description as string) || '');
       setDate((d.date as string) || today());
@@ -117,10 +134,12 @@ export function TransactionForm() {
   // Derivando, un valor que dejó de ser válido simplemente deja de usarse.
 
   const isTransfer = type === 'transfer';
+  // Aporte y retiro: la plata es de un socio, no del negocio.
+  const isEquity = type === 'contribution' || type === 'withdrawal';
 
   const typeCategories = useMemo(
-    () => (isTransfer ? [] : categories.filter((c) => c.type === type)),
-    [categories, type, isTransfer]
+    () => (isTransfer || isEquity ? [] : categories.filter((c) => c.type === type)),
+    [categories, type, isTransfer, isEquity]
   );
 
   const groups = useMemo(
@@ -133,6 +152,17 @@ export function TransactionForm() {
 
   /** El grupo elegido, o el primero disponible si el guardado ya no aplica. */
   const group = groups.includes(groupName) ? groupName : (groups[0] ?? '');
+
+  const partners = useFinanceStore((s) => s.partners);
+  const partnerOptions = useMemo(
+    () =>
+      partners.map((p) => ({
+        value: p.id,
+        label: p.name,
+        hint: p.ownership_pct > 0 ? `${p.ownership_pct}%` : undefined,
+      })),
+    [partners]
+  );
 
   const groupCategories = useMemo(
     () =>
@@ -191,6 +221,9 @@ export function TransactionForm() {
       return setError('Ingresá un monto mayor a cero.');
     }
     if (!account) return setError('Elegí una billetera.');
+    if (isEquity && !partnerId) {
+      return setError(type === 'contribution' ? 'Elegí quién aportó.' : 'Elegí quién retiró.');
+    }
     if (isTransfer) {
       if (!destination) return setError('Elegí la billetera de destino.');
       if (destination.id === account.id) {
@@ -199,7 +232,7 @@ export function TransactionForm() {
       if (currencyMismatch) {
         return setError('Todavía no se pueden transferir montos entre monedas distintas.');
       }
-    } else if (!category) {
+    } else if (!isEquity && !category) {
       return setError('Elegí una categoría.');
     }
 
@@ -210,14 +243,17 @@ export function TransactionForm() {
         type,
         amount: parsedAmount,
         currency_id: account.currency_id,
-        category_id: isTransfer ? null : category!.id,
+        // Un aporte o un retiro no lleva categoría: el plan de categorías es
+        // para resultados, y esto es patrimonio.
+        category_id: isTransfer || isEquity ? null : category!.id,
+        partner_id: isEquity ? partnerId : null,
         account_id: account.id,
         destination_account_id: isTransfer ? destination!.id : null,
         description: description.trim() || defaultDescription(type),
         // Mediodía local, no medianoche: 'YYYY-MM-DD' con new Date() se lee como
         // medianoche UTC y en GMT-3 el movimiento caía un día antes.
         date: new Date(`${date}T12:00:00`).toISOString(),
-        period_month: !isTransfer && isRecurring && periodMonth ? periodMonth : undefined,
+        period_month: !isTransfer && !isEquity && isRecurring && periodMonth ? periodMonth : undefined,
       };
 
       if (isEdit && editing) await updateTransaction(editing.id, payload);
@@ -242,34 +278,47 @@ export function TransactionForm() {
 
         <ResponsiveModalBody className="space-y-3">
           {/* Tipo. El activo se distingue por borde, fondo, color y peso. */}
-          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Tipo de movimiento">
-            {TYPES.map((opt) => {
-              const selected = type === opt.value;
-              return (
-                <button
+          <div role="radiogroup" aria-label="Tipo de movimiento" className="space-y-2">
+            <div className="grid grid-cols-3 gap-2">
+              {TYPES.map((opt) => (
+                <TypeButton
                   key={opt.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  onClick={() => {
+                  opt={opt}
+                  selected={type === opt.value}
+                  onSelect={() => {
                     setType(opt.value);
                     // Al salir de transferencia el destino deja de tener sentido.
                     if (opt.value !== 'transfer') setDestinationAccountId('');
+                    setPartnerId('');
                   }}
-                  className={cn(
-                    'flex items-center justify-center gap-2 rounded-xl border-2 px-2 py-2 transition-all',
-                    selected
-                      ? opt.active
-                      : 'border-transparent bg-muted text-muted-foreground hover:bg-accent'
-                  )}
-                >
-                  <opt.icon className="size-4 shrink-0" />
-                  <span className={cn('truncate text-xs', selected ? 'font-semibold' : 'font-medium')}>
-                    {opt.label}
-                  </span>
-                </button>
-              );
-            })}
+                />
+              ))}
+            </div>
+
+            {/* Fila aparte, y rotulada: un aporte no es una venta y un retiro no
+                es un costo. La separación visual es parte de lo que enseña la
+                diferencia. */}
+            <div className="flex items-center gap-2">
+              <span className="shrink-0 text-[11px] font-medium tracking-wide text-muted-foreground">
+                PLATA DE LOS SOCIOS
+              </span>
+              <span className="h-px flex-1 bg-border" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {EQUITY_TYPES.map((opt) => (
+                <TypeButton
+                  key={opt.value}
+                  opt={opt}
+                  selected={type === opt.value}
+                  onSelect={() => {
+                    setType(opt.value);
+                    setDestinationAccountId('');
+                    setCategoryId('');
+                  }}
+                />
+              ))}
+            </div>
           </div>
 
           <FieldRow>
@@ -378,7 +427,30 @@ export function TransactionForm() {
             </p>
           )}
 
-          {!isTransfer && (
+          {isEquity && (
+            <>
+              <Field
+                label={type === 'contribution' ? '¿Quién aportó?' : '¿Quién retiró?'}
+                error={partners.length === 0 ? 'Todavía no cargaste socios.' : null}
+              >
+                <Picker
+                  value={partnerId}
+                  onValueChange={setPartnerId}
+                  options={partnerOptions}
+                  placeholder="Elegir socio"
+                  emptyMessage="No hay socios cargados"
+                />
+              </Field>
+
+              <p className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
+                {type === 'contribution'
+                  ? 'Un aporte suma a la caja pero no es un ingreso del negocio: no entra al resultado del mes.'
+                  : 'Un retiro saca plata de la caja pero no es un gasto del negocio: no entra al resultado del mes.'}
+              </p>
+            </>
+          )}
+
+          {!isTransfer && !isEquity && (
             <>
               <FieldRow>
                 <Field label="Macrogrupo">
@@ -444,6 +516,41 @@ export function TransactionForm() {
   );
 }
 
+function TypeButton({
+  opt,
+  selected,
+  onSelect,
+}: {
+  opt: { value: TransactionType; label: string; icon: React.ElementType; active: string };
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={onSelect}
+      className={cn(
+        'flex items-center justify-center gap-2 rounded-xl border-2 px-2 py-2 transition-all',
+        selected ? opt.active : 'border-transparent bg-muted text-muted-foreground hover:bg-accent'
+      )}
+    >
+      <opt.icon className="size-4 shrink-0" />
+      <span className={cn('truncate text-xs', selected ? 'font-semibold' : 'font-medium')}>
+        {opt.label}
+      </span>
+    </button>
+  );
+}
+
 function defaultDescription(type: TransactionType): string {
-  return type === 'income' ? 'Ingreso' : type === 'expense' ? 'Gasto' : 'Transferencia';
+  const etiquetas: Record<TransactionType, string> = {
+    income: 'Ingreso',
+    expense: 'Gasto',
+    transfer: 'Transferencia',
+    contribution: 'Aporte',
+    withdrawal: 'Retiro',
+  };
+  return etiquetas[type] ?? 'Movimiento';
 }
