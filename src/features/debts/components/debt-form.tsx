@@ -157,23 +157,25 @@ export function DebtForm() {
           )}
         </ResponsiveModalBody>
 
-        <ResponsiveModalFooter>
-          <div className="flex items-center justify-between">
-            {isEdit ? (
-                <Button type="button" variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10" onClick={handleDelete}>
-                   <Trash2 className="size-4" />
-                </Button>
-            ) : <div/>}
-
-            <div className="flex gap-2">
-                <Button type="button" variant="outline" className="w-full" onClick={closeSheet}>
-                Cancelar
-                </Button>
-                <Button type="submit" className="w-full">
-                {isEdit ? 'Actualizar' : 'Crear'}
-                </Button>
-            </div>
+        {/* Eliminar y cancelar van en el cuerpo: el footer es UN botón, el de
+            la acción principal. Metidos adentro, el <div> que los envolvía
+            pasaba a ser "el botón" y los tres quedaban apretados en una fila
+            de 56px. */}
+        {isEdit && (
+          <div className="shrink-0 border-t border-border/60 px-4 py-2">
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="flex w-full items-center justify-center gap-1.5 rounded-xl p-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
+            >
+              <Trash2 className="size-4" />
+              Eliminar deuda
+            </button>
           </div>
+        )}
+
+        <ResponsiveModalFooter>
+          <Button type="submit">{isEdit ? 'Actualizar' : 'Crear'}</Button>
         </ResponsiveModalFooter>
         </form>
       </ResponsiveModalContent>

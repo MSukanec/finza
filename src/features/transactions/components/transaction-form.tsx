@@ -180,10 +180,22 @@ export function TransactionForm() {
   const category = groupCategories.find((c) => c.id === categoryId) ?? null;
   const isRecurring = category?.is_recurring ?? false;
 
-  const sortedAccounts = useMemo(
-    () => [...accounts].sort((a, b) => a.name.localeCompare(b.name)),
-    [accounts]
-  );
+  /**
+   * Sólo las hojas.
+   *
+   * Una billetera con subcuentas agrupa y no recibe movimientos —la base lo
+   * rechaza—, así que ofrecerla en el formulario sólo confunde: si el efectivo
+   * está repartido en tres cajas, la que se elige es la caja.
+   *
+   * Se deriva de `parent_id` acá mismo y no de la marca `isGroup` que calcula
+   * el store: así no depende de que ese cálculo haya corrido.
+   */
+  const sortedAccounts = useMemo(() => {
+    const agrupa = new Set(accounts.map((a) => a.parent_id).filter(Boolean) as string[]);
+    return accounts
+      .filter((a) => !agrupa.has(a.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [accounts]);
 
   /** La primera billetera es un valor por defecto, no una elección del usuario. */
   const account =
@@ -199,13 +211,11 @@ export function TransactionForm() {
     isTransfer && !!destination && !!account && destination.currency_id !== account.currency_id;
 
   // Las listas del formulario, ya con la moneda como texto secundario.
-  // Sólo las hojas: una billetera que agrupa subcuentas no recibe movimientos,
-  // y la base lo rechaza. El nombre del padre va como contexto para distinguir
-  // "Caja fuerte" de cualquier otra caja.
+  // El nombre de la madre va como contexto: distingue "Efectivo › Caja fuerte"
+  // de cualquier otra caja suelta que se llame parecido.
   const walletOptions = useMemo(() => {
     const nombrePadre = new Map(accounts.map((a) => [a.id, a.name]));
     return sortedAccounts
-      .filter((acc) => !acc.isGroup)
       .map((acc) => ({
         value: acc.id,
         label: acc.parent_id

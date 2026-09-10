@@ -285,44 +285,44 @@ export function ReconciliationForm() {
           )}
         </ResponsiveModalBody>
 
+        {/* Las acciones secundarias van en el CUERPO, no en el footer.
+            El footer aplica `h-14 flex-1` a sus hijos directos porque la regla
+            es que el footer entero sea el botón: metiendo un <div> con tres
+            botones adentro, ese div pasaba a ser "el botón" y todo quedaba
+            apretado en una pastilla. */}
+        {result && !matched && (
+          <div className="shrink-0 space-y-2 border-t border-border/60 px-4 py-3">
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => handleResolve('explained')}
+                disabled={submitting}
+                className="h-10 flex-1"
+              >
+                Ya sé por qué
+              </Button>
+              <Button variant="ghost" onClick={closeSheet} className="h-10 flex-1">
+                Resolver después
+              </Button>
+            </div>
+            <p className="text-center text-xs text-muted-foreground">
+              El ajuste asienta un movimiento por la diferencia, así queda a la vista en vez de
+              desaparecer.
+            </p>
+          </div>
+        )}
+
         <ResponsiveModalFooter>
           {!result ? (
-            <Button
-              onClick={handleCount}
-              disabled={submitting || parsed === null}
-            >
+            <Button onClick={handleCount} disabled={submitting || parsed === null}>
               {submitting ? 'Registrando…' : 'Registrar arqueo'}
             </Button>
           ) : matched ? (
-            <Button onClick={closeSheet} >
-              Listo
-            </Button>
+            <Button onClick={closeSheet}>Listo</Button>
           ) : (
-            <div className="space-y-2">
-              <Button
-                onClick={() => handleResolve('adjusted')}
-                disabled={submitting}
-              >
-                Asentar ajuste de {formatMoney(Math.abs(difference), currency)}
-              </Button>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => handleResolve('explained')}
-                  disabled={submitting}
-                  className="h-11 flex-1"
-                >
-                  Ya sé por qué
-                </Button>
-                <Button variant="ghost" onClick={closeSheet} className="h-11 flex-1">
-                  Resolver después
-                </Button>
-              </div>
-              <p className="text-center text-xs text-muted-foreground">
-                El ajuste asienta un movimiento por la diferencia, así queda a la vista en vez de
-                desaparecer.
-              </p>
-            </div>
+            <Button onClick={() => handleResolve('adjusted')} disabled={submitting}>
+              Asentar ajuste de {formatMoney(Math.abs(difference), currency)}
+            </Button>
           )}
         </ResponsiveModalFooter>
       </ResponsiveModalContent>

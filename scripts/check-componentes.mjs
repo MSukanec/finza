@@ -80,6 +80,36 @@ const registrar = (nombre, ok, detalle = '') => casos.push({ nombre, ok, detalle
   registrar('Cerrado no renderiza el contenido', !cerrado.includes('contenido'));
 }
 
+// ------------------------------------------- Contrato del footer del modal
+{
+  // El footer aplica h-14/flex-1 a sus HIJOS DIRECTOS: la regla es que el
+  // footer entero sea el botón. Un <div> con varios botones adentro convierte
+  // a ese div en "el botón" y todo queda apretado en una pastilla.
+  const { default: fs } = await import('node:fs');
+  const dirs = fs.readdirSync('src/features', { withFileTypes: true }).filter((d) => d.isDirectory());
+  const malos = [];
+
+  for (const d of dirs) {
+    const base = `src/features/${d.name}/components`;
+    if (!fs.existsSync(base)) continue;
+    for (const archivo of fs.readdirSync(base)) {
+      if (!archivo.endsWith('.tsx')) continue;
+      const ruta = `${base}/${archivo}`;
+      const src = fs.readFileSync(ruta, 'utf8');
+      const i = src.indexOf('<ResponsiveModalFooter>');
+      if (i < 0) continue;
+      const bloque = src.slice(i, src.indexOf('</ResponsiveModalFooter>', i));
+      if (bloque.includes('<div')) malos.push(archivo);
+    }
+  }
+
+  registrar(
+    'Ningún modal mete un <div> dentro del footer',
+    malos.length === 0,
+    malos.join(', ')
+  );
+}
+
 let fallas = 0;
 for (const c of casos) {
   if (c.ok) console.log(`OK   ${c.nombre}`);

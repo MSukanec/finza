@@ -9,6 +9,89 @@ export interface Conectado extends Person {
   desde: string;
 }
 
+type Oyente = (gente: Conectado[]) => void;
+
+interface Entrada {
+  canal: ReturnType<typeof supabase.channel>;
+  oyentes: Set<Oyente>;
+}
+
+/**
+ * Un canal por espacio, compartido por todos los que escuchan.
+ *
+ * No se puede confiar en `supabase.channel()` para reusar: devuelve el canal
+ * existente si el topic coincide, pero `teardown()` NUNCA lo saca de la lista
+ * interna del cliente. O sea que después de cerrarlo sigue devolviendo la misma
+ * instancia muerta, y agregarle handlers de presencia a un canal ya unido
+ * explota con "cannot add presence callbacks after subscribe()".
+ *
+ * En desarrollo React monta cada componente dos veces, así que eso pasaba
+ * siempre. Con un registro propio el canal se crea una sola vez por espacio,
+ * los handlers se enganchan una sola vez, y se cierra recién cuando no queda
+ * nadie escuchando.
+ */
+const registro = new Map<string, Entrada>();
+
+function entrar(workspaceId: string, yo: Person, oyente: Oyente): () => void {
+  const nombre = `presencia:${workspaceId}`;
+  const existente = registro.get(nombre);
+
+  if (existente) {
+    existente.oyentes.add(oyente);
+  } else {
+    const canal = supabase.channel(nombre, {
+      config: { presence: { key: yo.id }, private: true },
+    });
+    const nueva: Entrada = { canal, oyentes: new Set([oyente]) };
+    registro.set(nombre, nueva);
+
+    const volcar = () => {
+      const estado = canal.presenceState<Conectado>();
+      const gente: Conectado[] = [];
+
+      for (const [clave, entradas] of Object.entries(estado)) {
+        if (clave === yo.id) continue; // uno mismo no cuenta
+        const primera = entradas[0];
+        if (primera) gente.push(primera);
+      }
+
+      // Estable por nombre: sin esto la lista se reordena sola cada vez que
+      // alguien abre otra pestaña.
+      gente.sort((a, b) => (a.full_name ?? a.email).localeCompare(b.full_name ?? b.email));
+      for (const o of nueva.oyentes) o(gente);
+    };
+
+    canal
+      .on('presence', { event: 'sync' }, volcar)
+      .on('presence', { event: 'join' }, volcar)
+      .on('presence', { event: 'leave' }, volcar)
+      .subscribe((estado) => {
+        if (estado === 'SUBSCRIBED') {
+          void canal.track({
+            id: yo.id,
+            full_name: yo.full_name,
+            email: yo.email,
+            avatar_url: yo.avatar_url,
+            desde: new Date().toISOString(),
+          });
+        }
+      });
+  }
+
+  return () => {
+    const actual = registro.get(nombre);
+    if (!actual) return;
+    actual.oyentes.delete(oyente);
+
+    // Recién cuando no queda nadie escuchando se cierra. Si no, el segundo
+    // montaje de React cerraría el canal del primero.
+    if (actual.oyentes.size === 0) {
+      registro.delete(nombre);
+      void supabase.removeChannel(actual.canal);
+    }
+  };
+}
+
 /**
  * Quién más del espacio está con la app abierta.
  *
@@ -27,64 +110,7 @@ export function usePresence(workspaceId: string | null, yo: Person | null): Cone
 
   useEffect(() => {
     if (!workspaceId || !yo) return;
-
-    const nombre = `presencia:${workspaceId}`;
-    const topic = `realtime:${nombre}`;
-    let vivo = true;
-    let canal: ReturnType<typeof supabase.channel> | null = null;
-
-    const volcar = (c: NonNullable<typeof canal>) => () => {
-      const estado = c.presenceState<Conectado>();
-      const gente: Conectado[] = [];
-
-      for (const [clave, entradas] of Object.entries(estado)) {
-        if (clave === yo.id) continue; // uno mismo no cuenta
-        const primera = entradas[0];
-        if (primera) gente.push(primera);
-      }
-
-      // Estable por nombre: sin esto la lista se reordena sola cada vez que
-      // alguien abre otra pestaña.
-      gente.sort((a, b) => (a.full_name ?? a.email).localeCompare(b.full_name ?? b.email));
-      setOtros(gente);
-    };
-
-    // `supabase.channel()` devuelve el canal YA EXISTENTE si el topic coincide,
-    // y a un canal suscrito el cliente no le deja agregar handlers. En
-    // desarrollo React monta dos veces: el segundo montaje encontraba el canal
-    // del primero todavía vivo —removeChannel es asincrónico— y rompía con
-    // "cannot add presence callbacks after subscribe()".
-    const anterior = supabase.getChannels().find((c) => c.topic === topic);
-    const listo = anterior ? supabase.removeChannel(anterior) : Promise.resolve();
-
-    void listo.then(() => {
-      if (!vivo) return;
-
-      const c = supabase.channel(nombre, {
-        config: { presence: { key: yo.id }, private: true },
-      });
-      canal = c;
-
-      c.on('presence', { event: 'sync' }, volcar(c))
-        .on('presence', { event: 'join' }, volcar(c))
-        .on('presence', { event: 'leave' }, volcar(c))
-        .subscribe((estado) => {
-          if (estado === 'SUBSCRIBED') {
-            void c.track({
-              id: yo.id,
-              full_name: yo.full_name,
-              email: yo.email,
-              avatar_url: yo.avatar_url,
-              desde: new Date().toISOString(),
-            });
-          }
-        });
-    });
-
-    return () => {
-      vivo = false;
-      if (canal) void supabase.removeChannel(canal);
-    };
+    return entrar(workspaceId, yo, setOtros);
     // Se depende de los campos y no del objeto `yo`: viene de un mapa que se
     // rearma en cada hydrate, así que su identidad cambia sin que cambie la
     // persona, y el canal se resuscribiría de más.
