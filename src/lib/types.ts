@@ -171,7 +171,14 @@ export interface Reconciliation {
   /** Foto de lo que la app calculaba ese día. No se recalcula nunca. */
   expected_amount: number;
   status: 'matched' | 'pending' | 'resolved';
-  resolution: 'adjusted' | 'explained' | null;
+  /**
+   * Cómo se cerró la diferencia.
+   *
+   * 'superseded' es distinto de los otros dos: no se explicó ni se ajustó nada,
+   * simplemente alguien volvió a contar y ese conteo lo reemplazó. En el
+   * historial no es lo mismo que "alguien lo revisó".
+   */
+  resolution: 'adjusted' | 'explained' | 'superseded' | null;
   adjustment_transaction_id: string | null;
   note: string | null;
   created_at: string;

@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T19:38:10.199Z
+> Generated: 2026-09-10T19:45:39.888Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -318,10 +318,20 @@ DECLARE
 BEGIN
     SELECT workspace_id INTO v_ws FROM public.wallets WHERE id = w AND deleted_at IS NULL;
     IF v_ws IS NULL THEN RAISE EXCEPTION 'La billetera no existe'; END IF;
-    IF NOT public.can_see_all(v_ws) THEN
-        RAISE EXCEPTION 'No tenés acceso a esta información en este espacio';
+    IF NOT public.is_workspace_member(v_ws) THEN
+        RAISE EXCEPTION 'No sos miembro de este espacio';
     END IF;
     IF v_me IS NULL THEN RAISE EXCEPTION 'No hay sesión activa'; END IF;
+
+    -- Lo que había sin resolver de esta billetera queda cerrado: el conteo
+    -- nuevo lo reemplaza. Se hace ANTES de insertar para que nunca convivan dos
+    -- pendientes de la misma caja.
+    UPDATE public.wallet_reconciliations
+       SET status = 'resolved',
+           resolution = 'superseded'
+     WHERE wallet_id = w
+       AND status = 'pending'
+       AND deleted_at IS NULL;
 
     v_expected := public.wallet_expected_balance(w, at_time);
 

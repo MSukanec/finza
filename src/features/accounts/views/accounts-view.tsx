@@ -210,35 +210,45 @@ export function AccountsView() {
                              </div>
 
                              <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1.5 text-right">
+                                 {/* Dos números distintos y hay que decir cuál es cuál:
+                                     arriba SIEMPRE el saldo que calculó la app, y la línea
+                                     de abajo lo aclara. Antes decía "Arqueado hoy" debajo
+                                     del saldo, así que ese número se leía como si fuera lo
+                                     que la persona había contado. */}
                                  <div className="flex min-w-[80px] flex-col items-end text-sm font-semibold tabular-nums">
                                      <span className={cn(acc.balance < 0 ? "text-expense" : "")}>
                                          {formatMoney(acc.balance, group.currency)}
                                      </span>
                                      <span className="text-[10px] font-normal text-muted-foreground">
-                                        {acc.isGroup ? 'Se arquea por caja' : lastCountLabel(acc.id)}
+                                        {acc.isGroup
+                                          ? 'Se arquea por caja'
+                                          : pendingOf(acc.id)
+                                            ? 'Según la app'
+                                            : lastCountLabel(acc.id)}
                                      </span>
                                  </div>
 
-                                 {/* La diferencia con NÚMEROS. Antes la fila sólo decía
-                                     "Diferencia sin resolver": avisaba que algo no cerraba
-                                     y no decía ni cuánto contaste ni cuánto falta, que son
-                                     los dos datos por los que uno mira esa fila. */}
+                                 {/* Lo que se contó y la diferencia, con NÚMEROS. Antes la
+                                     fila sólo decía "Diferencia sin resolver": avisaba que
+                                     algo no cerraba y no decía ni cuánto se contó ni cuánto
+                                     falta, que son los dos datos por los que uno mira. */}
                                  {(() => {
                                      const pend = pendingOf(acc.id);
                                      if (!pend) return null;
                                      const diff = pend.counted_amount - pend.expected_amount;
                                      return (
-                                         <span className={cn(
-                                             'shrink-0 rounded-lg px-2.5 py-1 text-xs tabular-nums',
+                                         <div className={cn(
+                                             'flex shrink-0 flex-col items-end rounded-lg px-2.5 py-1 text-xs tabular-nums',
                                              diff < 0 ? 'bg-expense/12 text-expense' : 'bg-income/12 text-income'
                                          )}>
-                                             Contaste {formatMoney(pend.counted_amount, group.currency)}
-                                             {' · '}
-                                             {diff < 0 ? 'faltan ' : 'sobran '}
                                              <span className="font-semibold">
+                                                 {formatMoney(pend.counted_amount, group.currency)}
+                                             </span>
+                                             <span className="text-[10px] opacity-90">
+                                                 contado · {diff < 0 ? 'faltan ' : 'sobran '}
                                                  {formatMoney(Math.abs(diff), group.currency)}
                                              </span>
-                                         </span>
+                                         </div>
                                      );
                                  })()}
 

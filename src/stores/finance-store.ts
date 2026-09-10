@@ -700,7 +700,20 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     // nadie pueda arquear contra un numero calculado en el cliente. Pero una
     // vez que volvio, se inserta en memoria y listo: no hay motivo para
     // recargar los 1000 movimientos.
-    set((st) => ({ reconciliations: [saved, ...st.reconciliations] }));
+    // El conteo nuevo reemplaza al que hubiera abierto de esa billetera, igual
+    // que lo hace la base (DB/040). Sin esto el anterior seguiría contando como
+    // pendiente en memoria y la alerta mostraría dos diferencias de la misma
+    // caja hasta la próxima recarga.
+    set((st) => ({
+      reconciliations: [
+        saved,
+        ...st.reconciliations.map((r) =>
+          r.wallet_id === saved.wallet_id && r.status === 'pending' && r.id !== saved.id
+            ? { ...r, status: 'resolved' as const, resolution: 'superseded' as const }
+            : r
+        ),
+      ],
+    }));
     return saved;
   },
 
