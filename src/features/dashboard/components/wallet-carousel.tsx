@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useFinanceStore } from '@/stores/finance-store';
+import { raices } from '@/lib/cuentas';
 import { formatMoney } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import { Banknote, Landmark, Plus, Smartphone, Wallet } from 'lucide-react';
@@ -19,7 +20,10 @@ export function WalletCarousel() {
   const currencies = useFinanceStore((s) => s.currencies);
   const openSheet = useUIStore((s) => s.openSheet);
 
-  const sorted = [...accounts].sort((a, b) => b.balance - a.balance);
+  // El inicio es un resumen: va el agrupador y no sus cajas. Mostrar los dos
+  // ponía el mismo efectivo en dos tarjetas seguidas, con el mismo número.
+  // El detalle por caja está en Billeteras.
+  const sorted = raices(accounts).sort((a, b) => b.balance - a.balance);
 
   return (
     <Panel

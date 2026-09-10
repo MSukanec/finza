@@ -6,6 +6,7 @@ import { Search, Calendar, Wallet, SlidersHorizontal, Tags, Layers, X } from 'lu
 import { Input } from '@/components/ui/input';
 import { Picker } from '@/components/ui/picker';
 import { useFinanceStore } from '@/stores/finance-store';
+import { hojas } from '@/lib/cuentas';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
 
@@ -174,7 +175,9 @@ export function TransactionFilters({
                 onValueChange={onWalletChange}
                 options={[
                   { value: 'all', label: 'Cualquiera' },
-                  ...accounts.map((a) => ({ value: a.id, label: a.name })),
+                  // Sólo las hojas: un agrupador no tiene movimientos propios
+                  // que filtrar.
+                  ...hojas(accounts).map((a) => ({ value: a.id, label: a.name })),
                 ]}
               />
             </Field>

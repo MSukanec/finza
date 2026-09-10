@@ -7,7 +7,7 @@
     "build": "next build",
     "build:check": "node scripts/build-check.mjs",
     "check:preview": "node --experimental-loader ./scripts/tsx-loader.mjs scripts/check-vista-previa.mjs",
-    "check:ui": "node --experimental-loader ./scripts/tsx-loader.mjs scripts/check-select-labels.mjs && node --experimental-loader ./scripts/tsx-loader.mjs scripts/check-avatar.mjs && node --experimental-loader ./scripts/tsx-loader.mjs scripts/check-saldos.mjs && node --experimental-loader ./scripts/tsx-loader.mjs scripts/check-componentes.mjs && node --experimental-loader ./scripts/tsx-loader.mjs scripts/check-tiempo.mjs",
+    "check:ui": "node --experimental-loader ./scripts/tsx-loader.mjs scripts/check-select-labels.mjs && node --experimental-loader ./scripts/tsx-loader.mjs scripts/check-avatar.mjs && node --experimental-loader ./scripts/tsx-loader.mjs scripts/check-saldos.mjs && node --experimental-loader ./scripts/tsx-loader.mjs scripts/check-componentes.mjs && node --experimental-loader ./scripts/tsx-loader.mjs scripts/check-tiempo.mjs && node --experimental-loader ./scripts/tsx-loader.mjs scripts/check-cuentas.mjs",
     "check:import": "node --experimental-loader ./scripts/tsx-loader.mjs scripts/check-import.mjs",
     "check:huellas": "node scripts/check-huellas.mjs",
     "check:permisos": "node scripts/check-permisos.mjs",

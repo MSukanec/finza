@@ -6,6 +6,7 @@ import { useUIStore } from '@/stores/ui-store';
 import { PageLayout } from '@/components/layout/page-layout';
 import { Panel, Kpi } from '@/components/ui/panel';
 import { formatMoney } from '@/lib/money';
+import { saldoTotal } from '@/lib/cuentas';
 import { cn, parseLocalDate } from '@/lib/utils';
 import type { Transaction } from '@/lib/types';
 import { CalendarClock, AlertTriangle, Wallet, TrendingDown, CheckCircle2 } from 'lucide-react';
@@ -57,7 +58,8 @@ export function PaymentsView() {
       en30: pendientes
         .filter((t) => +new Date(t.settles_at!) <= ahora + 30 * DIA)
         .reduce((s, t) => s + salida(t), 0),
-      disponible: accounts.reduce((s, a) => s + a.balance, 0),
+      // Sólo las raíces: el agrupador ya trae el saldo de sus cajas.
+      disponible: saldoTotal(accounts),
     };
   }, [transactions, accounts, ahora]);
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useFinanceStore } from '@/stores/finance-store';
+import { saldoTotal } from '@/lib/cuentas';
 import { EXCHANGE_RATES } from '@/lib/mock-data';
 import { formatMoney } from '@/lib/money';
 import { parseLocalDate, cn } from '@/lib/utils';
@@ -49,7 +50,9 @@ export function KpiGrid() {
       return (amount * rate) / primaryRate;
     };
 
-    const balance = accounts.reduce((s, a) => s + toPrimary(a.balance, a.currency_id), 0);
+    // Sólo las raíces: el saldo de una billetera que agrupa ya incluye a sus
+    // subcuentas, así que sumar la lista entera contaba el efectivo dos veces.
+    const balance = saldoTotal(accounts, toPrimary);
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
