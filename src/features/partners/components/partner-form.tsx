@@ -42,14 +42,19 @@ export function PartnerForm() {
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  // El socio se lee acá adentro y no de `editing`: inicializar desde un valor
+  // del render hace que cada render del padre vuelva a pisar lo que el usuario
+  // esté tipeando.
   useEffect(() => {
-    if (!isOpen) return;
-    setError(null);
-    setName(editing?.name ?? '');
-    setPct(editing?.ownership_pct ? String(editing.ownership_pct) : '');
-    setUserId(editing?.user_id ?? '');
-    setNotes(editing?.notes ?? '');
-  }, [isOpen, editing]);
+    if (isOpen) {
+      const socio = sheetData?.partner as any;
+      setError(null);
+      setName(socio?.name ?? '');
+      setPct(socio?.ownership_pct ? String(socio.ownership_pct) : '');
+      setUserId(socio?.user_id ?? '');
+      setNotes(socio?.notes ?? '');
+    }
+  }, [isOpen, sheetData]);
 
   // Cuánto queda por repartir, sin contar al socio que se está editando.
   const asignado = partners

@@ -7,7 +7,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { TransactionType } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Plus, ArrowLeftRight } from 'lucide-react';
+import { Plus, ArrowLeftRight, HandCoins, X } from 'lucide-react';
 import { useUIStore } from '@/stores/ui-store';
 import { PageLayout } from '@/components/layout/page-layout';
 
@@ -19,11 +19,17 @@ export function TransactionsView() {
   
   const searchParams = useSearchParams();
   const [filterCategoryId, setFilterCategoryId] = useState<string>('all');
+  const [filterPartnerId, setFilterPartnerId] = useState<string>('all');
   
   useEffect(() => {
     const categoryParam = searchParams.get('category');
     if (categoryParam) {
       setFilterCategoryId(categoryParam);
+    }
+    // Desde la ficha de un socio se entra acá con su plata ya filtrada.
+    const partnerParam = searchParams.get('partner');
+    if (partnerParam) {
+      setFilterPartnerId(partnerParam);
     }
   }, [searchParams]);
 
@@ -38,6 +44,9 @@ export function TransactionsView() {
   const [visibleCount, setVisibleCount] = useState(PAGE);
 
   const categories = useFinanceStore((s) => s.categories);
+  const partners = useFinanceStore((s) => s.partners);
+
+  const socioFiltrado = partners.find((p) => p.id === filterPartnerId) ?? null;
 
   const filtered = useMemo(() => {
     let result = transactions;
@@ -64,6 +73,9 @@ export function TransactionsView() {
     if (filterCategoryId !== 'all') {
       result = result.filter((t) => t.category_id === filterCategoryId);
     }
+    if (filterPartnerId !== 'all') {
+      result = result.filter((t) => t.partner_id === filterPartnerId);
+    }
     if (filterGroupId !== 'all') {
       result = result.filter((t) => {
          const cat = categories.find(c => c.id === t.category_id);
@@ -71,12 +83,12 @@ export function TransactionsView() {
       });
     }
     return result;
-  }, [transactions, categories, filterType, searchQuery, filterWalletId, filterCategoryId, filterGroupId, dateFrom, dateTo]);
+  }, [transactions, categories, filterType, searchQuery, filterWalletId, filterCategoryId, filterGroupId, filterPartnerId, dateFrom, dateTo]);
 
   // Cualquier cambio de filtro vuelve a la primera tanda.
   useEffect(() => {
     setVisibleCount(PAGE);
-  }, [filterType, searchQuery, filterWalletId, filterCategoryId, filterGroupId, dateFrom, dateTo]);
+  }, [filterType, searchQuery, filterWalletId, filterCategoryId, filterGroupId, filterPartnerId, dateFrom, dateTo]);
 
   return (
     <PageLayout
@@ -107,6 +119,24 @@ export function TransactionsView() {
         </>
       }
     >
+      {socioFiltrado && (
+        <div className="flex items-center gap-2 rounded-xl bg-primary/10 px-3 py-2">
+          <HandCoins className="size-4 shrink-0 text-primary" />
+          <p className="min-w-0 flex-1 text-sm">
+            Mostrando sólo los aportes y retiros de{' '}
+            <strong className="font-semibold">{socioFiltrado.name}</strong>
+          </p>
+          <button
+            type="button"
+            onClick={() => setFilterPartnerId('all')}
+            className="shrink-0 rounded-lg p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            aria-label="Quitar el filtro por socio"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+
       <p className="text-sm text-muted-foreground">
         {filtered.length === transactions.length
           ? `${filtered.length.toLocaleString('es-AR')} movimientos`

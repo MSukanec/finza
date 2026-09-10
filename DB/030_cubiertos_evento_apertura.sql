@@ -1,4 +1,4 @@
--- 028 · Los cubiertos del evento de apertura vuelven a ser ingreso
+-- 030 · Los cubiertos del evento de apertura vuelven a ser ingreso
 --
 -- La 027 pasó a aporte todo lo que estaba en el grupo de categorías «Aportes».
 -- Siete de esos ocho movimientos no eran aportes: eran los cubiertos que cada
