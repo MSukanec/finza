@@ -27,10 +27,13 @@ export function PresenceBar({ className }: { className?: string }) {
   const people = useFinanceStore((s) => s.people);
 
   const yo = appUserId ? (people[appUserId] ?? null) : null;
-  const conectados = usePresence(workspaceId, yo);
+  const otros = usePresence(workspaceId, yo);
 
-  if (conectados.length === 0) return null;
+  if (!yo) return null;
 
+  // Uno mismo va primero y siempre: si sólo apareciera cuando hay alguien más,
+  // estando solo no habría forma de saber si esto funciona o si está roto.
+  const conectados = [yo, ...otros];
   const visibles = conectados.slice(0, VISIBLES);
   const resto = conectados.length - visibles.length;
 
@@ -54,8 +57,12 @@ export function PresenceBar({ className }: { className?: string }) {
                 }
               />
               <TooltipContent side="top">
-                <p className="font-medium">{p.full_name || p.email}</p>
-                <p className="text-xs opacity-80">Está en la app ahora</p>
+                <p className="font-medium">
+                  {p.id === yo.id ? 'Vos' : p.full_name || p.email}
+                </p>
+                <p className="text-xs opacity-80">
+                  {p.id === yo.id ? 'Sos vos' : 'Está en la app ahora'}
+                </p>
               </TooltipContent>
             </Tooltip>
           ))}
@@ -79,9 +86,11 @@ export function PresenceBar({ className }: { className?: string }) {
         </div>
 
         <span className="truncate text-xs text-muted-foreground">
-          {conectados.length === 1
-            ? `${(conectados[0].full_name || conectados[0].email).split(' ')[0]} está acá`
-            : `${conectados.length} conectados`}
+          {otros.length === 0
+            ? 'Sólo vos'
+            : otros.length === 1
+              ? `Vos y ${(otros[0].full_name || otros[0].email).split(' ')[0]}`
+              : `Vos y ${otros.length} más`}
         </span>
       </div>
     </TooltipProvider>

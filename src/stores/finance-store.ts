@@ -221,6 +221,18 @@ interface FinanceState {
   appUserId: string | null;
   /** Habilita secciones todavía no listas para un usuario común. NO es seguridad de datos: eso lo da RLS. */
   isAdmin: boolean;
+  /** Mi rol real en el espacio activo. */
+  currentRole: WorkspaceRole | null;
+  /**
+   * Rol que se está PREVISUALIZANDO, para ver la app como la vería otro.
+   *
+   * Es una vista previa de la interfaz, no un cambio de permisos: la sesión
+   * sigue siendo la misma y la base sigue respondiendo con los permisos reales.
+   * Sirve para contestar "¿qué le voy a mostrar a la encargada?" antes de
+   * invitarla, no para probar si el sistema es seguro. De eso se ocupa RLS.
+   */
+  previewRole: WorkspaceRole | null;
+  setPreviewRole: (role: WorkspaceRole | null) => Promise<void>;
 
   hydrate: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
@@ -306,6 +318,16 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   user: null,
   appUserId: null,
   isAdmin: false,
+  currentRole: null,
+  previewRole: null,
+
+  setPreviewRole: async (role) => {
+    // Se rehidrata para que los DATOS también se acoten: el colaborador ve sólo
+    // sus movimientos, y sin recargar la vista previa mostraría el menú
+    // recortado con los datos completos, que es peor que no tenerla.
+    set({ previewRole: role, isHydrated: false });
+    await get().hydrate();
+  },
 
   hydrate: async () => {
    try {
@@ -389,7 +411,15 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     // inicial adentro y no hay forma de esconder una columna con RLS. Para
     // elegir donde entra la plata usa una funcion que devuelve nombre y moneda
     // y ningun saldo (ver DB/034).
-    const soloLoSuyo = currentWorkspaceId ? roleByWs.get(currentWorkspaceId) === 'collaborator' : false;
+    const rolReal = currentWorkspaceId ? (roleByWs.get(currentWorkspaceId) ?? null) : null;
+
+    // Durante una vista previa manda el rol previsualizado, pero SÓLO puede
+    // recortar: nadie se da a sí mismo más permisos de los que tiene. La base
+    // no se entera de esto y sigue respondiendo con los permisos reales.
+    const preview = get().previewRole;
+    const rolEfectivo = preview ?? rolReal;
+
+    const soloLoSuyo = rolEfectivo === 'collaborator';
 
     const [walletsRes, categoriesRes, debtsRes, groupsRes, txs] = await Promise.all([
       soloLoSuyo
@@ -490,6 +520,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     set({
       workspaces,
       currentWorkspaceId,
+      currentRole: rolReal,
       people,
       budgets,
       reconciliations: ((reconciliationsRes as any).data || []).map((r: any) => ({

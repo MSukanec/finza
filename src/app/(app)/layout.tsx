@@ -20,6 +20,7 @@ import {
   Users,
   Shield,
   CalendarClock,
+  Settings,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -35,6 +36,7 @@ import { ReconciliationForm } from '@/features/accounts/components/reconciliatio
 import { PartnerForm } from '@/features/partners/components/partner-form';
 import { AdminPanel } from '@/components/admin-panel';
 import { PresenceBar } from '@/components/presence-bar';
+import { PreviewBanner } from '@/components/preview-banner';
 import { UserProfile } from '@/components/user-profile';
 import { WorkspaceSwitcher } from '@/components/workspace-switcher';
 import { DialogProvider } from '@/components/providers/dialog-provider';
@@ -58,6 +60,7 @@ const NAV_ITEMS = [
   { href: '/pagos', label: 'Pagos', icon: CalendarClock },
   { href: '/socios', label: 'Socios', icon: Users },
   { href: '/actividad', label: 'Actividad', icon: History },
+  { href: '/configuracion', label: 'Configuración', icon: Settings },
   { href: '/budgets', label: 'Presupuestos', icon: Target, adminOnly: true },
   { href: '/debts', label: 'Deudas', icon: Landmark, adminOnly: true },
   { href: '/importar', label: 'Importar', icon: FileSpreadsheet, adminOnly: true },
@@ -82,9 +85,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isHydrated = useFinanceStore((s) => s.isHydrated);
   const user = useFinanceStore((s) => s.user);
   const isAdmin = useFinanceStore((s) => s.isAdmin);
+  const previewRole = useFinanceStore((s) => s.previewRole);
+
+  // Durante una vista previa manda el rol previsualizado. Sólo recorta: el
+  // administrador de la app deja de serlo mientras mira como otro, pero nadie
+  // se da permisos que no tiene —y de eso, igual, se ocupa la base—.
+  const esAdmin = previewRole ? false : isAdmin;
   const workspaces = useFinanceStore((s) => s.workspaces);
   const currentWorkspaceId = useFinanceStore((s) => s.currentWorkspaceId);
-  const rolActual = workspaces.find((w) => w.id === currentWorkspaceId)?.role ?? null;
+  // Durante una vista previa manda el rol previsualizado. Sólo recorta: nadie
+  // se da a sí mismo permisos que no tiene, y de eso igual se ocupa la base.
+  const rolReal = workspaces.find((w) => w.id === currentWorkspaceId)?.role ?? null;
+  const rolActual = previewRole ?? rolReal;
 
   useEffect(() => {
     if (isHydrated && !user) router.push('/login');
@@ -131,7 +143,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <DialogProvider>
-      <div className="flex h-dvh overflow-hidden bg-background">
+      <div className="flex h-dvh flex-col overflow-hidden bg-background">
+        <PreviewBanner />
+
+        <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* ===== Sidebar (desktop) ===== */}
         <aside className="hidden w-64 shrink-0 flex-col border-r border-border/60 bg-sidebar md:flex">
           <div className="flex h-16 items-center gap-3 border-b border-border/60 px-5">
@@ -182,7 +197,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {/* Sólo para el dueño de la app. Esconderlo es presentación: lo que
                 impide leer los datos es que la función corta por is_admin en la
                 base. */}
-            {isAdmin && (
+            {esAdmin && (
               <button
                 type="button"
                 onClick={() => setAdminOpen(true)}
@@ -314,6 +329,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
+        </div>
+
         {/* ===== Modales globales ===== */}
         <TransactionForm />
         <AccountForm />
@@ -322,7 +339,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <BudgetForm />
         <ReconciliationForm />
         <PartnerForm />
-        {isAdmin && <AdminPanel open={adminOpen} onOpenChange={setAdminOpen} />}
+        {esAdmin && <AdminPanel open={adminOpen} onOpenChange={setAdminOpen} />}
 
         {/* Las escrituras son optimistas: si el servidor rechaza una, el cambio
             se deshace y el aviso sale por aca. */}
