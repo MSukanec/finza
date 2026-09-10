@@ -191,13 +191,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           {/* Arriba del usuario: es información sobre el equipo, no sobre una
               pantalla, así que acompaña al avatar y no al header de la página. */}
-          <PresenceBar className="border-t border-border/60 px-3 py-2.5" />
-
-          <div className="space-y-1 border-t border-border/60 p-3">
-            {/* Sólo para el dueño de la app. Esconderlo es presentación: lo que
-                impide leer los datos es que la función corta por is_admin en la
-                base. */}
-            {esAdmin && (
+          {/* Orden del pie: primero la herramienta, después quién está, y al
+              final quién sos. De lo más general a lo más personal. */}
+          {esAdmin && (
+            <div className="border-t border-border/60 p-3 pb-0">
+              {/* Sólo para el dueño de la app. Esconderlo es presentación: lo
+                  que impide leer los datos es que la función corta por is_admin
+                  en la base. */}
               <button
                 type="button"
                 onClick={() => setAdminOpen(true)}
@@ -208,7 +208,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <span className="flex-1 truncate text-left">Administración</span>
                 <Eye className="size-3.5 shrink-0 opacity-70" aria-hidden />
               </button>
-            )}
+            </div>
+          )}
+
+          <PresenceBar className={cn('px-3 py-2.5', !esAdmin && 'border-t border-border/60')} />
+
+          <div className="border-t border-border/60 p-3">
             <UserProfile />
           </div>
         </aside>
