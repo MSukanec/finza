@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T18:10:34.713Z
+> Generated: 2026-09-10T18:38:37.362Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -24,11 +24,12 @@
 - **`workspace_members`** (5 cols | FK: user_id → users, workspace_id → workspaces)
 - **`workspaces`** (6 cols | FK: user_id → users)
 
-### Functions (24)
+### Functions (26)
 
 - `activity_authors(ws uuid)` → TABLE(id uuid, full_name text, email text, avatar_url text, es_miembro boolean) 🔐 *(public/functions_1.md)*
 - `admin_list_users()` → TABLE(id uuid, email text, full_name text, avatar_url text, is_admin boolean, created_at timestamp with time zone, last_sign_in timestamp with time zone, espacios integer, invitado boolean) 🔐 *(public/functions_1.md)*
 - `aprender_regla(ws uuid, p_field text, p_pattern text, p_source text DEFAULT NULL::text, p_type text DEFAULT NULL::text, p_category uuid DEFAULT NULL::uuid, p_wallet uuid DEFAULT NULL::uuid, p_match text DEFAULT 'exact'::text)` → uuid 🔐 *(public/functions_1.md)*
+- `avatar_de_metadata(meta jsonb)` → text *(public/functions_1.md)*
 - `clone_workspace(source_ws uuid, new_name text)` → uuid *(public/functions_1.md)*
 - `current_user_id()` → uuid 🔐 *(public/functions_1.md)*
 - `entity_label(tabla text)` → text *(public/functions_1.md)*
@@ -45,9 +46,10 @@
 - `partner_positions(ws uuid)` → TABLE(id uuid, name text, user_id uuid, ownership_pct numeric, aportes numeric, retiros numeric, saldo numeric, retiros_pct numeric, ultimo_mov timestamp with time zone) 🔐 *(public/functions_1.md)*
 - `protect_is_admin()` → trigger *(public/functions_1.md)*
 - `reconciliation_summary(rec jsonb, op text)` → text 🔐 *(public/functions_1.md)*
-- `record_reconciliation(w uuid, counted numeric, at_time timestamp with time zone DEFAULT now(), note_text text DEFAULT NULL::text)` → wallet_reconciliations 🔐 *(public/functions_1.md)*
+- `record_reconciliation(w uuid, counted numeric, at_time timestamp with time zone DEFAULT now(), note_text text DEFAULT NULL::text)` → wallet_reconciliations 🔐 *(public/functions_2.md)*
 - `registrar_uso_reglas(ws uuid, ids uuid[])` → void 🔐 *(public/functions_2.md)*
 - `set_transaction_fingerprint()` → trigger *(public/functions_2.md)*
+- `sync_user_profile()` → trigger 🔐 *(public/functions_2.md)*
 - `transaction_fingerprint(p_wallet uuid, p_date timestamp with time zone, p_amount numeric, p_type text, p_description text)` → text *(public/functions_2.md)*
 - `wallet_expected_balance(w uuid, at_time timestamp with time zone DEFAULT now())` → numeric 🔐 *(public/functions_2.md)*
 

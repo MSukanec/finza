@@ -1,9 +1,55 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T18:10:34.713Z
+> Generated: 2026-09-10T18:38:37.362Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Functions (chunk 2: registrar_uso_reglas — wallet_expected_balance)
+## [PUBLIC] Functions (chunk 2: record_reconciliation — wallet_expected_balance)
+
+### `record_reconciliation(w uuid, counted numeric, at_time timestamp with time zone DEFAULT now(), note_text text DEFAULT NULL::text)` 🔐
+
+- **Returns**: wallet_reconciliations
+- **Kind**: function | VOLATILE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.record_reconciliation(w uuid, counted numeric, at_time timestamp with time zone DEFAULT now(), note_text text DEFAULT NULL::text)
+ RETURNS wallet_reconciliations
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+    v_ws       uuid;
+    v_me       uuid := public.current_user_id();
+    v_expected numeric;
+    v_row      public.wallet_reconciliations;
+BEGIN
+    SELECT workspace_id INTO v_ws FROM public.wallets WHERE id = w AND deleted_at IS NULL;
+    IF v_ws IS NULL THEN RAISE EXCEPTION 'La billetera no existe'; END IF;
+    IF NOT public.is_workspace_member(v_ws) THEN
+        RAISE EXCEPTION 'No sos miembro de este espacio';
+    END IF;
+    IF v_me IS NULL THEN RAISE EXCEPTION 'No hay sesión activa'; END IF;
+
+    v_expected := public.wallet_expected_balance(w, at_time);
+
+    INSERT INTO public.wallet_reconciliations
+        (workspace_id, wallet_id, user_id, counted_at, counted_amount, expected_amount, status, note)
+    VALUES (
+        v_ws, w, v_me, at_time, counted, v_expected,
+        -- Se compara con tolerancia de un centavo: numeric no tiene el problema
+        -- del punto flotante, pero un redondeo de conversión sí puede colarse.
+        CASE WHEN abs(counted - v_expected) < 0.01 THEN 'matched' ELSE 'pending' END,
+        note_text
+    )
+    RETURNING * INTO v_row;
+
+    RETURN v_row;
+END;
+$function$
+```
+</details>
 
 ### `registrar_uso_reglas(ws uuid, ids uuid[])` 🔐
 
@@ -48,6 +94,32 @@ BEGIN
     NEW.fingerprint := public.transaction_fingerprint(
         NEW.wallet_id, NEW.date, NEW.amount, NEW.type::text, NEW.description
     );
+    RETURN NEW;
+END;
+$function$
+```
+</details>
+
+### `sync_user_profile()` 🔐
+
+- **Returns**: trigger
+- **Kind**: function | VOLATILE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.sync_user_profile()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+    UPDATE public.users u
+       SET avatar_url = COALESCE(public.avatar_de_metadata(NEW.raw_user_meta_data), u.avatar_url),
+           full_name  = COALESCE(NULLIF(NEW.raw_user_meta_data->>'full_name', ''), u.full_name),
+           email      = COALESCE(NEW.email, u.email)
+     WHERE u.auth_id = NEW.id;
     RETURN NEW;
 END;
 $function$
