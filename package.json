@@ -9,6 +9,7 @@
     "check:ui": "node --experimental-loader ./scripts/tsx-loader.mjs scripts/check-select-labels.mjs && node --experimental-loader ./scripts/tsx-loader.mjs scripts/check-avatar.mjs",
     "check:import": "node --experimental-loader ./scripts/tsx-loader.mjs scripts/check-import.mjs",
     "check:huellas": "node scripts/check-huellas.mjs",
+    "check:permisos": "node scripts/check-permisos.mjs",
     "start": "next start",
     "lint": "eslint",
     "db:sql": "node scripts/db.mjs",

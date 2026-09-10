@@ -97,7 +97,30 @@ export interface RegisteredUser {
   invitado: boolean;
 }
 
-export type WorkspaceRole = 'owner' | 'member';
+/**
+ * Qué puede hacer alguien dentro de un espacio.
+ *
+ * `collaborator` es el único que NO ve el espacio entero: sólo los movimientos
+ * que cargó él. El límite no lo pone la pantalla sino RLS (ver DB/034), porque
+ * la persona tiene un token válido y puede consultar la base por fuera de la app.
+ */
+export type WorkspaceRole = 'owner' | 'member' | 'collaborator';
+
+export const ROLE_LABEL: Record<WorkspaceRole, string> = {
+  owner: 'Administrador',
+  member: 'Miembro',
+  collaborator: 'Colaborador',
+};
+
+export const ROLE_HINT: Record<WorkspaceRole, string> = {
+  owner: 'Ve y edita todo, invita gente y configura el espacio',
+  member: 'Ve y edita todo, pero no invita ni configura',
+  collaborator: 'Sólo carga movimientos y ve los suyos. No ve billeteras, socios ni el resto',
+};
+
+/** Si el rol ve el espacio entero o sólo lo propio. Espejo de `can_see_all` en la base. */
+export const veTodo = (rol: WorkspaceRole | null | undefined) =>
+  rol === 'owner' || rol === 'member';
 
 export interface Workspace {
   id: string;

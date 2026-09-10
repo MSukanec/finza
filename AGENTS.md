@@ -82,6 +82,33 @@ gastos reales. Con un `Set` y un "¿ya existe?" la segunda se descartaba en
 silencio y faltaban 443.055 pesos. Con un `Map` de conteos, si el archivo trae
 dos y la base tiene una, entra una. No volver a un `Set`.
 
+## Roles y qué ve cada uno
+
+Tres roles, en `workspace_members.role`: `owner` (Administrador), `member`
+(Miembro) y `collaborator` (Colaborador). Los dos primeros ven el espacio
+entero; el tercero **sólo los movimientos que cargó él**.
+
+**El límite vive en la base, no en la pantalla.** La persona tiene un token
+válido y puede consultar Supabase por fuera de la app: esconder un menú no
+protege nada. Todo está en DB/034 (políticas) y DB/035 (guardias de funciones).
+
+Dos cosas fáciles de olvidar al agregar algo nuevo:
+
+1. **Cada tabla nueva necesita decidir si el colaborador la ve**, y la respuesta
+   por defecto es que no. `is_workspace_member` significa "está en el espacio",
+   NO "puede ver todo": para eso está `can_see_all(ws)`.
+2. **Cada función `SECURITY DEFINER` se saltea RLS.** Es la puerta de atrás y
+   es la que se olvida. Si toma un `ws` y devuelve datos del espacio, la
+   guardia va con `can_see_all`, no con `is_workspace_member`.
+
+`wallets` es la excepción explicada: el colaborador NO lee esa tabla porque la
+fila lleva `initial_balance` y RLS no esconde columnas. Para elegir billetera
+usa `billeteras_para_cargar(ws)`, que devuelve nombre y moneda y ningún saldo.
+
+**Después de tocar permisos, correr `npm run check:permisos`**: arma un
+colaborador de mentira, ataca cada tabla y cada función desde su sesión, y hace
+rollback. Cuarenta comprobaciones, ninguna hipotética.
+
 ## Vaciar la caja
 
 Vaciar un espacio para empezar de cero es una operación de la app, no de un

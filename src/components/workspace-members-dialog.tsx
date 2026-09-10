@@ -15,7 +15,10 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Crown, Mail, Trash2, UserPlus, Clock } from 'lucide-react';
-import type { WorkspaceMember } from '@/lib/types';
+import { ROLE_HINT, ROLE_LABEL, type WorkspaceMember, type WorkspaceRole } from '@/lib/types';
+import { Picker } from '@/components/ui/picker';
+
+const ROLES: WorkspaceRole[] = ['owner', 'member', 'collaborator'];
 import { useGlobalDialog } from '@/components/providers/dialog-provider';
 
 export function WorkspaceMembersDialog({
@@ -34,10 +37,12 @@ export function WorkspaceMembersDialog({
   const workspaces = useFinanceStore((s) => s.workspaces);
   const loadMembers = useFinanceStore((s) => s.loadMembers);
   const inviteMember = useFinanceStore((s) => s.inviteMember);
+  const changeMemberRole = useFinanceStore((s) => s.changeMemberRole);
   const removeMember = useFinanceStore((s) => s.removeMember);
   const dialog = useGlobalDialog();
 
   const [email, setEmail] = useState('');
+  const [rol, setRol] = useState<WorkspaceRole>('member');
   const [loading, setLoading] = useState(false);
   const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,17 +67,29 @@ export function WorkspaceMembersDialog({
     setError(null);
     setNotice(null);
     try {
-      const result = await inviteMember(workspaceId, value);
+      const result = await inviteMember(workspaceId, value, rol);
       setEmail('');
       setNotice(
         result === 'added'
-          ? `Listo, ${value} ya tiene acceso al espacio.`
-          : `${value} todavía no tiene cuenta en Finza. La invitación queda pendiente y se activa sola cuando se registre con ese email.`
+          ? `Listo, ${value} entró al espacio como ${ROLE_LABEL[rol].toLowerCase()}.`
+          : `${value} todavía no tiene cuenta en Finza. La invitación queda pendiente como ${ROLE_LABEL[rol].toLowerCase()} y se activa sola cuando se registre con ese email.`
       );
     } catch (e: any) {
       setError(e.message || 'No se pudo invitar.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRole = async (m: WorkspaceMember, role: WorkspaceRole) => {
+    if (role === m.role) return;
+    setError(null);
+    setNotice(null);
+    try {
+      await changeMemberRole(workspaceId, m, role);
+      setNotice(`${m.full_name || m.email} ahora es ${ROLE_LABEL[role].toLowerCase()}.`);
+    } catch (e) {
+      setError((e as Error).message || 'No se pudo cambiar el rol.');
     }
   };
 
@@ -120,6 +137,19 @@ export function WorkspaceMembersDialog({
                   {loading ? 'Invitando…' : 'Invitar'}
                 </Button>
               </div>
+
+              {/* El rol se elige ANTES de invitar y no después: entre que
+                  alguien entra y alguien se acuerda de restringirlo, ya vio
+                  todo. */}
+              <div className="w-full sm:w-64">
+                <Picker
+                  value={rol}
+                  onValueChange={(v) => setRol(v as WorkspaceRole)}
+                  options={ROLES.map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
+                  searchable={false}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">{ROLE_HINT[rol]}</p>
             </div>
           )}
 
@@ -155,14 +185,25 @@ export function WorkspaceMembersDialog({
                       )}
                     </div>
 
-                    {m.pending ? (
-                      <Badge variant="outline" className="shrink-0">Pendiente</Badge>
-                    ) : m.role === 'owner' ? (
+                    {m.pending && <Badge variant="outline" className="shrink-0">Pendiente</Badge>}
+
+                    {/* El administrador cambia el rol acá mismo; el resto lo ve
+                        y no lo toca. Nadie puede cambiarse el suyo. */}
+                    {isOwner && !isMe ? (
+                      <div className="w-36 shrink-0">
+                        <Picker
+                          value={m.role}
+                          onValueChange={(v) => handleRole(m, v as WorkspaceRole)}
+                          options={ROLES.map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
+                          searchable={false}
+                        />
+                      </div>
+                    ) : (
                       <Badge variant="secondary" className="shrink-0 gap-1">
-                        <Crown className="size-3" />
-                        Dueño
+                        {m.role === 'owner' && <Crown className="size-3" />}
+                        {ROLE_LABEL[(m.role as WorkspaceRole) ?? 'member']}
                       </Badge>
-                    ) : null}
+                    )}
 
                     {isOwner && !isMe && (
                       <button

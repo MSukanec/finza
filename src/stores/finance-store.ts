@@ -245,7 +245,9 @@ interface FinanceState {
     resolution: 'adjusted' | 'explained',
     note?: string
   ) => Promise<void>;
-  inviteMember: (workspaceId: string, email: string) => Promise<'added' | 'invited'>;
+  inviteMember: (workspaceId: string, email: string, role?: WorkspaceRole) => Promise<'added' | 'invited'>;
+  /** Cambia el rol de un miembro o de una invitacion todavia sin aceptar. */
+  changeMemberRole: (workspaceId: string, member: WorkspaceMember, role: WorkspaceRole) => Promise<void>;
   removeMember: (workspaceId: string, member: WorkspaceMember) => Promise<void>;
   leaveWorkspace: (workspaceId: string) => Promise<void>;
 
@@ -383,8 +385,16 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       ? supabase.from('category_groups').select('*').is('deleted_at', null).or(`workspace_id.eq.${currentWorkspaceId},workspace_id.is.null`).order('name', { ascending: true })
       : supabase.from('category_groups').select('*').is('deleted_at', null).order('name', { ascending: true });
 
+    // El colaborador no puede leer la tabla `wallets`: la fila lleva el saldo
+    // inicial adentro y no hay forma de esconder una columna con RLS. Para
+    // elegir donde entra la plata usa una funcion que devuelve nombre y moneda
+    // y ningun saldo (ver DB/034).
+    const soloLoSuyo = currentWorkspaceId ? roleByWs.get(currentWorkspaceId) === 'collaborator' : false;
+
     const [walletsRes, categoriesRes, debtsRes, groupsRes, txs] = await Promise.all([
-      withWs(supabase.from('wallets').select('*').is('deleted_at', null).order('created_at', { ascending: true }) as any),
+      soloLoSuyo
+        ? supabase.rpc('billeteras_para_cargar', { ws: currentWorkspaceId })
+        : withWs(supabase.from('wallets').select('*').is('deleted_at', null).order('created_at', { ascending: true }) as any),
       withWs(supabase.from('categories').select('*, category_groups(name)').is('deleted_at', null).order('created_at', { ascending: true }) as any),
       withWs(supabase.from('debts').select('*').is('deleted_at', null).order('created_at', { ascending: true }) as any),
       groupsQuery,
@@ -778,14 +788,23 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     }));
   },
 
-  inviteMember: async (workspaceId: string, email: string) => {
+  inviteMember: async (workspaceId: string, email: string, role: WorkspaceRole = 'member') => {
     const { data, error } = await supabase.rpc('invite_to_workspace', {
       ws: workspaceId,
       invitee_email: email,
+      invitee_role: role,
     });
     if (error) throw error;
     await get().loadMembers(workspaceId);
     return data as 'added' | 'invited';
+  },
+
+  changeMemberRole: async (workspaceId: string, member: WorkspaceMember, role: WorkspaceRole) => {
+    // Una invitacion todavia sin aceptar vive en otra tabla que la membresia.
+    const table = member.pending ? 'workspace_invitations' : 'workspace_members';
+    const { error } = await supabase.from(table).update({ role }).eq('id', member.id);
+    if (error) throw error;
+    await get().loadMembers(workspaceId);
   },
 
   removeMember: async (workspaceId: string, member: WorkspaceMember) => {
