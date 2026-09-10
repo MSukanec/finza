@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Field, FieldRow } from '@/components/ui/field';
 import { parseAmount } from '@/lib/money';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Picker } from '@/components/ui/picker';
 import { useState, useEffect } from 'react';
 import { Trash2 } from 'lucide-react';
 
@@ -132,22 +132,13 @@ export function DebtForm() {
             </Field>
 
             <Field label="Moneda">
-              <Select
+              <Picker
                 value={currencyCode}
-                onValueChange={(val) => {
-                  if (val) setCurrencyCode(val);
-                }}
+                onValueChange={setCurrencyCode}
+                options={currencies.map((c) => ({ value: c.id.toUpperCase(), label: c.code }))}
+                placeholder="Elegir"
                 disabled={isEdit}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Elegir" />
-                </SelectTrigger>
-                <SelectContent>
-                  {currencies.map((c) => (
-                    <SelectItem key={c.id} value={c.id.toUpperCase()}>{c.code}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </Field>
           </FieldRow>
 

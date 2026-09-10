@@ -1,7 +1,7 @@
 'use client';
 
 import { useFinanceStore } from '@/stores/finance-store';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Picker } from '@/components/ui/picker';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -138,16 +138,12 @@ export function ReportFilters({
 
       {/* Agrupar y Métrica: sueltos sólo si hay ancho */}
       <div className="hidden lg:block">
-        <Select value={filters.grain} onValueChange={(v) => v && onChange({ grain: v as Filters['grain'] })}>
-          <SelectTrigger className="h-9 w-[124px]">
-            <SelectValue>{GRAINS.find((g) => g.id === filters.grain)?.label}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {GRAINS.map((g) => (
-              <SelectItem key={g.id} value={g.id}>{g.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Picker
+          value={filters.grain}
+          onValueChange={(v) => onChange({ grain: v as Filters['grain'] })}
+          options={GRAINS.map((g) => ({ value: g.id, label: g.label }))}
+          className="w-[124px]"
+        />
       </div>
 
       {/* Resto */}
@@ -166,56 +162,39 @@ export function ReportFilters({
           {/* En pantallas chicas estos dos no están sueltos, así que van acá. */}
           <div className="space-y-1 lg:hidden">
             <Label className="text-xs text-muted-foreground">Agrupar por</Label>
-            <Select value={filters.grain} onValueChange={(v) => v && onChange({ grain: v as Filters['grain'] })}>
-              <SelectTrigger className="h-9">
-                <SelectValue>{GRAINS.find((g) => g.id === filters.grain)?.label}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {GRAINS.map((g) => (
-                  <SelectItem key={g.id} value={g.id}>{g.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Picker
+              value={filters.grain}
+              onValueChange={(v) => onChange({ grain: v as Filters['grain'] })}
+              options={GRAINS.map((g) => ({ value: g.id, label: g.label }))}
+            />
           </div>
 
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Billetera</Label>
-            <Select value={filters.walletId} onValueChange={(v) => v && onChange({ walletId: v })}>
-              <SelectTrigger className="h-9">
-                <SelectValue>
-                  {filters.walletId === 'all'
-                    ? 'Todas'
-                    : accounts.find((a) => a.id === filters.walletId)?.name}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas</SelectItem>
-                {[...accounts].sort((a, b) => a.name.localeCompare(b.name)).map((a) => (
-                  <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Picker
+              value={filters.walletId}
+              onValueChange={(v) => onChange({ walletId: v })}
+              options={[
+                { value: 'all', label: 'Todas' },
+                ...[...accounts]
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((a) => ({ value: a.id, label: a.name })),
+              ]}
+            />
           </div>
 
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Grupo</Label>
-            <Select value={filters.groupId} onValueChange={(v) => v && onChange({ groupId: v })}>
-              <SelectTrigger className="h-9">
-                <SelectValue>
-                  {filters.groupId === 'all'
-                    ? 'Todos'
-                    : groups.find((g: any) => g.id === filters.groupId)?.name}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                {[...groups]
+            <Picker
+              value={filters.groupId}
+              onValueChange={(v) => onChange({ groupId: v })}
+              options={[
+                { value: 'all', label: 'Todos' },
+                ...[...groups]
                   .sort((a: any, b: any) => a.name.localeCompare(b.name))
-                  .map((g: any) => (
-                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+                  .map((g: any) => ({ value: g.id, label: g.name })),
+              ]}
+            />
           </div>
 
           <div className="flex items-center justify-between border-t border-border/60 pt-2.5 text-xs text-muted-foreground">

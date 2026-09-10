@@ -13,7 +13,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Field, FieldRow } from '@/components/ui/field';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Picker } from '@/components/ui/picker';
+
+const TIPOS_DE_CUENTA = [
+  { value: 'cash', label: 'Efectivo' },
+  { value: 'bank', label: 'Banco tradicional' },
+  { value: 'digital', label: 'Billetera digital / Crypto' },
+];
 import { useState, useEffect } from 'react';
 import { parseAmount } from '@/lib/money';
 import { Scale } from 'lucide-react';
@@ -120,31 +126,21 @@ export function AccountForm() {
 
           <FieldRow>
             <Field label="Tipo de cuenta">
-              <Select value={type} onValueChange={(v) => v && setType(v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Elegir tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">Efectivo</SelectItem>
-                  <SelectItem value="bank">Banco tradicional</SelectItem>
-                  <SelectItem value="digital">Billetera digital / Crypto</SelectItem>
-                </SelectContent>
-              </Select>
+              <Picker
+                value={type}
+                onValueChange={setType}
+                options={TIPOS_DE_CUENTA}
+                placeholder="Elegir tipo"
+              />
             </Field>
 
             <Field label="Moneda principal">
-              <Select value={currencyId} onValueChange={(v) => v && setCurrencyId(v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Elegir moneda" />
-                </SelectTrigger>
-                <SelectContent>
-                  {currencies.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {`${c.name} (${c.code})`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Picker
+                value={currencyId}
+                onValueChange={setCurrencyId}
+                options={currencies.map((c) => ({ value: c.id, label: c.name, hint: c.code }))}
+                placeholder="Elegir moneda"
+              />
             </Field>
           </FieldRow>
 

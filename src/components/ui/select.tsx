@@ -117,15 +117,21 @@ function SelectContent({
   children,
   side = "bottom",
   sideOffset = 4,
-  align = "center",
+  align = "start",
   alignOffset = 0,
-  alignItemWithTrigger = true,
+  alignItemWithTrigger = false,
   ...props
 }: SelectPrimitive.Popup.Props &
   Pick<
     SelectPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset" | "alignItemWithTrigger"
   >) {
+  // `alignItemWithTrigger` viene en true por defecto en Base UI: el popup se
+  // posiciona para que el item YA SELECCIONADO quede encima del trigger, como
+  // el select nativo de macOS. Con listas largas eso lo hacía aparecer a
+  // cualquier altura, tapando los campos de arriba. Acá abre debajo del
+  // trigger, como un desplegable de toda la vida.
+  //
   // El ancho seguía al trigger (`w-(--anchor-width)`), así que con un trigger
   // angosto los nombres largos quedaban cortados. Ahora crece con el contenido
   // usando el trigger como mínimo, con tope para no salirse de la pantalla.

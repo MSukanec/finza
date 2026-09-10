@@ -4,7 +4,7 @@ import { useFinanceStore } from '@/stores/finance-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useMemo, useState } from 'react';
 import { Panel, Kpi } from '@/components/ui/panel';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Picker } from '@/components/ui/picker';
 import { Repeat, ChevronDown, ChevronRight, Plus, Calendar, Layers, ArrowDownUp , CalendarDays } from 'lucide-react';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { PageLayout } from '@/components/layout/page-layout';
@@ -297,16 +297,12 @@ export function RecurrentesView() {
             </button>
           </div>
           <Calendar className="size-4 text-muted-foreground" />
-          <Select value={selectedYear} onValueChange={(val) => val && setSelectedYear(val)}>
-            <SelectTrigger className="h-9 w-[96px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {yearsOptions.map((y) => (
-                <SelectItem key={y} value={y}>{y}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Picker
+            value={selectedYear}
+            onValueChange={setSelectedYear}
+            options={yearsOptions.map((y) => ({ value: y, label: y }))}
+            className="w-[96px]"
+          />
         </div>
       }
     >

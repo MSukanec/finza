@@ -13,7 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Field, FieldRow } from '@/components/ui/field';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Picker } from '@/components/ui/picker';
 import { useState, useEffect } from 'react';
 import type { TransactionType } from '@/lib/types';
 
@@ -106,28 +106,24 @@ export function CategoryForm() {
 
           <FieldRow>
             <Field label="Tipo">
-              <Select value={type} onValueChange={(v) => v && setType(v as 'expense' | 'income')}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Elegir" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="expense">Gasto</SelectItem>
-                  <SelectItem value="income">Ingreso</SelectItem>
-                </SelectContent>
-              </Select>
+              <Picker
+                value={type}
+                onValueChange={(v) => setType(v as 'expense' | 'income')}
+                options={[
+                  { value: 'expense', label: 'Gasto' },
+                  { value: 'income', label: 'Ingreso' },
+                ]}
+                placeholder="Elegir"
+              />
             </Field>
 
             <Field label="Macrogrupo">
-              <Select value={groupName} onValueChange={(v) => v && setGroupName(v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Elegir grupo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {existingGroups.map((g) => (
-                    <SelectItem key={g} value={g}>{g}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Picker
+                value={groupName}
+                onValueChange={setGroupName}
+                options={existingGroups.map((g) => ({ value: g, label: g }))}
+                placeholder="Elegir grupo"
+              />
             </Field>
           </FieldRow>
 

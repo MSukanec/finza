@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import React from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../src/components/ui/select.tsx';
 import { Select as SelectPrimitive } from '@base-ui/react/select';
+import { Picker } from '../src/components/ui/picker.tsx';
 
 const casos = [
   {
@@ -90,6 +91,47 @@ if (/(^|\s)all(\s|$)/.test(textoCrudo)) {
   fallas++;
   console.log(`FALLA control: esperaba ver "all" crudo, salio "${textoCrudo}"`);
   console.log('      => el test no detecta el bug, no sirve como prueba');
+}
+
+// --- Picker: el desplegable canonico ---
+const casosPicker = [
+  {
+    nombre: 'picker con valor elegido',
+    valor: 'w1',
+    options: [
+      { value: 'all', label: 'Cualquiera' },
+      { value: 'w1', label: 'Banco Santander Rio' },
+    ],
+    esperado: 'Banco Santander Rio',
+    prohibido: 'w1',
+  },
+  {
+    nombre: 'picker sin valor muestra el placeholder',
+    valor: '',
+    options: [{ value: 'w1', label: 'Banco Santander Rio' }],
+    esperado: 'Elegir billetera',
+    prohibido: 'undefined',
+  },
+];
+
+for (const c of casosPicker) {
+  const html = renderToStaticMarkup(
+    React.createElement(Picker, {
+      value: c.valor,
+      onValueChange: () => {},
+      options: c.options,
+      placeholder: 'Elegir billetera',
+    })
+  );
+  const texto = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  const ok = texto.includes(c.esperado);
+  const filtrado = !new RegExp(`(^|\s)${c.prohibido}(\s|$)`).test(texto);
+  if (ok && filtrado) {
+    console.log(`OK   ${c.nombre} -> "${texto}"`);
+  } else {
+    fallas++;
+    console.log(`FALLA ${c.nombre}: esperaba "${c.esperado}", salio "${texto}"`);
+  }
 }
 
 process.exit(fallas === 0 ? 0 : 1);

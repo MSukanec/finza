@@ -30,7 +30,7 @@ import {
   topNWithOther,
   CHART_CONTAINER,
 } from '@/components/charts/chart-kit';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Picker } from '@/components/ui/picker';
 import { formatMoney } from '@/lib/money';
 import { METRICS, fullDate, type Bucket, type Metric, type Slice } from '../use-report-data';
 import type { Currency } from '@/lib/types';
@@ -114,16 +114,12 @@ export function EvolutionChart({
               Ver todo
             </button>
           )}
-          <Select value={metric} onValueChange={(v) => v && onMetricChange(v as Metric)}>
-            <SelectTrigger className="h-8 w-[112px] text-xs">
-              <SelectValue>{METRICS.find((m) => m.id === metric)?.label}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {METRICS.map((m) => (
-                <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Picker
+            value={metric}
+            onValueChange={(v) => onMetricChange(v as Metric)}
+            options={METRICS.map((m) => ({ value: m.id, label: m.label }))}
+            className="h-8 w-[112px] text-xs"
+          />
         </>
       }
     >

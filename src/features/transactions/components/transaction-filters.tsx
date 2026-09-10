@@ -4,7 +4,7 @@ import type { TransactionType } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Search, Calendar, Wallet, SlidersHorizontal, Tags, Layers, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Picker } from '@/components/ui/picker';
 import { useFinanceStore } from '@/stores/finance-store';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
@@ -161,71 +161,51 @@ export function TransactionFilters({
                 <SlidersHorizontal className="size-3.5" />
                 Tipo
               </Label>
-              <Select value={filterType} onValueChange={(v) => v && onFilterChange(v as TransactionType | 'all')}>
-                <SelectTrigger className="h-9">
-                  <SelectValue>{TABS.find((t) => t.value === filterType)?.label}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {TABS.map((t) => (
-                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Picker
+                value={filterType}
+                onValueChange={(v) => onFilterChange(v as TransactionType | 'all')}
+                options={TABS.map((t) => ({ value: t.value, label: t.label }))}
+              />
             </div>
 
             <Field icon={Wallet} label="Billetera">
-              <Select value={filterWalletId} onValueChange={(v) => v && onWalletChange(v)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Cualquiera</SelectItem>
-                  {accounts.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Picker
+                value={filterWalletId}
+                onValueChange={onWalletChange}
+                options={[
+                  { value: 'all', label: 'Cualquiera' },
+                  ...accounts.map((a) => ({ value: a.id, label: a.name })),
+                ]}
+              />
             </Field>
 
             <Field icon={Layers} label="Grupo">
-              <Select
+              <Picker
                 value={filterGroupId}
                 onValueChange={(v) => {
-                  if (!v) return;
                   onGroupChange(v);
                   onCategoryChange('all');
                 }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {groups.map((g) => (
-                    <SelectItem key={g.id} value={g.id}>
-                      {g.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                options={[
+                  { value: 'all', label: 'Todos' },
+                  ...groups.map((g) => ({ value: g.id, label: g.name })),
+                ]}
+              />
             </Field>
 
             <Field icon={Tags} label="Categoría">
-              <Select value={filterCategoryId} onValueChange={(v) => v && onCategoryChange(v)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  {visibleCategories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Picker
+                value={filterCategoryId}
+                onValueChange={onCategoryChange}
+                options={[
+                  { value: 'all', label: 'Todas' },
+                  ...visibleCategories.map((c) => ({
+                    value: c.id,
+                    label: c.name,
+                    hint: c.group_name,
+                  })),
+                ]}
+              />
             </Field>
 
             <div className="grid grid-cols-2 gap-3">

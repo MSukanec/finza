@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Field, FieldRow } from '@/components/ui/field';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Picker } from '@/components/ui/picker';
 import { cn } from '@/lib/utils';
 import { parseAmount, formatMoney } from '@/lib/money';
 import { TrendingUp, TrendingDown, ArrowLeftRight, AlertTriangle } from 'lucide-react';
@@ -163,6 +163,24 @@ export function TransactionForm() {
   // todavía no pide, así que se avisa en vez de guardar algo incorrecto.
   const currencyMismatch =
     isTransfer && !!destination && !!account && destination.currency_id !== account.currency_id;
+
+  // Las listas del formulario, ya con la moneda como texto secundario.
+  const walletOptions = useMemo(
+    () =>
+      sortedAccounts.map((acc) => ({
+        value: acc.id,
+        label: acc.name,
+        hint: currencies.find((c) => c.id === acc.currency_id)?.code,
+      })),
+    [sortedAccounts, currencies]
+  );
+
+  const groupOptions = useMemo(() => groups.map((g) => ({ value: g, label: g })), [groups]);
+
+  const categoryOptions = useMemo(
+    () => groupCategories.map((c) => ({ value: c.id, label: c.name })),
+    [groupCategories]
+  );
 
   // ---------------------------------------------------------------- guardar
 
@@ -324,54 +342,31 @@ export function TransactionForm() {
           {isTransfer ? (
             <FieldRow>
               <Field label="Billetera de origen">
-                <Select value={account?.id ?? ''} onValueChange={(v) => v && setAccountId(v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Elegir" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sortedAccounts.map((acc) => (
-                      <SelectItem key={acc.id} value={acc.id}>
-                        {`${acc.name} (${currencies.find((c) => c.id === acc.currency_id)?.code})`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Picker
+                  value={account?.id}
+                  onValueChange={setAccountId}
+                  options={walletOptions}
+                  placeholder="Elegir"
+                />
               </Field>
 
               <Field label="Billetera de destino">
-                <Select
-                  value={destination?.id ?? ''}
-                  onValueChange={(v) => v && setDestinationAccountId(v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Elegir" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sortedAccounts
-                      .filter((a) => a.id !== account?.id)
-                      .map((acc) => (
-                        <SelectItem key={acc.id} value={acc.id}>
-                          {`${acc.name} (${currencies.find((c) => c.id === acc.currency_id)?.code})`}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
+                <Picker
+                  value={destination?.id}
+                  onValueChange={setDestinationAccountId}
+                  options={walletOptions.filter((o) => o.value !== account?.id)}
+                  placeholder="Elegir"
+                />
               </Field>
             </FieldRow>
           ) : (
             <Field label="Billetera">
-              <Select value={account?.id ?? ''} onValueChange={(v) => v && setAccountId(v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Elegir billetera" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sortedAccounts.map((acc) => (
-                    <SelectItem key={acc.id} value={acc.id}>
-                      {`${acc.name} (${currencies.find((c) => c.id === acc.currency_id)?.code})`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Picker
+                value={account?.id}
+                onValueChange={setAccountId}
+                options={walletOptions}
+                placeholder="Elegir billetera"
+              />
             </Field>
           )}
 
@@ -387,37 +382,25 @@ export function TransactionForm() {
             <>
               <FieldRow>
                 <Field label="Macrogrupo">
-                  <Select
+                  <Picker
                     value={group}
                     onValueChange={(v) => {
-                      if (!v) return;
                       setGroupName(v);
                       setCategoryId(''); // el grupo cambió: la categoría anterior ya no aplica
                       setPeriodMonth('');
                     }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sin grupos" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {groups.map((g) => (
-                        <SelectItem key={g} value={g}>{g}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    options={groupOptions}
+                    placeholder="Sin grupos"
+                  />
                 </Field>
 
                 <Field label="Categoría">
-                  <Select value={category?.id ?? ''} onValueChange={(v) => v && setCategoryId(v)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Elegir" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {groupCategories.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Picker
+                    value={category?.id}
+                    onValueChange={setCategoryId}
+                    options={categoryOptions}
+                    placeholder="Elegir"
+                  />
                 </Field>
               </FieldRow>
 

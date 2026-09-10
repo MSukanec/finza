@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Field, FieldRow } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Picker } from '@/components/ui/picker';
 import { Plus, Trash2 } from 'lucide-react';
 import type { Budget } from '@/lib/types';
 import { parseAmount } from '@/lib/money';
@@ -83,6 +84,11 @@ export function BudgetForm() {
   const setLine = (index: number, patch: Partial<Line>) =>
     setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)));
 
+  const categoryOptions = useMemo(
+    () => expenseCategories.map((c) => ({ value: c.id, label: c.name, hint: c.group_name })),
+    [expenseCategories]
+  );
+
   const total = lines.reduce((sum, l) => sum + (parseAmount(l.limit_amount) ?? 0), 0);
 
   const handleSubmit = async () => {
@@ -148,30 +154,24 @@ export function BudgetForm() {
 
           <FieldRow>
             <Field label="Período">
-              <Select value={period} onValueChange={(v) => v && setPeriod(v as 'monthly' | 'weekly')}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Elegir" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="monthly">Mensual</SelectItem>
-                  <SelectItem value="weekly">Semanal</SelectItem>
-                </SelectContent>
-              </Select>
+              <Picker
+                value={period}
+                onValueChange={(v) => setPeriod(v as 'monthly' | 'weekly')}
+                options={[
+                  { value: 'monthly', label: 'Mensual' },
+                  { value: 'weekly', label: 'Semanal' },
+                ]}
+                placeholder="Elegir"
+              />
             </Field>
 
             <Field label="Moneda">
-              <Select value={currencyId} onValueChange={(v) => v && setCurrencyId(v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Elegir" />
-                </SelectTrigger>
-                <SelectContent>
-                  {currencies.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {`${c.name} (${c.code})`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Picker
+                value={currencyId}
+                onValueChange={setCurrencyId}
+                options={currencies.map((c) => ({ value: c.id, label: c.name, hint: c.code }))}
+                placeholder="Elegir"
+              />
             </Field>
           </FieldRow>
 
@@ -187,25 +187,12 @@ export function BudgetForm() {
               {lines.map((line, i) => (
                 <div key={i} className="flex gap-2">
                   <div className="min-w-0 flex-1">
-                    <Select
+                    <Picker
                       value={line.category_id}
-                      onValueChange={(v) => v && setLine(i, { category_id: v })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue>
-                          {line.category_id
-                            ? expenseCategories.find((c) => c.id === line.category_id)?.name
-                            : 'Elegir categoría'}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {expenseCategories.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.group_name} › {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      onValueChange={(v) => setLine(i, { category_id: v })}
+                      options={categoryOptions}
+                      placeholder="Elegir categoría"
+                    />
                   </div>
 
                   <Input

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { History, Plus, Pencil, Trash2, RotateCcw } from 'lucide-react';
 import { PageLayout } from '@/components/layout/page-layout';
 import { Panel } from '@/components/ui/panel';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Picker } from '@/components/ui/picker';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { useFinanceStore } from '@/stores/finance-store';
 import { cn } from '@/lib/utils';
@@ -108,33 +108,23 @@ export function ActivityView() {
       icon={History}
       actions={
         <>
-          <Select value={entity} onValueChange={(v) => v && setEntity(v)}>
-            <SelectTrigger className="h-9 w-[140px]">
-              <SelectValue>{ENTITIES.find((e) => e.id === entity)?.label}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {ENTITIES.map((e) => (
-                <SelectItem key={e.id} value={e.id}>{e.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Picker
+            value={entity}
+            onValueChange={setEntity}
+            options={ENTITIES.map((e) => ({ value: e.id, label: e.label }))}
+            className="w-[140px]"
+          />
 
           {authors.length > 1 && (
-            <Select value={author} onValueChange={(v) => v && setAuthor(v)}>
-              <SelectTrigger className="h-9 w-[150px]">
-                <SelectValue>
-                  {author === 'all' ? 'Todos' : people[author]?.full_name || people[author]?.email}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                {authors.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.full_name || p.email}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Picker
+              value={author}
+              onValueChange={setAuthor}
+              options={[
+                { value: 'all', label: 'Todos' },
+                ...authors.map((p) => ({ value: p.id, label: p.full_name || p.email || 'Sin nombre' })),
+              ]}
+              className="w-[150px]"
+            />
           )}
 
           <button
