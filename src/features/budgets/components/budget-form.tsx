@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Field, FieldRow } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Trash2 } from 'lucide-react';
@@ -134,47 +135,45 @@ export function BudgetForm() {
           </ResponsiveModalTitle>
         </ResponsiveModalHeader>
 
-        <ResponsiveModalBody className="space-y-5">
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Nombre</Label>
+        <ResponsiveModalBody className="space-y-3">
+          <Field label="Nombre" htmlFor="presu-nombre">
             <Input
+              id="presu-nombre"
               placeholder="Ej: Costos de cocina"
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoFocus
             />
-          </div>
+          </Field>
 
-          <div className="space-y-5">
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Período</Label>
+          <FieldRow>
+            <Field label="Período">
               <Select value={period} onValueChange={(v) => v && setPeriod(v as 'monthly' | 'weekly')}>
                 <SelectTrigger>
-                  <SelectValue>{period === 'monthly' ? 'Mensual' : 'Semanal'}</SelectValue>
+                  <SelectValue placeholder="Elegir" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="monthly">Mensual</SelectItem>
                   <SelectItem value="weekly">Semanal</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
 
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Moneda</Label>
+            <Field label="Moneda">
               <Select value={currencyId} onValueChange={(v) => v && setCurrencyId(v)}>
                 <SelectTrigger>
-                  <SelectValue>{currency?.code}</SelectValue>
+                  <SelectValue placeholder="Elegir" />
                 </SelectTrigger>
                 <SelectContent>
                   {currencies.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
-                      {c.name} ({c.code})
+                      {`${c.name} (${c.code})`}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-          </div>
+            </Field>
+          </FieldRow>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">

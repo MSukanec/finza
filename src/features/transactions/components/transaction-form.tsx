@@ -13,7 +13,8 @@ import {
 } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Field, FieldRow } from '@/components/ui/field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { parseAmount, formatMoney } from '@/lib/money';
@@ -221,7 +222,7 @@ export function TransactionForm() {
           </ResponsiveModalTitle>
         </ResponsiveModalHeader>
 
-        <ResponsiveModalBody className="space-y-5">
+        <ResponsiveModalBody className="space-y-3">
           {/* Tipo. El activo se distingue por borde, fondo, color y peso. */}
           <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Tipo de movimiento">
             {TYPES.map((opt) => {
@@ -238,14 +239,14 @@ export function TransactionForm() {
                     if (opt.value !== 'transfer') setDestinationAccountId('');
                   }}
                   className={cn(
-                    'flex flex-col items-center gap-2 rounded-xl border-2 p-3 transition-all',
+                    'flex items-center justify-center gap-2 rounded-xl border-2 px-2 py-2 transition-all',
                     selected
                       ? opt.active
                       : 'border-transparent bg-muted text-muted-foreground hover:bg-accent'
                   )}
                 >
-                  <opt.icon className={cn('size-5', selected && 'scale-110')} />
-                  <span className={cn('text-xs', selected ? 'font-semibold' : 'font-medium')}>
+                  <opt.icon className="size-4 shrink-0" />
+                  <span className={cn('truncate text-xs', selected ? 'font-semibold' : 'font-medium')}>
                     {opt.label}
                   </span>
                 </button>
@@ -253,11 +254,20 @@ export function TransactionForm() {
             })}
           </div>
 
-          {/* Monto. Texto y no number: un input numérico rechaza la coma, así que
-              "1.234,56" quedaba vacío. Se parsea con parseAmount. */}
-          <Field label="Monto">
-            <div className="relative">
+          <FieldRow>
+            {/* Monto. Texto y no number: un input numérico rechaza la coma, así
+                que "1.234,56" quedaba vacío. Se parsea con parseAmount. */}
+            <Field
+              label="Monto"
+              htmlFor="tx-monto"
+              hint={
+                parsedAmount !== null && parsedAmount > 0
+                  ? formatMoney(parsedAmount, currency)
+                  : currency?.code
+              }
+            >
               <Input
+                id="tx-monto"
                 type="text"
                 inputMode="decimal"
                 autoComplete="off"
@@ -265,145 +275,166 @@ export function TransactionForm() {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                className="h-12 w-full pr-16 text-lg font-semibold tabular-nums"
+                className="font-semibold tabular-nums"
                 autoFocus
               />
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
-                {currency?.code}
-              </span>
-            </div>
-            {parsedAmount !== null && parsedAmount > 0 && (
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {formatMoney(parsedAmount, currency)}
-              </p>
-            )}
-          </Field>
+            </Field>
 
-          <Field label="Fecha">
-            <div className="flex gap-2">
+            <Field
+              label="Fecha"
+              htmlFor="tx-fecha"
+              hint={
+                date !== today() ? (
+                  <button
+                    type="button"
+                    onClick={() => setDate(today())}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    Hoy
+                  </button>
+                ) : null
+              }
+            >
               <Input
+                id="tx-fecha"
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="h-12 w-full"
               />
-              {date !== today() && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-12 shrink-0"
-                  onClick={() => setDate(today())}
-                >
-                  Hoy
-                </Button>
-              )}
-            </div>
-          </Field>
+            </Field>
+          </FieldRow>
 
-          <Field label="Descripción">
-            <Input
+          <Field label="Descripción" htmlFor="tx-desc">
+            <Textarea
+              id="tx-desc"
               placeholder={isTransfer ? 'Motivo de la transferencia' : '¿En qué fue?'}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-              className="h-12 w-full"
+              // Enter hace salto de línea; se guarda con Ctrl/Cmd + Enter.
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  handleSubmit();
+                }
+              }}
+              maxRows={4}
             />
           </Field>
 
-          <Field label={isTransfer ? 'Billetera de origen' : 'Billetera'}>
-            <Select value={account?.id ?? ''} onValueChange={(v) => v && setAccountId(v)}>
-              <SelectTrigger className="h-12 text-base">
-                <SelectValue>{account?.name ?? 'Seleccionar billetera'}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {sortedAccounts.map((acc) => (
-                  <SelectItem key={acc.id} value={acc.id}>
-                    {acc.name} ({currencies.find((c) => c.id === acc.currency_id)?.code})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-
-          {isTransfer && (
-            <Field label="Billetera de destino">
-              <Select
-                value={destination?.id ?? ''}
-                onValueChange={(v) => v && setDestinationAccountId(v)}
-              >
-                <SelectTrigger className="h-12 text-base">
-                  <SelectValue>{destination?.name ?? 'Seleccionar destino'}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {sortedAccounts
-                    .filter((a) => a.id !== account?.id)
-                    .map((acc) => (
+          {isTransfer ? (
+            <FieldRow>
+              <Field label="Billetera de origen">
+                <Select value={account?.id ?? ''} onValueChange={(v) => v && setAccountId(v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Elegir" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sortedAccounts.map((acc) => (
                       <SelectItem key={acc.id} value={acc.id}>
-                        {acc.name} ({currencies.find((c) => c.id === acc.currency_id)?.code})
+                        {`${acc.name} (${currencies.find((c) => c.id === acc.currency_id)?.code})`}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+
+              <Field label="Billetera de destino">
+                <Select
+                  value={destination?.id ?? ''}
+                  onValueChange={(v) => v && setDestinationAccountId(v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Elegir" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sortedAccounts
+                      .filter((a) => a.id !== account?.id)
+                      .map((acc) => (
+                        <SelectItem key={acc.id} value={acc.id}>
+                          {`${acc.name} (${currencies.find((c) => c.id === acc.currency_id)?.code})`}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            </FieldRow>
+          ) : (
+            <Field label="Billetera">
+              <Select value={account?.id ?? ''} onValueChange={(v) => v && setAccountId(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Elegir billetera" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sortedAccounts.map((acc) => (
+                    <SelectItem key={acc.id} value={acc.id}>
+                      {`${acc.name} (${currencies.find((c) => c.id === acc.currency_id)?.code})`}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
-
-              {currencyMismatch && (
-                <p className="flex items-start gap-1.5 text-xs text-warning">
-                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                  Son monedas distintas. Todavía no se puede convertir en la
-                  transferencia: registralo como un gasto y un ingreso por separado.
-                </p>
-              )}
             </Field>
+          )}
+
+          {isTransfer && currencyMismatch && (
+            <p className="flex items-start gap-1.5 rounded-xl bg-warning/10 p-2.5 text-xs text-warning">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+              Son monedas distintas. Todavía no se puede convertir en la transferencia:
+              registralo como un gasto y un ingreso por separado.
+            </p>
           )}
 
           {!isTransfer && (
             <>
-              <Field label="Macrogrupo">
-                <Select
-                  value={group}
-                  onValueChange={(v) => {
-                    if (!v) return;
-                    setGroupName(v);
-                    setCategoryId(''); // el grupo cambió: la categoría anterior ya no aplica
-                    setPeriodMonth('');
-                  }}
-                >
-                  <SelectTrigger className="h-12 text-base">
-                    <SelectValue>{group || 'Sin grupos'}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {groups.map((g) => (
-                      <SelectItem key={g} value={g}>{g}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
+              <FieldRow>
+                <Field label="Macrogrupo">
+                  <Select
+                    value={group}
+                    onValueChange={(v) => {
+                      if (!v) return;
+                      setGroupName(v);
+                      setCategoryId(''); // el grupo cambió: la categoría anterior ya no aplica
+                      setPeriodMonth('');
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sin grupos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {groups.map((g) => (
+                        <SelectItem key={g} value={g}>{g}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
 
-              <Field label="Categoría">
-                <Select value={category?.id ?? ''} onValueChange={(v) => v && setCategoryId(v)}>
-                  <SelectTrigger className="h-12 text-base">
-                    <SelectValue>{category?.name ?? 'Seleccionar categoría'}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {groupCategories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {groups.length === 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    No tenés categorías de {type === 'income' ? 'ingreso' : 'gasto'}. Creá una
-                    desde Categorías.
-                  </p>
-                )}
-              </Field>
+                <Field label="Categoría">
+                  <Select value={category?.id ?? ''} onValueChange={(v) => v && setCategoryId(v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Elegir" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {groupCategories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </FieldRow>
+
+              {groups.length === 0 && (
+                <p className="px-1 text-xs text-muted-foreground">
+                  No tenés categorías de {type === 'income' ? 'ingreso' : 'gasto'}. Creá una desde
+                  Categorías.
+                </p>
+              )}
 
               {isRecurring && (
-                <Field label="Período de facturación">
+                <Field label="Período de facturación" htmlFor="tx-periodo">
                   <Input
+                    id="tx-periodo"
                     type="month"
                     value={periodMonth}
                     onChange={(e) => setPeriodMonth(e.target.value)}
-                    className="h-12 w-full"
                   />
                 </Field>
               )}
@@ -427,15 +458,6 @@ export function TransactionForm() {
         </ResponsiveModalFooter>
       </ResponsiveModalContent>
     </ResponsiveModal>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-2">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      {children}
-    </div>
   );
 }
 

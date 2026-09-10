@@ -13,7 +13,9 @@ import {
 } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Field, FieldRow } from '@/components/ui/field';
+import { parseAmount } from '@/lib/money';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useState, useEffect } from 'react';
 import { Trash2 } from 'lucide-react';
@@ -59,10 +61,17 @@ export function DebtForm() {
     e.preventDefault();
     if (!name || !totalAmount) return;
 
+    // El campo es texto para aceptar "1.234,56": Number() devolveria NaN.
+    const total = parseAmount(totalAmount);
+    if (total === null || total <= 0) {
+      setError('Ingresá un total mayor a cero.');
+      return;
+    }
+
     const payload = {
       name,
       description,
-      total_amount: Number(totalAmount),
+      total_amount: total,
       currency_code: currencyCode,
     };
 
@@ -96,63 +105,67 @@ export function DebtForm() {
         </ResponsiveModalHeader>
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-        <ResponsiveModalBody className="space-y-5">
-          <div className="space-y-2">
-            <Label>Nombre (Reflejado como Subcategoría)</Label>
+        <ResponsiveModalBody className="space-y-3">
+          <Field label="Nombre" hint="También es la subcategoría" htmlFor="deuda-nombre">
             <Input
+              id="deuda-nombre"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ej: Préstamo Auto, Tarjeta Galicia, etc"
+              placeholder="Ej: Préstamo auto, Tarjeta Galicia…"
               required
             />
-          </div>
+          </Field>
 
-          <div className="space-y-2">
-            <Label>Moneda de la Deuda</Label>
-            <Select value={currencyCode} onValueChange={(val) => { if (val) setCurrencyCode(val) }} disabled={isEdit}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {currencies.map(c => (
-                  <SelectItem key={c.id} value={c.id.toUpperCase()}>{c.code}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Total Inicial Adeudado</Label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+          <FieldRow>
+            <Field label="Total adeudado" hint="Monto fijo" htmlFor="deuda-total">
               <Input
-                type="number"
-                step="0.01"
-                min="0"
-                className="pl-7 tabular-nums"
+                id="deuda-total"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="0,00"
+                className="tabular-nums"
                 value={totalAmount}
                 onChange={(e) => setTotalAmount(e.target.value)}
                 required
               />
-            </div>
-            <p className="text-xs text-muted-foreground">Monto fijo inamovible (Ej: 10,000).</p>
-          </div>
+            </Field>
 
-          <div className="space-y-2">
-            <Label>Descripción Adicional</Label>
-            <Input
+            <Field label="Moneda">
+              <Select
+                value={currencyCode}
+                onValueChange={(val) => {
+                  if (val) setCurrencyCode(val);
+                }}
+                disabled={isEdit}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Elegir" />
+                </SelectTrigger>
+                <SelectContent>
+                  {currencies.map((c) => (
+                    <SelectItem key={c.id} value={c.id.toUpperCase()}>{c.code}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </FieldRow>
+
+          <Field label="Detalle" hint="Opcional" htmlFor="deuda-detalle">
+            <Textarea
+              id="deuda-detalle"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Plazo, tasa de interés, entidad, etc"
+              placeholder="Plazo, tasa de interés, entidad…"
+              maxRows={4}
             />
-          </div>
+          </Field>
 
           {error && (
             <p role="alert" className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
               {error}
             </p>
           )}
-
         </ResponsiveModalBody>
 
         <ResponsiveModalFooter>

@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field, FieldRow } from '@/components/ui/field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useState, useEffect } from 'react';
 import { parseAmount } from '@/lib/money';
@@ -107,101 +107,95 @@ export function AccountForm() {
           </ResponsiveModalTitle>
         </ResponsiveModalHeader>
 
-        <ResponsiveModalBody className="space-y-5">
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Nombre de la cuenta</Label>
+        <ResponsiveModalBody className="space-y-3">
+          <Field label="Nombre de la billetera" htmlFor="acc-nombre">
             <Input
-              className="h-12 w-full"
+              id="acc-nombre"
               placeholder="Ej: Banco Galicia, Billetera Mágica…"
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoFocus
             />
-          </div>
+          </Field>
 
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Tipo de Cuenta</Label>
-            <Select value={type} onValueChange={(v) => v && setType(v)}>
-              <SelectTrigger className="h-12 text-base">
-                <SelectValue>
-                  {type === 'bank' ? 'Banco Tradicional' : type === 'cash' ? 'Efectivo' : type === 'digital' ? 'Billetera Digital / Crypto' : 'Seleccionar tipo'}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cash">Efectivo</SelectItem>
-                <SelectItem value="bank">Banco Tradicional</SelectItem>
-                <SelectItem value="digital">Billetera Digital / Crypto</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <FieldRow>
+            <Field label="Tipo de cuenta">
+              <Select value={type} onValueChange={(v) => v && setType(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Elegir tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Efectivo</SelectItem>
+                  <SelectItem value="bank">Banco tradicional</SelectItem>
+                  <SelectItem value="digital">Billetera digital / Crypto</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
 
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Moneda Principal</Label>
-            <Select value={currencyId} onValueChange={(v) => v && setCurrencyId(v)}>
-              <SelectTrigger className="h-12 text-base">
-                {/* Sin hijos, SelectValue renderiza el valor crudo: mostraba "ars". */}
-                <SelectValue>
-                  {currencies.find((c) => c.id === currencyId)?.name ?? 'Seleccionar moneda'}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {currencies.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name} ({c.code})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+            <Field label="Moneda principal">
+              <Select value={currencyId} onValueChange={(v) => v && setCurrencyId(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Elegir moneda" />
+                </SelectTrigger>
+                <SelectContent>
+                  {currencies.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {`${c.name} (${c.code})`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </FieldRow>
 
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">
-              {isEdit ? 'Saldo con el que arrancaste' : '¿Cuánto tenés ahora?'}
-            </Label>
+          <Field
+            label={isEdit ? 'Saldo con el que arrancaste' : '¿Cuánto tenés ahora?'}
+            htmlFor="acc-saldo"
+          >
             <Input
+              id="acc-saldo"
               type="text"
               inputMode="decimal"
               autoComplete="off"
               placeholder="0,00"
               value={initialBalance}
               onChange={(e) => setInitialBalance(e.target.value)}
-              className="h-12 w-full tabular-nums"
+              className="tabular-nums"
             />
+          </Field>
 
-            {/* Los dos actos son distintos y la interfaz tiene que decirlo:
-                el saldo inicial es el punto de partida, el arqueo es cuánto hay
-                hoy. Ajustar el inicial para "cuadrar" reescribe la historia. */}
-            {isEdit ? (
-              <div className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
-                Este es el punto de partida de la billetera, no lo que hay hoy. Cambialo sólo si te
-                equivocaste al cargarlo: modificarlo recalcula todo el historial.
-                <button
-                  type="button"
-                  onClick={() => {
-                    const id = (sheetData?.account as any)?.id;
-                    closeSheet();
-                    if (id) setTimeout(() => openSheet('reconcile-wallet', { walletId: id }), 0);
-                  }}
-                  className="mt-2 flex items-center gap-1.5 font-medium text-primary hover:underline"
-                >
-                  <Scale className="size-3.5" />
-                  Para registrar cuánto hay hoy, hacé un arqueo
-                </button>
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Poné la plata que hay en esta billetera hoy. Es el punto de partida: de acá en
-                adelante el saldo lo calculan los movimientos.
-              </p>
-            )}
-          </div>
+          {/* Los dos actos son distintos y la interfaz tiene que decirlo: el
+              saldo inicial es el punto de partida, el arqueo es cuánto hay hoy.
+              Ajustar el inicial para "cuadrar" reescribe la historia. */}
+          {isEdit ? (
+            <div className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
+              Este es el punto de partida de la billetera, no lo que hay hoy. Cambialo sólo si te
+              equivocaste al cargarlo: modificarlo recalcula todo el historial.
+              <button
+                type="button"
+                onClick={() => {
+                  const id = (sheetData?.account as any)?.id;
+                  closeSheet();
+                  if (id) setTimeout(() => openSheet('reconcile-wallet', { walletId: id }), 0);
+                }}
+                className="mt-2 flex items-center gap-1.5 font-medium text-primary hover:underline"
+              >
+                <Scale className="size-3.5" />
+                Para registrar cuánto hay hoy, hacé un arqueo
+              </button>
+            </div>
+          ) : (
+            <p className="px-1 text-xs text-muted-foreground">
+              Poné la plata que hay en esta billetera hoy. Es el punto de partida: de acá en
+              adelante el saldo lo calculan los movimientos.
+            </p>
+          )}
 
           {error && (
             <p role="alert" className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
               {error}
             </p>
           )}
-
         </ResponsiveModalBody>
 
         <ResponsiveModalFooter>

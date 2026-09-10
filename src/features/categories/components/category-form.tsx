@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field, FieldRow } from '@/components/ui/field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useState, useEffect } from 'react';
 import type { TransactionType } from '@/lib/types';
@@ -93,63 +93,64 @@ export function CategoryForm() {
           </ResponsiveModalTitle>
         </ResponsiveModalHeader>
 
-        <ResponsiveModalBody className="space-y-5">
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Nombre</Label>
+        <ResponsiveModalBody className="space-y-3">
+          <Field label="Nombre" htmlFor="cat-nombre">
             <Input
-              placeholder="Ej: Suscripciones, Cursos, etc."
+              id="cat-nombre"
+              placeholder="Ej: Suscripciones, Cursos…"
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoFocus
             />
-          </div>
+          </Field>
 
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Tipo</Label>
-            <Select value={type} onValueChange={(v) => v && setType(v as 'expense' | 'income')}>
-              <SelectTrigger>
-                <SelectValue>{type === 'expense' ? 'Gasto' : 'Ingreso'}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="expense">Gasto</SelectItem>
-                <SelectItem value="income">Ingreso</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <FieldRow>
+            <Field label="Tipo">
+              <Select value={type} onValueChange={(v) => v && setType(v as 'expense' | 'income')}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Elegir" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="expense">Gasto</SelectItem>
+                  <SelectItem value="income">Ingreso</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
 
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Macrogrupo</Label>
-            <Select value={groupName} onValueChange={(v) => v && setGroupName(v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecciona un macrogrupo..." />
-              </SelectTrigger>
-              <SelectContent>
-                {existingGroups.map(g => (
+            <Field label="Macrogrupo">
+              <Select value={groupName} onValueChange={(v) => v && setGroupName(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Elegir grupo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {existingGroups.map((g) => (
                     <SelectItem key={g} value={g}>{g}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </FieldRow>
 
-          <div className="flex items-center justify-between p-4 rounded-xl bg-accent/50">
-            <div className="space-y-0.5">
-               <Label className="text-sm font-medium">¿Es Recurrente?</Label>
-               <p className="text-xs text-muted-foreground">Esta categoría se paga periódicamente (ej: alquiler, internet).</p>
-            </div>
+          <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl bg-accent/50 p-3">
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">¿Es recurrente?</span>
+              <span className="block text-xs text-muted-foreground">
+                Se paga periódicamente: alquiler, internet, sueldos.
+              </span>
+            </span>
             <input
               type="checkbox"
               checked={isRecurring}
-              onChange={e => setIsRecurring(e.target.checked)}
-              className="size-5 accent-primary"
+              onChange={(e) => setIsRecurring(e.target.checked)}
+              className="size-5 shrink-0 accent-primary"
             />
-          </div>
+          </label>
 
           {error && (
             <p role="alert" className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
               {error}
             </p>
           )}
-
         </ResponsiveModalBody>
 
         <ResponsiveModalFooter>

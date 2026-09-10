@@ -122,7 +122,7 @@ export function ResponsiveModalBody({
   return (
     <div
       className={cn(
-        "custom-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-5",
+        "custom-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-5",
         className
       )}
     >

@@ -14,7 +14,8 @@ import {
 } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Field } from '@/components/ui/field';
 import { cn, parseLocalDate } from '@/lib/utils';
 import { parseAmount, formatMoney } from '@/lib/money';
 import { CheckCircle2, AlertTriangle, Lightbulb, ArrowRight } from 'lucide-react';
@@ -154,45 +155,37 @@ export function ReconciliationForm() {
           </ResponsiveModalDescription>
         </ResponsiveModalHeader>
 
-        <ResponsiveModalBody className="space-y-5">
+        <ResponsiveModalBody className="space-y-3">
           {!result ? (
             <>
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">
-                  ¿Cuánto hay realmente en {wallet?.name}?
-                </Label>
-                <div className="relative">
-                  <Input
-                    type="text"
-                    inputMode="decimal"
-                    autoComplete="off"
-                    placeholder="0,00"
-                    value={counted}
-                    onChange={(e) => setCounted(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleCount()}
-                    className="h-12 w-full pr-16 text-lg font-semibold tabular-nums"
-                    autoFocus
-                  />
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
-                    {currency?.code}
-                  </span>
-                </div>
-                {parsed !== null && (
-                  <p className="text-xs tabular-nums text-muted-foreground">
-                    {formatMoney(parsed, currency)}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Nota (opcional)</Label>
+              <Field
+                label={`¿Cuánto hay realmente en ${wallet?.name ?? 'la billetera'}?`}
+                htmlFor="arqueo-monto"
+                hint={parsed !== null ? formatMoney(parsed, currency) : currency?.code}
+              >
                 <Input
+                  id="arqueo-monto"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="0,00"
+                  value={counted}
+                  onChange={(e) => setCounted(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleCount()}
+                  className="text-base font-semibold tabular-nums"
+                  autoFocus
+                />
+              </Field>
+
+              <Field label="Nota" hint="Opcional" htmlFor="arqueo-nota">
+                <Textarea
+                  id="arqueo-nota"
                   placeholder="Ej: contado con Joel al cierre"
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  className="h-12 w-full"
+                  maxRows={3}
                 />
-              </div>
+              </Field>
 
               <p className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
                 Esto <strong className="text-foreground">no cambia</strong> el saldo inicial de la

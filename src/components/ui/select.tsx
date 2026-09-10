@@ -6,7 +6,60 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+/**
+ * Recorre el JSX buscando <SelectItem> y arma el mapa valor -> etiqueta.
+ *
+ * Se camina el arbol de elementos, no el DOM: los hijos existen como objetos
+ * antes de montarse, asi que la etiqueta se conoce aunque el popup nunca se
+ * haya abierto.
+ */
+function collectItemLabels(node: React.ReactNode, acc: Record<string, React.ReactNode>) {
+  React.Children.forEach(node, (child) => {
+    if (!React.isValidElement(child)) return;
+    const props = child.props as { value?: unknown; children?: React.ReactNode };
+
+    if (child.type === SelectItem && props.value !== undefined) {
+      const label = props.children;
+      // Solo texto plano: un nodo compuesto cambia de identidad en cada render
+      // y no sirve como etiqueta estable. Esos casos pasan su propio
+      // <SelectValue>{...}</SelectValue>.
+      if (typeof label === "string" || typeof label === "number") {
+        acc[String(props.value)] = label;
+      }
+    }
+
+    if (props.children) collectItemLabels(props.children, acc);
+  });
+}
+
+/**
+ * `Select.Value` sin hijos imprime el VALOR crudo, no la etiqueta: por eso los
+ * filtros mostraban "all" y el selector de moneda mostraba "ars". Base UI lo
+ * resuelve con la prop `items` del Root, pero obligaria a cada pantalla a
+ * repetir el listado a mano y a acordarse de mantenerlo.
+ *
+ * Aca se deriva solo de los <SelectItem> declarados. El call site no tiene que
+ * hacer nada: <SelectValue /> muestra siempre la etiqueta que ve el usuario.
+ */
+function Select<Value, Multiple extends boolean | undefined = false>({
+  items,
+  children,
+  ...props
+}: SelectPrimitive.Root.Props<Value, Multiple>) {
+  const derivedItems = React.useMemo(() => {
+    if (items) return items;
+    const acc: Record<string, React.ReactNode> = {};
+    collectItemLabels(children, acc);
+    return acc;
+  }, [items, children]);
+
+  return (
+    <SelectPrimitive.Root items={derivedItems} {...props}>
+      {children}
+    </SelectPrimitive.Root>
+  );
+}
+
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (
