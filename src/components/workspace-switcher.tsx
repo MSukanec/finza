@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
-import { Boxes, Check, ChevronsUpDown, Plus, Copy, FilePlus2, Trash2, Users, LogOut } from 'lucide-react';
+import { Wallet, Check, ChevronsUpDown, Plus, Copy, FilePlus2, Trash2, Users, LogOut } from 'lucide-react';
 import { WorkspaceMembersDialog } from '@/components/workspace-members-dialog';
 import { useGlobalDialog } from '@/components/providers/dialog-provider';
 
@@ -83,16 +83,21 @@ export function WorkspaceSwitcher() {
   return (
     <>
       <DropdownMenu>
+        {/* La marca Y el selector son el mismo control. Antes eran dos filas
+            —el logo arriba, el espacio abajo— que juntas se comían 130px del
+            alto del sidebar sin decir nada que no entre en una. */}
         <DropdownMenuTrigger className="w-full outline-none">
-          <div className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-xl hover:bg-accent transition-colors text-left cursor-pointer">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
-              <Boxes className="size-4" />
+          <div className="flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-accent">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+              <Wallet className="size-4" />
             </span>
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground leading-none">Espacio</p>
-              <p className="text-sm font-medium truncate leading-tight mt-0.5">{current?.name ?? 'Principal'}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold leading-none tracking-tight">Finza</p>
+              <p className="mt-1 truncate text-xs leading-none text-muted-foreground">
+                {current?.name ?? 'Principal'}
+              </p>
             </div>
-            <ChevronsUpDown className="size-4 text-muted-foreground shrink-0" />
+            <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
           </div>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-60">

@@ -149,18 +149,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* ===== Sidebar (desktop) ===== */}
         <aside className="hidden w-64 shrink-0 flex-col border-r border-border/60 bg-sidebar md:flex">
-          <div className="flex h-16 items-center gap-3 border-b border-border/60 px-5">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-              <Wallet className="size-4" />
-            </span>
-            <span className="text-lg font-semibold tracking-tight">Finza</span>
-          </div>
-
           <div className="border-b border-border/60 p-3">
             <WorkspaceSwitcher />
           </div>
 
-          <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+          <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
             {navItems.map((item) => {
               const active = isActive(pathname, item.href);
               const onlyMe = !!item.adminOnly;
@@ -171,7 +164,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   aria-current={active ? 'page' : undefined}
                   title={onlyMe ? SOLO_ADMIN : undefined}
                   className={cn(
-                    'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
+                    'flex items-center gap-3 rounded-xl px-3 py-1.5 text-sm font-medium transition-colors',
                     active
                       ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:bg-accent hover:text-foreground',
