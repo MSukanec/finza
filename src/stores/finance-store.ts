@@ -4,6 +4,7 @@ import type { Account, Category, Transaction, Budget, Currency, Debt, Workspace,
 import { CURRENCIES, EXCHANGE_RATES } from '@/lib/mock-data';
 import { toast } from '@/stores/toast-store';
 import { signoEnCaja } from '@/lib/money';
+import { optimizarLogo } from '@/lib/optimizar-imagen';
 
 // Todo borrado es lógico: se marca `deleted_at` y la fila queda. Ver DB/021.
 const nowIso = () => new Date().toISOString();
@@ -272,6 +273,9 @@ interface FinanceState {
   switchWorkspace: (id: string) => Promise<void>;
   createWorkspace: (name: string, options?: { clone?: boolean }) => Promise<void>;
   renameWorkspace: (id: string, name: string) => Promise<void>;
+  /** Sube el logo del espacio y devuelve su URL pública. */
+  uploadWorkspaceLogo: (workspaceId: string, archivo: File) => Promise<string>;
+  removeWorkspaceLogo: (workspaceId: string) => Promise<void>;
   deleteWorkspace: (id: string) => Promise<void>;
 
   loadMembers: (workspaceId: string) => Promise<void>;
@@ -379,7 +383,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     let currentWorkspaceId: string | null = get().currentWorkspaceId || readWs();
 
     const [wsRes, memRes] = await Promise.all([
-      supabase.from('workspaces').select('id,name,created_at').is('deleted_at', null).order('created_at', { ascending: true }),
+      supabase.from('workspaces').select('id,name,logo_url,created_at').is('deleted_at', null).order('created_at', { ascending: true }),
       appUserId
         ? supabase.from('workspace_members').select('workspace_id,role').eq('user_id', appUserId)
         : Promise.resolve({ data: [] as any[] }),
@@ -392,6 +396,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     workspaces = (wsRes.data || []).map((w: any) => ({
       id: w.id,
       name: w.name,
+      logo_url: w.logo_url ?? null,
       created_at: w.created_at,
       role: roleByWs.get(w.id) ?? 'member',
     }));
@@ -661,6 +666,50 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   renameWorkspace: async (id: string, name: string) => {
     await supabase.from('workspaces').update({ name }).eq('id', id);
     set((s) => ({ workspaces: s.workspaces.map((w) => (w.id === id ? { ...w, name } : w)) }));
+  },
+
+  uploadWorkspaceLogo: async (workspaceId, archivo) => {
+    const optimizada = await optimizarLogo(archivo);
+
+    // Nombre fijo por espacio: al reemplazarlo se pisa el anterior en vez de ir
+    // dejando archivos huérfanos que nadie borra nunca.
+    const ruta = `${workspaceId}/logo.webp`;
+
+    const { error } = await supabase.storage
+      .from('logos')
+      .upload(ruta, optimizada, { upsert: true, contentType: 'image/webp' });
+    if (error) throw error;
+
+    const { data } = supabase.storage.from('logos').getPublicUrl(ruta);
+    // El `?v=` fuerza al navegador a recargarla: la ruta no cambia al
+    // reemplazar el logo, así que sin esto seguiría mostrando el viejo.
+    const url = `${data.publicUrl}?v=${Date.now()}`;
+
+    const { error: e2 } = await supabase
+      .from('workspaces')
+      .update({ logo_url: url })
+      .eq('id', workspaceId);
+    if (e2) throw e2;
+
+    set((st) => ({
+      workspaces: st.workspaces.map((w) => (w.id === workspaceId ? { ...w, logo_url: url } : w)),
+    }));
+    return url;
+  },
+
+  removeWorkspaceLogo: async (workspaceId) => {
+    const { error } = await supabase.storage.from('logos').remove([`${workspaceId}/logo.webp`]);
+    if (error) throw error;
+
+    const { error: e2 } = await supabase
+      .from('workspaces')
+      .update({ logo_url: null })
+      .eq('id', workspaceId);
+    if (e2) throw e2;
+
+    set((st) => ({
+      workspaces: st.workspaces.map((w) => (w.id === workspaceId ? { ...w, logo_url: null } : w)),
+    }));
   },
 
   deleteWorkspace: async (id: string) => {

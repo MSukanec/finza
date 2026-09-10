@@ -9,6 +9,7 @@ import { UserAvatar } from '@/components/ui/user-avatar';
 import { cn } from '@/lib/utils';
 import { ROLE_LABEL, ROLE_HINT, type WorkspaceRole } from '@/lib/types';
 import { Settings, Users, Eye, ShieldCheck, Info } from 'lucide-react';
+import { LogoUploader } from '../components/logo-uploader';
 
 /** Todos los roles, aunque todavía nadie los tenga. */
 const ROLES: WorkspaceRole[] = ['owner', 'member', 'collaborator'];
@@ -51,6 +52,8 @@ export function SettingsView() {
 
   return (
     <PageLayout title="Configuración" description="Quién está en el espacio y qué ve cada uno" icon={Settings}>
+      <LogoUploader />
+
       <Panel
         icon={Users}
         title="Miembros"

@@ -1,9 +1,38 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T19:45:39.888Z
+> Generated: 2026-09-10T20:25:24.331Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Functions (chunk 2: log_activity — workspace_role)
+## [PUBLIC] Functions (chunk 2: list_workspace_people — workspace_role)
+
+### `list_workspace_people(ws uuid)` 🔐
+
+- **Returns**: TABLE(id uuid, full_name text, email text, avatar_url text)
+- **Kind**: function | STABLE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.list_workspace_people(ws uuid)
+ RETURNS TABLE(id uuid, full_name text, email text, avatar_url text)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+    IF NOT public.can_see_all(ws) THEN
+        RAISE EXCEPTION 'No tenés acceso a esta información en este espacio';
+    END IF;
+
+    RETURN QUERY
+        SELECT u.id, u.full_name, u.email, u.avatar_url
+          FROM public.users u
+          JOIN public.workspace_members m ON m.user_id = u.id
+         WHERE m.workspace_id = ws;
+END;
+$function$
+```
+</details>
 
 ### `log_activity()` 🔐
 

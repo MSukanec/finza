@@ -1,9 +1,9 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T19:45:39.888Z
+> Generated: 2026-09-10T20:25:24.331Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Functions (chunk 1: activity_authors — list_workspace_people)
+## [PUBLIC] Functions (chunk 1: activity_authors — list_workspace_members)
 
 ### `activity_authors(ws uuid)` 🔐
 
@@ -396,6 +396,28 @@ $function$
 ```
 </details>
 
+### `espacio_del_archivo(ruta text)`
+
+- **Returns**: uuid
+- **Kind**: function | IMMUTABLE | SECURITY INVOKER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.espacio_del_archivo(ruta text)
+ RETURNS uuid
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+    SELECT CASE
+        WHEN split_part(ruta, '/', 1) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        THEN split_part(ruta, '/', 1)::uuid
+    END
+$function$
+```
+</details>
+
 ### `espacio_del_canal(canal text)`
 
 - **Returns**: uuid
@@ -642,35 +664,6 @@ BEGIN
          WHERE i.workspace_id = ws AND i.accepted_at IS NULL
 
         ORDER BY 6, 5 DESC, 3;
-END;
-$function$
-```
-</details>
-
-### `list_workspace_people(ws uuid)` 🔐
-
-- **Returns**: TABLE(id uuid, full_name text, email text, avatar_url text)
-- **Kind**: function | STABLE | SECURITY DEFINER
-
-<details><summary>Source</summary>
-
-```sql
-CREATE OR REPLACE FUNCTION public.list_workspace_people(ws uuid)
- RETURNS TABLE(id uuid, full_name text, email text, avatar_url text)
- LANGUAGE plpgsql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-BEGIN
-    IF NOT public.can_see_all(ws) THEN
-        RAISE EXCEPTION 'No tenés acceso a esta información en este espacio';
-    END IF;
-
-    RETURN QUERY
-        SELECT u.id, u.full_name, u.email, u.avatar_url
-          FROM public.users u
-          JOIN public.workspace_members m ON m.user_id = u.id
-         WHERE m.workspace_id = ws;
 END;
 $function$
 ```

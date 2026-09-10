@@ -123,6 +123,8 @@ export const veTodo = (rol: WorkspaceRole | null | undefined) =>
   rol === 'owner' || rol === 'member';
 
 export interface Workspace {
+  /** Logo del negocio. NULL usa el ícono por defecto. */
+  logo_url?: string | null;
   id: string;
   name: string;
   created_at: string;
