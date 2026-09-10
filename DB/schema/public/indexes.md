@@ -1,9 +1,9 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T17:29:43.542Z
+> Generated: 2026-09-10T18:10:34.713Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Indexes (28, excluding PKs)
+## [PUBLIC] Indexes (30, excluding PKs)
 
 | Table | Index | Definition |
 |-------|-------|------------|
@@ -17,6 +17,8 @@
 | category_groups | idx_category_groups_workspace | `CREATE INDEX idx_category_groups_workspace ON public.category_groups USING bt...` |
 | debts | idx_debts_workspace | `CREATE INDEX idx_debts_workspace ON public.debts USING btree (workspace_id)` |
 | import_batches | import_batches_espacio_idx | `CREATE INDEX import_batches_espacio_idx ON public.import_batches USING btree ...` |
+| import_rules | import_rules_espacio_idx | `CREATE INDEX import_rules_espacio_idx ON public.import_rules USING btree (wor...` |
+| import_rules | import_rules_patron_uniq | `CREATE UNIQUE INDEX import_rules_patron_uniq ON public.import_rules USING btr...` |
 | partners | partners_espacio_idx | `CREATE INDEX partners_espacio_idx ON public.partners USING btree (workspace_id)` |
 | partners | partners_espacio_nombre_uniq | `CREATE UNIQUE INDEX partners_espacio_nombre_uniq ON public.partners USING btr...` |
 | partners | partners_espacio_usuario_uniq | `CREATE UNIQUE INDEX partners_espacio_usuario_uniq ON public.partners USING bt...` |

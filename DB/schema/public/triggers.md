@@ -1,9 +1,9 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T17:29:43.542Z
+> Generated: 2026-09-10T18:10:34.713Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Triggers (22)
+## [PUBLIC] Triggers (23)
 
 | Table | Trigger | Timing | Events | Action |
 |-------|---------|--------|--------|--------|
@@ -12,13 +12,14 @@
 | categories | log_activity_categories | AFTER | INSERT, UPDATE, DELETE | EXECUTE FUNCTION log_activity() |
 | categories | set_updated_at_categories | BEFORE | UPDATE | EXECUTE FUNCTION handle_updated_at() |
 | category_groups | log_activity_category_groups | AFTER | INSERT, UPDATE, DELETE | EXECUTE FUNCTION log_activity() |
-| debts | log_activity_debts | AFTER | DELETE, INSERT, UPDATE | EXECUTE FUNCTION log_activity() |
+| debts | log_activity_debts | AFTER | UPDATE, INSERT, DELETE | EXECUTE FUNCTION log_activity() |
 | debts | set_updated_at_debts | BEFORE | UPDATE | EXECUTE FUNCTION handle_updated_at() |
-| partners | partners_activity | AFTER | INSERT, DELETE, UPDATE | EXECUTE FUNCTION log_activity() |
+| import_rules | import_rules_updated_at | BEFORE | UPDATE | EXECUTE FUNCTION handle_updated_at() |
+| partners | partners_activity | AFTER | DELETE, INSERT, UPDATE | EXECUTE FUNCTION log_activity() |
 | partners | partners_updated_at | BEFORE | UPDATE | EXECUTE FUNCTION handle_updated_at() |
-| transactions | log_activity_transactions | AFTER | UPDATE, INSERT, DELETE | EXECUTE FUNCTION log_activity() |
+| transactions | log_activity_transactions | AFTER | DELETE, INSERT, UPDATE | EXECUTE FUNCTION log_activity() |
 | transactions | set_updated_at_transactions | BEFORE | UPDATE | EXECUTE FUNCTION handle_updated_at() |
-| transactions | transactions_fingerprint | BEFORE | UPDATE, INSERT | EXECUTE FUNCTION set_transaction_fingerprint() |
+| transactions | transactions_fingerprint | BEFORE | INSERT, UPDATE | EXECUTE FUNCTION set_transaction_fingerprint() |
 | users | guard_is_admin | BEFORE | UPDATE | EXECUTE FUNCTION protect_is_admin() |
 | users | set_updated_at_users | BEFORE | UPDATE | EXECUTE FUNCTION handle_updated_at() |
 | wallet_reconciliations | log_activity_wallet_reconciliations | AFTER | UPDATE, DELETE, INSERT | EXECUTE FUNCTION log_activity() |
@@ -26,6 +27,6 @@
 | wallets | log_activity_wallets | AFTER | INSERT, DELETE, UPDATE | EXECUTE FUNCTION log_activity() |
 | wallets | set_updated_at_wallets | BEFORE | UPDATE | EXECUTE FUNCTION handle_updated_at() |
 | workspace_members | log_activity_workspace_members | AFTER | DELETE, INSERT, UPDATE | EXECUTE FUNCTION log_activity() |
-| workspaces | log_activity_workspaces | AFTER | INSERT, DELETE, UPDATE | EXECUTE FUNCTION log_activity() |
+| workspaces | log_activity_workspaces | AFTER | UPDATE, INSERT, DELETE | EXECUTE FUNCTION log_activity() |
 | workspaces | on_workspace_created | AFTER | INSERT | EXECUTE FUNCTION handle_new_workspace() |
 | workspaces | set_updated_at_workspaces | BEFORE | UPDATE | EXECUTE FUNCTION handle_updated_at() |

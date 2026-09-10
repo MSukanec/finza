@@ -18,6 +18,7 @@ import {
   History,
   Eye,
   Users,
+  Shield,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -30,6 +31,7 @@ import { DebtForm } from '@/features/debts/components/debt-form';
 import { BudgetForm } from '@/features/budgets/components/budget-form';
 import { ReconciliationForm } from '@/features/accounts/components/reconciliation-form';
 import { PartnerForm } from '@/features/partners/components/partner-form';
+import { AdminPanel } from '@/components/admin-panel';
 import { UserProfile } from '@/components/user-profile';
 import { WorkspaceSwitcher } from '@/components/workspace-switcher';
 import { DialogProvider } from '@/components/providers/dialog-provider';
@@ -71,6 +73,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
   const openSheet = useUIStore((s) => s.openSheet);
   const isHydrated = useFinanceStore((s) => s.isHydrated);
   const user = useFinanceStore((s) => s.user);
@@ -147,7 +150,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             })}
           </nav>
 
-          <div className="border-t border-border/60 p-3">
+          <div className="space-y-1 border-t border-border/60 p-3">
+            {/* Sólo para el dueño de la app. Esconderlo es presentación: lo que
+                impide leer los datos es que la función corta por is_admin en la
+                base. */}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setAdminOpen(true)}
+                title={SOLO_ADMIN}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <Shield className="size-[18px] shrink-0 opacity-60" />
+                <span className="flex-1 truncate text-left">Administración</span>
+                <Eye className="size-3.5 shrink-0 opacity-70" aria-hidden />
+              </button>
+            )}
             <UserProfile />
           </div>
         </aside>
@@ -273,6 +291,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <BudgetForm />
         <ReconciliationForm />
         <PartnerForm />
+        {isAdmin && <AdminPanel open={adminOpen} onOpenChange={setAdminOpen} />}
 
         {/* Las escrituras son optimistas: si el servidor rechaza una, el cambio
             se deshace y el aviso sale por aca. */}

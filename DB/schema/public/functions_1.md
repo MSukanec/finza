@@ -1,9 +1,9 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T17:29:43.542Z
+> Generated: 2026-09-10T18:10:34.713Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Functions (chunk 1: activity_authors — transaction_fingerprint)
+## [PUBLIC] Functions (chunk 1: activity_authors — record_reconciliation)
 
 ### `activity_authors(ws uuid)` 🔐
 
@@ -47,6 +47,96 @@ BEGIN
         SELECT m.user_id FROM public.workspace_members m
          WHERE m.workspace_id = ws
      );
+END;
+$function$
+```
+</details>
+
+### `admin_list_users()` 🔐
+
+- **Returns**: TABLE(id uuid, email text, full_name text, avatar_url text, is_admin boolean, created_at timestamp with time zone, last_sign_in timestamp with time zone, espacios integer, invitado boolean)
+- **Kind**: function | STABLE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.admin_list_users()
+ RETURNS TABLE(id uuid, email text, full_name text, avatar_url text, is_admin boolean, created_at timestamp with time zone, last_sign_in timestamp with time zone, espacios integer, invitado boolean)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+    v_me uuid := public.current_user_id();
+BEGIN
+    IF v_me IS NULL THEN
+        RAISE EXCEPTION 'No hay sesión activa';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM public.users u WHERE u.id = v_me AND u.is_admin) THEN
+        RAISE EXCEPTION 'No tenés permiso para ver esto';
+    END IF;
+
+    RETURN QUERY
+    SELECT u.id,
+           u.email,
+           u.full_name,
+           u.avatar_url,
+           u.is_admin,
+           u.created_at,
+           au.last_sign_in_at,
+           (SELECT count(*)::int FROM public.workspace_members m WHERE m.user_id = u.id),
+           EXISTS (
+               SELECT 1 FROM public.workspace_invitations i
+                WHERE lower(i.email) = lower(u.email) AND i.accepted_at IS NULL
+           )
+      FROM public.users u
+      LEFT JOIN auth.users au ON au.id = u.auth_id
+     ORDER BY u.created_at DESC;
+END;
+$function$
+```
+</details>
+
+### `aprender_regla(ws uuid, p_field text, p_pattern text, p_source text DEFAULT NULL::text, p_type text DEFAULT NULL::text, p_category uuid DEFAULT NULL::uuid, p_wallet uuid DEFAULT NULL::uuid, p_match text DEFAULT 'exact'::text)` 🔐
+
+- **Returns**: uuid
+- **Kind**: function | VOLATILE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.aprender_regla(ws uuid, p_field text, p_pattern text, p_source text DEFAULT NULL::text, p_type text DEFAULT NULL::text, p_category uuid DEFAULT NULL::uuid, p_wallet uuid DEFAULT NULL::uuid, p_match text DEFAULT 'exact'::text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+    v_pattern text := public.normalizar_texto(p_pattern);
+    v_id      uuid;
+BEGIN
+    IF NOT public.is_workspace_member(ws) THEN
+        RAISE EXCEPTION 'No sos miembro de este espacio';
+    END IF;
+    IF v_pattern = '' THEN
+        RAISE EXCEPTION 'La regla necesita un texto que reconocer';
+    END IF;
+
+    INSERT INTO public.import_rules
+        (workspace_id, user_id, field, source, match_type, pattern, type, category_id, wallet_id)
+    VALUES
+        (ws, public.current_user_id(), p_field, p_source, p_match, v_pattern, p_type, p_category, p_wallet)
+    ON CONFLICT (workspace_id, field, coalesce(source, ''), coalesce(type, ''), pattern)
+        WHERE deleted_at IS NULL
+    DO UPDATE SET
+        category_id = EXCLUDED.category_id,
+        wallet_id   = EXCLUDED.wallet_id,
+        match_type  = EXCLUDED.match_type,
+        updated_at  = now()
+    RETURNING id INTO v_id;
+
+    RETURN v_id;
 END;
 $function$
 ```
@@ -176,6 +266,7 @@ AS $function$
         WHEN 'workspaces'             THEN 'espacio'
         WHEN 'workspace_members'      THEN 'miembro'
         WHEN 'wallet_reconciliations' THEN 'arqueo'
+        WHEN 'partners'               THEN 'socio'
         ELSE tabla
     END
 $function$
@@ -471,6 +562,14 @@ BEGIN
 
     v_actor := public.current_user_id();
 
+    -- Sumarse a un espacio lo hace el propio miembro, y el alta corre sin
+    -- sesion (auth.uid() todavia es NULL): sin esto la entrada quedaba sin
+    -- autor y, desde que el historial muestra solo acciones de personas, no
+    -- aparecia en ninguna parte.
+    IF v_actor IS NULL AND TG_TABLE_NAME = 'workspace_members' THEN
+        v_actor := (v_rec->>'user_id')::uuid;
+    END IF;
+
     v_action := lower(TG_OP);
     IF TG_OP = 'UPDATE' THEN
         IF v_old->>'deleted_at' IS NULL AND v_rec->>'deleted_at' IS NOT NULL THEN
@@ -718,52 +817,6 @@ BEGIN
 
     RETURN v_row;
 END;
-$function$
-```
-</details>
-
-### `set_transaction_fingerprint()`
-
-- **Returns**: trigger
-- **Kind**: function | VOLATILE | SECURITY INVOKER
-
-<details><summary>Source</summary>
-
-```sql
-CREATE OR REPLACE FUNCTION public.set_transaction_fingerprint()
- RETURNS trigger
- LANGUAGE plpgsql
-AS $function$
-BEGIN
-    NEW.fingerprint := public.transaction_fingerprint(
-        NEW.wallet_id, NEW.date, NEW.amount, NEW.type::text, NEW.description
-    );
-    RETURN NEW;
-END;
-$function$
-```
-</details>
-
-### `transaction_fingerprint(p_wallet uuid, p_date timestamp with time zone, p_amount numeric, p_type text, p_description text)`
-
-- **Returns**: text
-- **Kind**: function | IMMUTABLE | SECURITY INVOKER
-
-<details><summary>Source</summary>
-
-```sql
-CREATE OR REPLACE FUNCTION public.transaction_fingerprint(p_wallet uuid, p_date timestamp with time zone, p_amount numeric, p_type text, p_description text)
- RETURNS text
- LANGUAGE sql
- IMMUTABLE PARALLEL SAFE
-AS $function$
-    SELECT concat_ws('|',
-        to_char(p_date AT TIME ZONE 'UTC', 'YYYY-MM-DD'),
-        to_char(abs(p_amount), 'FM9999999999990.00'),
-        coalesce(p_wallet::text, ''),
-        p_type,
-        public.normalizar_texto(p_description)
-    )
 $function$
 ```
 </details>

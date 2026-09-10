@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase/client';
-import type { Account, Category, Transaction, Budget, Currency, Debt, Workspace, WorkspaceRole, WorkspaceMember, Person, ActivityEntry, Reconciliation, Partner, PartnerPosition } from '@/lib/types';
+import type { Account, Category, Transaction, Budget, Currency, Debt, Workspace, WorkspaceRole, WorkspaceMember, Person, ActivityEntry, Reconciliation, Partner, PartnerPosition, RegisteredUser } from '@/lib/types';
 import { CURRENCIES, EXCHANGE_RATES } from '@/lib/mock-data';
 import { toast } from '@/stores/toast-store';
 import { signoEnCaja } from '@/lib/money';
@@ -191,6 +191,8 @@ interface FinanceState {
 
   loadMembers: (workspaceId: string) => Promise<void>;
   loadActivity: (workspaceId: string, limit?: number) => Promise<ActivityEntry[]>;
+  /** Panel de administración: quién se registró. Sólo responde a un admin. */
+  loadRegisteredUsers: () => Promise<RegisteredUser[]>;
   /** Registra un arqueo. El esperado lo calcula la base, no el cliente. */
   recordReconciliation: (walletId: string, counted: number, note?: string) => Promise<Reconciliation>;
   resolveReconciliation: (
@@ -550,6 +552,14 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         pending: m.pending,
       })),
     });
+  },
+
+  loadRegisteredUsers: async () => {
+    // El permiso lo valida la base, no el cliente: esconder el botón es
+    // presentación, lo que impide leer es que la función corta por is_admin.
+    const { data, error } = await supabase.rpc('admin_list_users');
+    if (error) throw error;
+    return (data || []) as RegisteredUser[];
   },
 
   loadActivity: async (workspaceId: string, limit = 200) => {

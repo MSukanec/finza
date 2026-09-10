@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T17:29:43.542Z
+> Generated: 2026-09-10T18:10:34.713Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -101,6 +101,26 @@
 | rows_skipped | int4 | ✗ | 0 |  |
 | created_at | timestamptz | ✗ | now() |  |
 | reverted_at | timestamptz | ✓ |  |  |
+
+### `import_rules`
+
+| Column | Type | Nullable | Default | Constraints |
+|--------|------|----------|---------|-------------|
+| id | uuid | ✗ | gen_random_uuid() | PK |
+| workspace_id | uuid | ✗ |  | FK → workspaces.id |
+| user_id | uuid | ✗ |  | FK → users.id |
+| field | text | ✗ |  |  |
+| source | text | ✓ |  |  |
+| match_type | text | ✗ | 'exact'::text |  |
+| pattern | text | ✗ |  |  |
+| type | text | ✓ |  |  |
+| category_id | uuid | ✓ |  | FK → categories.id |
+| wallet_id | uuid | ✓ |  | FK → wallets.id |
+| hits | int4 | ✗ | 0 |  |
+| last_used_at | timestamptz | ✓ |  |  |
+| created_at | timestamptz | ✗ | now() |  |
+| updated_at | timestamptz | ✗ | now() |  |
+| deleted_at | timestamptz | ✓ |  |  |
 
 ### `partners`
 

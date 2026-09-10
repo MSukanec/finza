@@ -60,6 +60,28 @@ export interface PartnerPosition extends Partner {
   ultimo_mov: string | null;
 }
 
+/**
+ * Una cuenta registrada en la app, para el panel de administración.
+ *
+ * Son datos de CUENTA y nada de plata: quién se registró, cuándo y si entró.
+ * El administrador no ve movimientos ni saldos ajenos — eso lo sigue cortando
+ * RLS, que no tiene excepción para administradores.
+ */
+export interface RegisteredUser {
+  id: string;
+  email: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  is_admin: boolean;
+  created_at: string;
+  /** Último ingreso. NULL si se registró y nunca entró. */
+  last_sign_in: string | null;
+  /** En cuántos espacios está. No dice cuáles. */
+  espacios: number;
+  /** Si le queda alguna invitación sin aceptar. */
+  invitado: boolean;
+}
+
 export type WorkspaceRole = 'owner' | 'member';
 
 export interface Workspace {
