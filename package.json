@@ -7,6 +7,8 @@
     "build": "next build",
     "build:check": "node scripts/build-check.mjs",
     "check:ui": "node --experimental-loader ./scripts/tsx-loader.mjs scripts/check-select-labels.mjs",
+    "check:import": "node --experimental-loader ./scripts/tsx-loader.mjs scripts/check-import.mjs",
+    "check:huellas": "node scripts/check-huellas.mjs",
     "start": "next start",
     "lint": "eslint",
     "db:sql": "node scripts/db.mjs",
