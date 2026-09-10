@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Field, FieldRow } from '@/components/ui/field';
+import { Field } from '@/components/ui/field';
 import { Picker } from '@/components/ui/picker';
 import { useState, useEffect } from 'react';
 import type { TransactionType } from '@/lib/types';
@@ -104,7 +104,6 @@ export function CategoryForm() {
             />
           </Field>
 
-          <FieldRow>
             <Field label="Tipo">
               <Picker
                 value={type}
@@ -125,7 +124,6 @@ export function CategoryForm() {
                 placeholder="Elegir grupo"
               />
             </Field>
-          </FieldRow>
 
           <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl bg-accent/50 p-3">
             <span className="min-w-0">

@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Field, FieldRow } from '@/components/ui/field';
+import { Field } from '@/components/ui/field';
 import { Picker } from '@/components/ui/picker';
 
 const TIPOS_DE_CUENTA = [
@@ -124,7 +124,6 @@ export function AccountForm() {
             />
           </Field>
 
-          <FieldRow>
             <Field label="Tipo de cuenta">
               <Picker
                 value={type}
@@ -142,7 +141,6 @@ export function AccountForm() {
                 placeholder="Elegir moneda"
               />
             </Field>
-          </FieldRow>
 
           <Field
             label={isEdit ? 'Saldo con el que arrancaste' : '¿Cuánto tenés ahora?'}

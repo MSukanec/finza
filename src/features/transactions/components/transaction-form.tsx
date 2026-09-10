@@ -14,31 +14,25 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Field, FieldRow } from '@/components/ui/field';
+import { Field } from '@/components/ui/field';
 import { Picker } from '@/components/ui/picker';
-import { cn } from '@/lib/utils';
 import { parseAmount, formatMoney } from '@/lib/money';
-import { TrendingUp, TrendingDown, ArrowLeftRight, AlertTriangle, HandCoins, Landmark } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import type { TransactionType } from '@/lib/types';
 
-/** Lo que el negocio generó, consumió o movió entre billeteras propias. */
-const TYPES = [
-  { value: 'income' as const, label: 'Ingreso', icon: TrendingUp, active: 'border-income bg-income/10 text-income' },
-  { value: 'expense' as const, label: 'Gasto', icon: TrendingDown, active: 'border-expense bg-expense/10 text-expense' },
-  { value: 'transfer' as const, label: 'Transferencia', icon: ArrowLeftRight, active: 'border-transfer bg-transfer/10 text-transfer' },
-];
-
 /**
- * Plata de los socios, no del negocio.
+ * Los cinco tipos, en un solo selector.
  *
- * Van en una fila aparte a propósito: un aporte no es una venta y un retiro no
- * es un costo. Mueven la caja pero no entran al resultado, y separarlos acá es
- * lo que evita que alguien los cargue como ingreso o gasto —que es justo como
- * estaban cargados antes.
+ * Aporte y retiro van al final y aclarados: no son resultado del negocio sino
+ * plata de los socios, y esa distinción es la que evita que alguien cargue un
+ * aporte como si fuera una venta.
  */
-const EQUITY_TYPES = [
-  { value: 'contribution' as const, label: 'Aporte', icon: HandCoins, active: 'border-primary bg-primary/10 text-primary' },
-  { value: 'withdrawal' as const, label: 'Retiro', icon: Landmark, active: 'border-primary bg-primary/10 text-primary' },
+const TYPES = [
+  { value: 'income' as const, label: 'Ingreso' },
+  { value: 'expense' as const, label: 'Egreso' },
+  { value: 'transfer' as const, label: 'Transferencia' },
+  { value: 'contribution' as const, label: 'Aporte', hint: 'de un socio' },
+  { value: 'withdrawal' as const, label: 'Retiro', hint: 'de un socio' },
 ];
 
 const today = () => {
@@ -276,105 +270,137 @@ export function TransactionForm() {
           </ResponsiveModalTitle>
         </ResponsiveModalHeader>
 
-        <ResponsiveModalBody className="space-y-3">
-          {/* Tipo. El activo se distingue por borde, fondo, color y peso. */}
-          <div role="radiogroup" aria-label="Tipo de movimiento" className="space-y-2">
-            <div className="grid grid-cols-3 gap-2">
-              {TYPES.map((opt) => (
-                <TypeButton
-                  key={opt.value}
-                  opt={opt}
-                  selected={type === opt.value}
-                  onSelect={() => {
-                    setType(opt.value);
-                    // Al salir de transferencia el destino deja de tener sentido.
-                    if (opt.value !== 'transfer') setDestinationAccountId('');
-                    setPartnerId('');
-                  }}
-                />
-              ))}
-            </div>
+        <ResponsiveModalBody className="space-y-2">
+          <Field label="Tipo">
+            <Picker
+              value={type}
+              onValueChange={(v) => {
+                const nuevo = v as TransactionType;
+                setType(nuevo);
+                // Cada tipo usa campos distintos: lo que deja de aplicar se
+                // limpia, para no guardar un destino o una categoría de un
+                // tipo anterior.
+                if (nuevo !== 'transfer') setDestinationAccountId('');
+                if (nuevo === 'transfer' || nuevo === 'contribution' || nuevo === 'withdrawal') {
+                  setCategoryId('');
+                }
+                if (nuevo !== 'contribution' && nuevo !== 'withdrawal') setPartnerId('');
+              }}
+              options={TYPES}
+              searchable={false}
+            />
+          </Field>
 
-            {/* Fila aparte, y rotulada: un aporte no es una venta y un retiro no
-                es un costo. La separación visual es parte de lo que enseña la
-                diferencia. */}
-            <div className="flex items-center gap-2">
-              <span className="shrink-0 text-[11px] font-medium tracking-wide text-muted-foreground">
-                PLATA DE LOS SOCIOS
-              </span>
-              <span className="h-px flex-1 bg-border" />
-            </div>
+          <Field label="Fecha" htmlFor="tx-fecha">
+            <Input
+              id="tx-fecha"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </Field>
 
-            <div className="grid grid-cols-2 gap-2">
-              {EQUITY_TYPES.map((opt) => (
-                <TypeButton
-                  key={opt.value}
-                  opt={opt}
-                  selected={type === opt.value}
-                  onSelect={() => {
-                    setType(opt.value);
-                    setDestinationAccountId('');
-                    setCategoryId('');
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-
-          <FieldRow>
-            {/* Monto. Texto y no number: un input numérico rechaza la coma, así
-                que "1.234,56" quedaba vacío. Se parsea con parseAmount. */}
+          {isEquity && (
             <Field
-              label="Monto"
-              htmlFor="tx-monto"
-              hint={
-                parsedAmount !== null && parsedAmount > 0
-                  ? formatMoney(parsedAmount, currency)
-                  : currency?.code
-              }
+              label={type === 'contribution' ? 'Aporta' : 'Retira'}
+              error={partners.length === 0 ? 'Todavía no cargaste socios.' : null}
             >
-              <Input
-                id="tx-monto"
-                type="text"
-                inputMode="decimal"
-                autoComplete="off"
-                placeholder="0,00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                className="font-semibold tabular-nums"
-                autoFocus
+              <Picker
+                value={partnerId}
+                onValueChange={setPartnerId}
+                options={partnerOptions}
+                placeholder="Elegir socio"
+                emptyMessage="No hay socios cargados"
               />
             </Field>
+          )}
 
-            <Field
-              label="Fecha"
-              htmlFor="tx-fecha"
-              hint={
-                date !== today() ? (
-                  <button
-                    type="button"
-                    onClick={() => setDate(today())}
-                    className="font-medium text-primary hover:underline"
-                  >
-                    Hoy
-                  </button>
-                ) : null
-              }
-            >
-              <Input
-                id="tx-fecha"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
+          {!isTransfer && !isEquity && (
+            <>
+              <Field label="Macrogrupo">
+                <Picker
+                  value={group}
+                  onValueChange={(v) => {
+                    setGroupName(v);
+                    setCategoryId(''); // el grupo cambió: la categoría anterior ya no aplica
+                    setPeriodMonth('');
+                  }}
+                  options={groupOptions}
+                  placeholder="Sin grupos"
+                />
+              </Field>
+
+              <Field label="Categoría">
+                <Picker
+                  value={category?.id}
+                  onValueChange={setCategoryId}
+                  options={categoryOptions}
+                  placeholder="Elegir"
+                />
+              </Field>
+            </>
+          )}
+
+          <Field label={isTransfer ? 'Desde' : 'Billetera'}>
+            <Picker
+              value={account?.id}
+              onValueChange={setAccountId}
+              options={walletOptions}
+              placeholder="Elegir billetera"
+            />
+          </Field>
+
+          {isTransfer && (
+            <Field label="Hasta">
+              <Picker
+                value={destination?.id}
+                onValueChange={setDestinationAccountId}
+                options={walletOptions.filter((o) => o.value !== account?.id)}
+                placeholder="Elegir billetera"
               />
             </Field>
-          </FieldRow>
+          )}
+
+          {isRecurring && !isTransfer && !isEquity && (
+            <Field label="Período" htmlFor="tx-periodo">
+              <Input
+                id="tx-periodo"
+                type="month"
+                value={periodMonth}
+                onChange={(e) => setPeriodMonth(e.target.value)}
+              />
+            </Field>
+          )}
+
+          {/* Monto. Texto y no number: un input numérico rechaza la coma, así
+              que "1.234,56" quedaba vacío. Se parsea con parseAmount. */}
+          <Field
+            label="Monto"
+            htmlFor="tx-monto"
+            hint={
+              parsedAmount !== null && parsedAmount > 0
+                ? formatMoney(parsedAmount, currency)
+                : currency?.code
+            }
+          >
+            <Input
+              id="tx-monto"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="0,00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+              className="font-semibold tabular-nums"
+              autoFocus
+            />
+          </Field>
 
           <Field label="Descripción" htmlFor="tx-desc">
             <Textarea
               id="tx-desc"
-              placeholder={isTransfer ? 'Motivo de la transferencia' : '¿En qué fue?'}
+              placeholder={isTransfer ? 'Motivo' : '¿En qué fue?'}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               // Enter hace salto de línea; se guarda con Ctrl/Cmd + Enter.
@@ -388,35 +414,12 @@ export function TransactionForm() {
             />
           </Field>
 
-          {isTransfer ? (
-            <FieldRow>
-              <Field label="Billetera de origen">
-                <Picker
-                  value={account?.id}
-                  onValueChange={setAccountId}
-                  options={walletOptions}
-                  placeholder="Elegir"
-                />
-              </Field>
-
-              <Field label="Billetera de destino">
-                <Picker
-                  value={destination?.id}
-                  onValueChange={setDestinationAccountId}
-                  options={walletOptions.filter((o) => o.value !== account?.id)}
-                  placeholder="Elegir"
-                />
-              </Field>
-            </FieldRow>
-          ) : (
-            <Field label="Billetera">
-              <Picker
-                value={account?.id}
-                onValueChange={setAccountId}
-                options={walletOptions}
-                placeholder="Elegir billetera"
-              />
-            </Field>
+          {isEquity && (
+            <p className="px-1 text-xs text-muted-foreground">
+              {type === 'contribution'
+                ? 'Un aporte suma a la caja pero no es un ingreso del negocio: no entra al resultado del mes.'
+                : 'Un retiro saca plata de la caja pero no es un gasto del negocio: no entra al resultado del mes.'}
+            </p>
           )}
 
           {isTransfer && currencyMismatch && (
@@ -427,73 +430,11 @@ export function TransactionForm() {
             </p>
           )}
 
-          {isEquity && (
-            <>
-              <Field
-                label={type === 'contribution' ? '¿Quién aportó?' : '¿Quién retiró?'}
-                error={partners.length === 0 ? 'Todavía no cargaste socios.' : null}
-              >
-                <Picker
-                  value={partnerId}
-                  onValueChange={setPartnerId}
-                  options={partnerOptions}
-                  placeholder="Elegir socio"
-                  emptyMessage="No hay socios cargados"
-                />
-              </Field>
-
-              <p className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
-                {type === 'contribution'
-                  ? 'Un aporte suma a la caja pero no es un ingreso del negocio: no entra al resultado del mes.'
-                  : 'Un retiro saca plata de la caja pero no es un gasto del negocio: no entra al resultado del mes.'}
-              </p>
-            </>
-          )}
-
-          {!isTransfer && !isEquity && (
-            <>
-              <FieldRow>
-                <Field label="Macrogrupo">
-                  <Picker
-                    value={group}
-                    onValueChange={(v) => {
-                      setGroupName(v);
-                      setCategoryId(''); // el grupo cambió: la categoría anterior ya no aplica
-                      setPeriodMonth('');
-                    }}
-                    options={groupOptions}
-                    placeholder="Sin grupos"
-                  />
-                </Field>
-
-                <Field label="Categoría">
-                  <Picker
-                    value={category?.id}
-                    onValueChange={setCategoryId}
-                    options={categoryOptions}
-                    placeholder="Elegir"
-                  />
-                </Field>
-              </FieldRow>
-
-              {groups.length === 0 && (
-                <p className="px-1 text-xs text-muted-foreground">
-                  No tenés categorías de {type === 'income' ? 'ingreso' : 'gasto'}. Creá una desde
-                  Categorías.
-                </p>
-              )}
-
-              {isRecurring && (
-                <Field label="Período de facturación" htmlFor="tx-periodo">
-                  <Input
-                    id="tx-periodo"
-                    type="month"
-                    value={periodMonth}
-                    onChange={(e) => setPeriodMonth(e.target.value)}
-                  />
-                </Field>
-              )}
-            </>
+          {groups.length === 0 && !isTransfer && !isEquity && (
+            <p className="px-1 text-xs text-muted-foreground">
+              No tenés categorías de {type === 'income' ? 'ingreso' : 'gasto'}. Creá una desde
+              Categorías.
+            </p>
           )}
 
           {error && (
@@ -513,34 +454,6 @@ export function TransactionForm() {
         </ResponsiveModalFooter>
       </ResponsiveModalContent>
     </ResponsiveModal>
-  );
-}
-
-function TypeButton({
-  opt,
-  selected,
-  onSelect,
-}: {
-  opt: { value: TransactionType; label: string; icon: React.ElementType; active: string };
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      onClick={onSelect}
-      className={cn(
-        'flex items-center justify-center gap-2 rounded-xl border-2 px-2 py-2 transition-all',
-        selected ? opt.active : 'border-transparent bg-muted text-muted-foreground hover:bg-accent'
-      )}
-    >
-      <opt.icon className="size-4 shrink-0" />
-      <span className={cn('truncate text-xs', selected ? 'font-semibold' : 'font-medium')}>
-        {opt.label}
-      </span>
-    </button>
   );
 }
 

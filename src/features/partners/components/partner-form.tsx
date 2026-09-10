@@ -15,7 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Field, FieldRow } from '@/components/ui/field';
+import { Field } from '@/components/ui/field';
 import { Picker } from '@/components/ui/picker';
 import { parseAmount } from '@/lib/money';
 import { Trash2 } from 'lucide-react';
@@ -119,7 +119,6 @@ export function PartnerForm() {
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <ResponsiveModalBody className="space-y-3">
-            <FieldRow>
               <Field label="Nombre" htmlFor="socio-nombre">
                 <Input
                   id="socio-nombre"
@@ -146,7 +145,6 @@ export function PartnerForm() {
                   onChange={(e) => setPct(e.target.value)}
                 />
               </Field>
-            </FieldRow>
 
             {/* El socio existe antes que la cuenta: se carga con nombre y recién
                 cuando la persona se registra en la app se las vincula. */}

@@ -14,7 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Field, FieldRow } from '@/components/ui/field';
+import { Field } from '@/components/ui/field';
 import { parseAmount } from '@/lib/money';
 import { Picker } from '@/components/ui/picker';
 import { useState, useEffect } from 'react';
@@ -116,7 +116,6 @@ export function DebtForm() {
             />
           </Field>
 
-          <FieldRow>
             <Field label="Total adeudado" hint="Monto fijo" htmlFor="deuda-total">
               <Input
                 id="deuda-total"
@@ -140,7 +139,6 @@ export function DebtForm() {
                 disabled={isEdit}
               />
             </Field>
-          </FieldRow>
 
           <Field label="Detalle" hint="Opcional" htmlFor="deuda-detalle">
             <Textarea

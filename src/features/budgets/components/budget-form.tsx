@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Field, FieldRow } from '@/components/ui/field';
+import { Field } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Picker } from '@/components/ui/picker';
@@ -152,7 +152,6 @@ export function BudgetForm() {
             />
           </Field>
 
-          <FieldRow>
             <Field label="Período">
               <Picker
                 value={period}
@@ -173,7 +172,6 @@ export function BudgetForm() {
                 placeholder="Elegir"
               />
             </Field>
-          </FieldRow>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
