@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T19:02:05.896Z
+> Generated: 2026-09-10T19:16:28.638Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -123,6 +123,54 @@ $function$
 ```
 </details>
 
+### `restaurar_purga(purga uuid)` 🔐
+
+- **Returns**: integer
+- **Kind**: function | VOLATILE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.restaurar_purga(purga uuid)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+    v_ws    uuid;
+    v_hecho timestamptz;
+    v_filas integer;
+BEGIN
+    SELECT workspace_id, restored_at INTO v_ws, v_hecho FROM public.purges WHERE id = purga;
+
+    IF v_ws IS NULL OR NOT public.is_workspace_member(v_ws) THEN
+        RAISE EXCEPTION 'El vaciado no existe o no tenés acceso';
+    END IF;
+    IF v_hecho IS NOT NULL THEN
+        RAISE EXCEPTION 'Ese vaciado ya se restauró el %', v_hecho::date;
+    END IF;
+
+    PERFORM set_config('app.silenciar_historial', 'on', true);
+
+    UPDATE public.transactions
+       SET deleted_at = NULL
+     WHERE purge_id = purga AND deleted_at IS NOT NULL;
+    GET DIAGNOSTICS v_filas = ROW_COUNT;
+
+    UPDATE public.wallets w
+       SET initial_balance = (b.valor->>'initial_balance')::numeric
+      FROM (SELECT jsonb_array_elements(balances) AS valor FROM public.purges WHERE id = purga) b
+     WHERE w.id = (b.valor->>'wallet_id')::uuid;
+
+    UPDATE public.purges SET restored_at = now() WHERE id = purga;
+
+    RETURN v_filas;
+END;
+$function$
+```
+</details>
+
 ### `set_transaction_fingerprint()`
 
 - **Returns**: trigger
@@ -191,6 +239,57 @@ AS $function$
         p_type,
         public.normalizar_texto(p_description)
     )
+$function$
+```
+</details>
+
+### `vaciar_espacio(ws uuid, motivo text DEFAULT NULL::text)` 🔐
+
+- **Returns**: uuid
+- **Kind**: function | VOLATILE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.vaciar_espacio(ws uuid, motivo text DEFAULT NULL::text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+    v_id     uuid;
+    v_saldos jsonb;
+    v_filas  integer;
+BEGIN
+    IF NOT public.is_workspace_member(ws) THEN
+        RAISE EXCEPTION 'No sos miembro de este espacio';
+    END IF;
+
+    PERFORM set_config('app.silenciar_historial', 'on', true);
+
+    SELECT coalesce(jsonb_agg(jsonb_build_object('wallet_id', id, 'initial_balance', initial_balance)), '[]'::jsonb)
+      INTO v_saldos
+      FROM public.wallets
+     WHERE workspace_id = ws AND deleted_at IS NULL AND initial_balance <> 0;
+
+    INSERT INTO public.purges (workspace_id, user_id, reason, balances)
+    VALUES (ws, public.current_user_id(), nullif(btrim(coalesce(motivo, '')), ''), v_saldos)
+    RETURNING id INTO v_id;
+
+    UPDATE public.transactions
+       SET deleted_at = now(), purge_id = v_id
+     WHERE workspace_id = ws AND deleted_at IS NULL;
+    GET DIAGNOSTICS v_filas = ROW_COUNT;
+
+    UPDATE public.wallets
+       SET initial_balance = 0
+     WHERE workspace_id = ws AND deleted_at IS NULL AND initial_balance <> 0;
+
+    UPDATE public.purges SET transactions_count = v_filas WHERE id = v_id;
+
+    RETURN v_id;
+END;
 $function$
 ```
 </details>

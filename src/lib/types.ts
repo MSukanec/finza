@@ -95,6 +95,19 @@ export interface Workspace {
   role: WorkspaceRole;
 }
 
+/**
+ * Un vaciado de caja: todos los movimientos del espacio dados de baja de una
+ * vez, registrado como UN hecho para poder deshacerlo entero.
+ */
+export interface Purge {
+  id: string;
+  user_id: string;
+  reason: string | null;
+  transactions_count: number;
+  created_at: string;
+  restored_at: string | null;
+}
+
 /** Autor de una acción: quién aparece en el historial y en cada movimiento. */
 export interface Person {
   id: string;
@@ -188,6 +201,14 @@ export interface Transaction {
   category_id: string | null;
   /** Sólo en aportes y retiros: de qué socio es la plata. */
   partner_id?: string | null;
+  /**
+   * Número de comprobante: factura, remito, ticket.
+   *
+   * Vivía metido en la descripción porque en una planilla no había otro lugar.
+   * Con campo propio se puede buscar por comprobante, que es como se rastrea un
+   * pago cuando el proveedor reclama.
+   */
+  reference?: string | null;
   account_id: string;
   destination_account_id: string | null; // For transfers
   description: string;

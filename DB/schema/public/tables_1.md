@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T19:02:05.896Z
+> Generated: 2026-09-10T19:16:28.638Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -137,6 +137,19 @@
 | updated_at | timestamptz | ✗ | now() |  |
 | deleted_at | timestamptz | ✓ |  |  |
 
+### `purges`
+
+| Column | Type | Nullable | Default | Constraints |
+|--------|------|----------|---------|-------------|
+| id | uuid | ✗ | gen_random_uuid() | PK |
+| workspace_id | uuid | ✗ |  | FK → workspaces.id |
+| user_id | uuid | ✗ |  | FK → users.id |
+| reason | text | ✓ |  |  |
+| transactions_count | int4 | ✗ | 0 |  |
+| balances | jsonb | ✗ | '[]'::jsonb |  |
+| created_at | timestamptz | ✗ | now() |  |
+| restored_at | timestamptz | ✓ |  |  |
+
 ### `transactions`
 
 | Column | Type | Nullable | Default | Constraints |
@@ -165,6 +178,8 @@
 | fingerprint | text | ✓ |  |  |
 | import_batch_id | uuid | ✓ |  | FK → import_batches.id |
 | settles_at | timestamptz | ✓ |  |  |
+| purge_id | uuid | ✓ |  | FK → purges.id |
+| reference | text | ✓ |  |  |
 
 ### `users`
 

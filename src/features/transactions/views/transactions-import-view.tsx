@@ -1,692 +1,1146 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import Papa from 'papaparse';
-import { useFinanceStore } from '@/stores/finance-store';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  AlertTriangle,
+  ArrowRightLeft,
+  CheckCircle2,
+  CreditCard,
+  FileSpreadsheet,
+  RotateCcw,
+  Sparkles,
+  Tags,
+  Upload,
+  Wallet,
+} from 'lucide-react';
+
 import { Badge } from '@/components/ui/badge';
-import { Upload, CheckCircle2, ArrowRightLeft, FileSpreadsheet, RotateCcw, ChevronRight } from 'lucide-react';
-import { supabase } from '@/lib/supabase/client';
+import { Button } from '@/components/ui/button';
+import { Panel } from '@/components/ui/panel';
+import { Picker, type PickerOption } from '@/components/ui/picker';
 import { PageLayout } from '@/components/layout/page-layout';
+import { supabase } from '@/lib/supabase/client';
+import { useFinanceStore } from '@/stores/finance-store';
 import { cn } from '@/lib/utils';
+import {
+  clave,
+  emparejar,
+  emparejarTransferencias,
+  ErrorDePlanilla,
+  buscarRegla,
+  esResumenVisa,
+  ErrorDePdf,
+  huella,
+  leerPdf,
+  leerResumenVisa,
+  resumenAMovimientos,
+  interpretar,
+  leerPlanilla,
+  marcarRepetidas,
+  reglaDesdeFila,
+  type Confianza,
+  type Descartada,
+  type Movimiento,
+  type Regla,
+} from '@/lib/import';
 
-interface CSVRow {
-  FECHA: string;
-  TIPO: string;
-  CATEGORIA: string;
-  SUBCATEGORIA: string;
-  DETALLE: string;
-  FIAT: string;
-  BILLETERA: string;
-  TOTAL: string;
-  NOMBRE: string;
-  APELLIDO: string;
-  FACTURADO: string;
+/**
+ * De qué adaptador viene el archivo. Es lo que permite que "cuota" signifique
+ * una cosa en el resumen de la tarjeta y otra en la planilla del negocio: las
+ * reglas se aprenden y se buscan por origen.
+ */
+type Origen = 'planilla' | 'visa';
+
+/** El nombre con el que entra la tarjeta hasta que se la mapea a una billetera. */
+const BILLETERA_VISA = 'Visa';
+
+type Paso = 'archivo' | 'revision' | 'importando' | 'listo' | 'error';
+
+/** Qué hacer con una billetera o categoría que aparece en el archivo. */
+const CREAR = '__crear__';
+const IGNORAR = '__ignorar__';
+
+interface Destino {
+  clave: string;
+  /** Lo que decía el archivo. */
+  etiqueta: string;
+  /** Contexto: moneda de la billetera, tipo de la categoría. */
+  contexto: string;
+  filas: number;
+  /** Qué tan seguro estuvo el emparejamiento automático, si hubo alguno. */
+  confianza: Confianza | null;
+  sugerido: string | null;
+  decision: string;
+  /** Lo resolvió una regla aprendida, no el parecido. */
+  porRegla: boolean;
+  reglaId: string | null;
 }
 
-interface Mapping {
-   original: string;
-   mappedId: string | 'create' | 'ignore';
-   isAutoMatched: boolean;
-   // for categories
-   originalGroup?: string;
-   originalName?: string;
-   type?: 'income'|'expense';
-   // for wallets
-   currency?: string;
+interface Lectura {
+  origen: Origen;
+  archivo: string;
+  /** Qué se detectó del archivo, para que se vea antes de importar. */
+  detalle: string;
+  movimientos: Movimiento[];
+  descartadas: Descartada[];
+  yaImportadas: number;
+  pares: number;
+  huerfanos: number;
+  /** Lo que el archivo trae pero no corresponde importar, y hay que decirlo. */
+  avisos: string[];
 }
 
-function parseArgentineMoney(val: string): number {
-  if (!val) return 0;
-  let str = String(val).trim();
-  
-  const lastComma = str.lastIndexOf(',');
-  const lastDot = str.lastIndexOf('.');
+/** Billeteras del mismo nombre pero distinta moneda son billeteras distintas. */
+const claveBilletera = (m: Movimiento) => `${clave(m.billetera)}|${m.moneda ?? '?'}`;
+/**
+ * Un resumen de tarjeta no trae categorías: lo único que identifica al gasto es
+ * el comercio. Cuando el adaptador lo provee, es la clave por la que se agrupan
+ * las filas y se aprenden las reglas.
+ */
+const claveCategoria = (m: Movimiento) =>
+  m.comercio ? `${m.tipo}|${clave(m.comercio)}` : `${m.tipo}|${clave(m.grupo)}|${clave(m.categoria)}`;
 
-  if (lastComma !== -1 && lastDot !== -1) {
-    if (lastComma > lastDot) {
-      str = str.replace(/\./g, '');
-      str = str.replace(',', '.');
-    } else {
-      str = str.replace(/,/g, '');
-    }
-  } else if (lastComma !== -1) {
-    const parts = str.replace(/[^0-9,-]/g, '').split(',');
-    if (parts.length > 2) return parseFloat(str.replace(/,/g, '')) || 0;
-    if (parts[1] && parts[1].length === 3) {
-      if (parts[0] === '0' || parts[0] === '-0') {
-        str = str.replace(',', '.');
-      } else {
-        str = str.replace(',', '');
-      }
-    } else {
-      str = str.replace(',', '.');
-    }
-  } else if (lastDot !== -1) {
-    const parts = str.replace(/[^0-9.-]/g, '').split('.');
-    if (parts.length > 2) return parseFloat(str.replace(/\./g, '')) || 0;
-    if (parts[1] && parts[1].length === 3) {
-      if (parts[0] === '0' || parts[0] === '-0') {
-        // keep dot
-      } else {
-        str = str.replace('.', '');
-      }
-    }
-  }
-  
-  str = str.replace(/[^0-9.-]/g, '');
-  return parseFloat(str) || 0;
+/** El campo sobre el que se aprende y se busca una regla de categoría. */
+const campoDeRegla = (origen: Origen) => (origen === 'visa' ? 'detalle' : 'categoria');
+
+/** La huella de una fila del archivo, una vez que se sabe a qué billetera va. */
+const huellaDe = (m: Movimiento, walletId: string) =>
+  huella({ fecha: m.fecha, monto: m.monto, walletId, tipo: m.tipo, detalle: m.detalle });
+
+interface Lote {
+  id: string;
+  file_name: string | null;
+  source: string;
+  rows_imported: number;
+  created_at: string;
 }
 
-function normalizeStr(str: string): string {
-   if (!str) return '';
-   return str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-}
+const fechaLarga = (iso: string) =>
+  new Date(iso).toLocaleString('es-AR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
-function computeFuzzyMatch(rawOriginal: string, dbEntities: any[], nameKey: string = 'name'): any {
-   const orig = normalizeStr(rawOriginal);
-   if (!orig) return null;
+/**
+ * Los lotes viejos no tienen nombre de archivo: su `file_name` es la cadena con
+ * la que se los identificaba (`batch_1775432100000_ab12cd34`), que no le dice
+ * nada a nadie. Para esos vale más la fecha.
+ */
+const nombrarLote = (l: Lote) =>
+  l.file_name && !/^(batch_|xls-)/.test(l.file_name) ? l.file_name : fechaLarga(l.created_at);
 
-   // 1. Exact Name/Trigram Match
-   const exact = dbEntities.find(e => normalizeStr(e[nameKey]) === orig);
-   if (exact) return exact;
-
-   // 2. Substring Match (e.g., "mercadpago" in "mercado pago" or vice versa)
-   const substringBase = dbEntities.find(e => orig.includes(normalizeStr(e[nameKey]).substring(0, 5)) || normalizeStr(e[nameKey]).includes(orig.substring(0, 5)));
-   if (substringBase) return substringBase;
-
-   // 3. Very Fuzzy distance check (Levenstein partial mockup)
-   // For MVP, if it starts with the same 4 reliable letters, it's a match.
-   const fuzzy = dbEntities.find(e => {
-       const dbN = normalizeStr(e[nameKey]);
-       // Ignore single-letter differences or very short words.
-       return orig.length > 3 && dbN.length > 3 && (orig.startsWith(dbN.substring(0, 4)) || dbN.startsWith(orig.substring(0, 4)));
-   });
-
-   return fuzzy || null;
-}
+const ordenarPendientesPrimero = (a: Destino, b: Destino) => {
+  const peso = (d: Destino) => (d.decision === CREAR ? 0 : d.confianza === 'sugerida' ? 1 : 2);
+  return peso(a) - peso(b) || b.filas - a.filas;
+};
 
 export function TransactionsImportView() {
-  const [file, setFile] = useState<File | null>(null);
-  const [parsedRows, setParsedRows] = useState<CSVRow[]>([]);
-  
-  const [step, setStep] = useState<'upload' | 'mapping' | 'importing' | 'done' | 'error'>('upload');
-  
-  const [walletMappings, setWalletMappings] = useState<Record<string, Mapping>>({});
-  const [catMappings, setCatMappings] = useState<Record<string, Mapping>>({});
+  const [paso, setPaso] = useState<Paso>('archivo');
+  const [lectura, setLectura] = useState<Lectura | null>(null);
+  const [billeteras, setBilleteras] = useState<Destino[]>([]);
+  const [categorias, setCategorias] = useState<Destino[]>([]);
+  const [saltearRepetidas, setSaltearRepetidas] = useState(true);
+  const [registro, setRegistro] = useState<string[]>([]);
+  const [lotes, setLotes] = useState<Lote[]>([]);
+  const [confirmando, setConfirmando] = useState<string | null>(null);
+  const [reglas, setReglas] = useState<Regla[]>([]);
+  const inputArchivo = useRef<HTMLInputElement>(null);
 
-  const [logs, setLogs] = useState<string[]>([]);
-  const [confirmingId, setConfirmingId] = useState<string | null>(null);
-  const [batches, setBatches] = useState<{ id: string, count: number }[]>([]);
+  const cuentas = useFinanceStore((s) => s.accounts);
+  const categoriasDb = useFinanceStore((s) => s.categories);
+  const transacciones = useFinanceStore((s) => s.transactions);
+  const espacioId = useFinanceStore((s) => s.currentWorkspaceId);
 
-  const accounts = useFinanceStore(s => s.accounts);
-  const categories = useFinanceStore(s => s.categories);
-  const currentWorkspaceId = useFinanceStore(s => s.currentWorkspaceId);
+  const anotar = (msg: string) => setRegistro((prev) => [...prev, msg]);
 
-  const addLog = (msg: string) => setLogs(prev => [...prev, msg]);
-
-  const fetchBatches = async () => {
-     // Sin este filtro la consulta trae los lotes de todos los espacios donde el
-     // usuario es miembro: RLS acota por membresía, no por espacio activo.
-     if (!currentWorkspaceId) { setBatches([]); return; }
-
-     let allData: any[] = [];
-     let hasMore = true;
-     let page = 0;
-     const PAGE_SIZE = 1000;
-
-     while (hasMore) {
-       const { data } = await supabase.from('transactions')
-           .select('import_batch')
-           .eq('workspace_id', currentWorkspaceId)
-           .not('import_batch', 'is', null)
-           .is('deleted_at', null)
-           .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-
-       if (!data || data.length === 0) break;
-       allData = allData.concat(data);
-       if (data.length < PAGE_SIZE) break;
-       page++;
-     }
-
-     if (allData.length > 0) {
-         const counts = allData.reduce((acc: any, row: any) => {
-             const bid = row.import_batch;
-             acc[bid] = (acc[bid] || 0) + 1;
-             return acc;
-         }, {});
-         
-         const formatted = Object.keys(counts).map(key => ({
-             id: key,
-             count: counts[key]
-         })).sort((a,b) => b.id.localeCompare(a.id));
-         
-         setBatches(formatted);
-     } else {
-         setBatches([]);
-     }
-  };
-
-  // Depende del espacio: al cambiar de espacio la lista tiene que rehacerse, no
-  // quedar mostrando los lotes del anterior.
-  useEffect(() => {
-    fetchBatches();
-  }, [currentWorkspaceId]);
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setFile(file);
-
-    Papa.parse<any>(file, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (h) => {
-        let clean = h.trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        if (clean === 'FECHA') return 'FECHA';
-        if (clean === 'TIPO') return 'TIPO';
-        if (clean === 'CATEGORIA') return 'CATEGORIA';
-        if (clean === 'SUBCATEGORIA') return 'SUBCATEGORIA';
-        if (clean === 'DESCRIPCION' || clean === 'DETALLE' || clean === 'CONCEPTO') return 'DETALLE';
-        if (clean === 'FIAT' || clean === 'MONEDA') return 'FIAT';
-        if (clean === 'BILLETERA' || clean === 'CUENTA') return 'BILLETERA';
-        if (clean === 'TOTAL' || clean === 'MONTO' || clean === 'IMPORTE') return 'TOTAL';
-        return clean;
-      },
-      complete: (results) => {
-        setParsedRows(results.data);
-        generateMappings(results.data);
-        setStep('mapping');
-      },
-      error: (err) => {
-        setStep('error');
-        addLog(`❌ Error parseando CSV: ${err.message}`);
-      }
-    });
-  };
-
-  const generateMappings = (rows: CSVRow[]) => {
-      const uWallets = new Map<string, { original: string, currency: string }>();
-      const uCats = new Map<string, {group: string, name: string, type: 'income'|'expense'}>();
-
-      rows.forEach(r => {
-          const rawW = r.BILLETERA?.trim();
-          if (rawW) {
-             const cur = r.FIAT?.toUpperCase().startsWith('D') ? 'USD' : 'ARS';
-             const id = `${rawW} (${cur})`;
-             if (!uWallets.has(id)) {
-                 uWallets.set(id, { original: rawW, currency: cur });
-             }
-          }
-          let cVal = r.CATEGORIA?.trim() || '';
-          let sVal = r.SUBCATEGORIA?.trim() || '';
-          
-          if (!cVal && sVal) {
-             cVal = sVal;
-             sVal = '';
-          }
-          
-          if (cVal && cVal.toUpperCase() !== 'MOVIMIENTOS') {
-             const t = r.TIPO?.toUpperCase() === 'INGRESO' ? 'income' : 'expense';
-             // CORE FIX 1: If SUBCATEGORIA is empty, they intend cVal to be the Name, and Group to be "General".
-             const groupName = sVal ? cVal : 'General';
-             const catName = sVal ? sVal : cVal;
-             
-             uCats.set(`${t}-${groupName}-${catName}`, {
-                 group: groupName,
-                 name: catName,
-                 type: t
-             });
-          }
+  /**
+   * Cuántas veces está cargada ya cada huella.
+   *
+   * Cuenta y no presencia, y la diferencia es plata: en el resumen de tarjeta
+   * OSDE aparece facturado DOS veces el mismo día, por el mismo importe y con la
+   * misma referencia — dos filas idénticas hasta el byte, más su devolución. Con
+   * un simple "¿ya existe?" la segunda se descartaba en silencio y faltaban
+   * 443.055 pesos. Comparando cantidades, si el archivo trae dos y la base tiene
+   * una, entra una; y si trae dos y ya hay dos, no entra ninguna.
+   *
+   * Se recalculan acá en vez de leer la columna `fingerprint` porque el store ya
+   * tiene todos los movimientos del espacio en memoria y `huella()` es un espejo
+   * exacto de la función de la base (lo verifica `npm run check:huellas`).
+   */
+  const huellasCargadas = useMemo(() => {
+    const cuenta = new Map<string, number>();
+    for (const t of transacciones) {
+      const h = huella({
+        fecha: t.date,
+        monto: Number(t.amount),
+        walletId: t.account_id,
+        tipo: t.type,
+        detalle: t.description ?? '',
       });
+      cuenta.set(h, (cuenta.get(h) ?? 0) + 1);
+    }
+    return cuenta;
+  }, [transacciones]);
 
-      const wm: Record<string, Mapping> = {};
-      Array.from(uWallets.entries()).forEach(([key, val]) => {
-         const scopedDbAccs = accounts.filter(a => a.currency_id.toLowerCase() === val.currency.toLowerCase());
-         const match = computeFuzzyMatch(val.original, scopedDbAccs, 'name');
-         wm[key] = {
-             original: key,
-             originalName: val.original,
-             currency: val.currency,
-             mappedId: match ? match.id : 'create',
-             isAutoMatched: !!match
-         };
-      });
-      
-      const cm: Record<string, Mapping> = {};
-      Array.from(uCats.entries()).forEach(([key, val]) => {
-         // Categories are complex because of Type and Group Name.
-         // We filter by type first
-         const scopedDbCats = categories.filter(c => c.type === val.type);
-         let match = null;
-         
-         // Try exact multi-level match first
-         match = scopedDbCats.find(c => 
-             normalizeStr(c.name) === normalizeStr(val.name) && 
-             normalizeStr(c.group_name || 'General') === normalizeStr(val.group)
-         );
-
-         // If not exact, fallback to fuzzy logic primarily by Name.
-         if (!match) {
-             const fuzzy = computeFuzzyMatch(val.name, scopedDbCats, 'name');
-             if (fuzzy) match = fuzzy;
-         }
-
-         cm[key] = {
-             original: key,
-             originalGroup: val.group,
-             originalName: val.name,
-             type: val.type,
-             mappedId: match ? match.id : 'create',
-             isAutoMatched: !!match
-         };
-      });
-
-      setWalletMappings(wm);
-      setCatMappings(cm);
-  };
-
-  const processImport = async () => {
-    setStep('importing');
-    addLog('🚀 Iniciando inyección de datos usando tus mapeos...');
-    const state = useFinanceStore.getState();
-    const { data: userData } = await supabase.from('users').select('id').eq('auth_id', state.user?.id).single();
-    if (!userData) {
-      addLog('❌ Error: Usuario no encontrado en BD.');
-      setStep('error');
+  const cargarLotes = async () => {
+    // Sin este filtro la consulta trae los lotes de todos los espacios donde el
+    // usuario es miembro: RLS acota por membresía, no por espacio activo.
+    if (!espacioId) {
+      setLotes([]);
       return;
     }
 
-    const wsPatch = state.currentWorkspaceId ? { workspace_id: state.currentWorkspaceId } : {};
+    // Antes esto leía las 1500 transacciones del espacio para agrupar en el
+    // cliente. Ahora el lote es una fila propia con sus conteos ya hechos.
+    const { data } = await supabase
+      .from('import_batches')
+      .select('id, file_name, source, rows_imported, created_at')
+      .eq('workspace_id', espacioId)
+      .is('reverted_at', null)
+      .order('created_at', { ascending: false });
 
+    setLotes((data ?? []) as Lote[]);
+  };
+
+  /**
+   * Lo que el espacio ya aprendió sobre cómo se llaman las cosas en los
+   * archivos. Sin esto, cada importación vuelve a preguntar lo mismo.
+   */
+  const cargarReglas = async () => {
+    if (!espacioId) {
+      setReglas([]);
+      return;
+    }
+    const { data } = await supabase
+      .from('import_rules')
+      .select('*')
+      .eq('workspace_id', espacioId)
+      .is('deleted_at', null);
+
+    setReglas((data ?? []).map(reglaDesdeFila));
+  };
+
+  // Depende del espacio: al cambiar de espacio las listas tienen que rehacerse,
+  // no quedar mostrando lo del anterior.
+  useEffect(() => {
+    cargarLotes();
+    cargarReglas();
+  }, [espacioId]);
+
+  // ------------------------------------------------------------- paso 1
+
+  const reiniciar = () => {
+    setPaso('archivo');
+    setLectura(null);
+    setBilleteras([]);
+    setCategorias([]);
+    setRegistro([]);
+    if (inputArchivo.current) inputArchivo.current.value = '';
+  };
+
+  const tomarArchivo = async (archivo: File) => {
+    setRegistro([]);
     try {
-      // 1. Process "Create" Wallet Mappings
-      const finalWallets = { ...walletMappings };
-      for (const [key, mapping] of Object.entries(walletMappings)) {
-         if (mapping.mappedId === 'create') {
-            addLog(`✨ Creando billetera: ${mapping.originalName} en ${mapping.currency}`);
-            const { data: newW } = await supabase.from('wallets').insert({
-              user_id: userData.id,
-              ...wsPatch,
-              name: mapping.originalName,
-              type: 'bank',
-              currency_code: mapping.currency
-            }).select().single();
-            if (newW) finalWallets[key].mappedId = newW.id;
-         }
+      const bytes = new Uint8Array(await archivo.arrayBuffer());
+      const lectura =
+        bytes[0] === 0x25 && bytes[1] === 0x50 ? await leerComoPdf(bytes) : leerComoPlanilla(bytes);
+
+      const { movimientos, descartadas, avisos, origen, detalle } = lectura;
+      const { pares, huerfanos } = emparejarTransferencias(movimientos);
+
+      const normales = movimientos.filter((m) => !m.esTransferencia);
+      const destinos = prepararDestinos(normales, origen);
+
+      // Una fila sólo puede estar repetida si su billetera YA existe: la huella
+      // se calcula con el id de billetera, y una billetera por crear todavía no
+      // tiene movimientos contra los que chocar.
+      const enArchivo = new Map<string, number>();
+      for (const m of normales) {
+        const w = destinos.get(claveBilletera(m));
+        if (!w) continue;
+        const h = huellaDe(m, w);
+        enArchivo.set(h, (enArchivo.get(h) ?? 0) + 1);
       }
+      let yaImportadas = 0;
+      for (const [h, n] of enArchivo) yaImportadas += Math.min(n, huellasCargadas.get(h) ?? 0);
 
-      // 2. Process "Create" Category Mappings
-      const finalCats = { ...catMappings };
-      for (const [key, mapping] of Object.entries(catMappings)) {
-         if (mapping.mappedId === 'create') {
-            addLog(`✨ Creando categoría: ${mapping.originalGroup} > ${mapping.originalName}`);
-            const { data: newC } = await supabase.from('categories').insert({
-              user_id: userData.id,
-              ...wsPatch,
-              name: mapping.originalName,
-              group_name: mapping.originalGroup,
-              type: mapping.type
-            }).select().single();
-            if (newC) finalCats[key].mappedId = newC.id;
-         }
-      }
-
-      // 3. Build Transactions
-      const transactionsToInsert = [];
-      const pendingTransfers: any[] = [];
-      // El timestamp mantiene el orden en la lista; el sufijo evita que dos
-      // importaciones del mismo milisegundo compartan id.
-      const importBatchId = `batch_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
-
-      for (const row of parsedRows) {
-        if (!row.TIPO || !row.TOTAL) continue;
-
-        const rawWallet = row.BILLETERA?.trim() || '';
-        const currency = row.FIAT?.toUpperCase().startsWith('D') ? 'USD' : 'ARS';
-        const wKey = `${rawWallet} (${currency})`;
-        
-        const wMapping = finalWallets[wKey];
-        if (wMapping && wMapping.mappedId === 'ignore') continue;
-
-        let dateObj = new Date();
-        if (row.FECHA) {
-           const parts = row.FECHA.split(/[-/]/);
-           if (parts.length === 3) {
-             let year = parseInt(parts[2]);
-             if (year < 100) year += 2000;
-             dateObj = new Date(year, parseInt(parts[1]) - 1, parseInt(parts[0]));
-           }
-        }
-        
-        let type: 'income'|'expense'|'transfer' = row.TIPO.toUpperCase() === 'INGRESO' ? 'income' : 'expense';
-        const amount = parseArgentineMoney(row.TOTAL);
-        const walletId = wMapping ? wMapping.mappedId : null;
-        
-        let description = row.DETALLE?.trim() || '';
-        if (row.NOMBRE || row.APELLIDO) {
-          const fullname = `${row.NOMBRE || ''} ${row.APELLIDO || ''}`.trim();
-          description = `[${fullname}] ${description}`.trim();
-        }
-
-        let invoicedAt = null;
-        if (row.FACTURADO?.toLowerCase() === 'x') {
-           invoicedAt = dateObj.toISOString();
-        }
-
-        // --- TRANSFER LOGIC ---
-        if (row.CATEGORIA?.toUpperCase() === 'MOVIMIENTOS') {
-           const sameDateTransfers = pendingTransfers.filter(pt => 
-              pt.dateStr === row.FECHA && 
-              Math.abs(pt.amount - amount) < 2 &&
-              pt.type !== type
-           );
-
-           if (sameDateTransfers.length > 0) {
-              const matched = sameDateTransfers[0];
-              pendingTransfers.splice(pendingTransfers.indexOf(matched), 1);
-
-              const isExpense = type === 'expense';
-              const sourceWalletId = isExpense ? walletId : matched.walletId;
-              const destWalletId = isExpense ? matched.walletId : walletId;
-
-              const txIdOut = crypto.randomUUID();
-              const txIdIn = crypto.randomUUID();
-
-              transactionsToInsert.push({
-                 id: txIdOut,
-                 user_id: userData.id,
-                 type: 'transfer',
-                 amount: amount,
-                 currency_code: currency,
-                 wallet_id: sourceWalletId !== 'create' ? sourceWalletId : null,
-                 description: 'Transferencia (Auto-fusionada) - Origen',
-                 date: dateObj.toISOString(),
-                 invoiced_at: null,
-                 import_batch: importBatchId,
-                 related_transaction_id: txIdIn
-              });
-
-              transactionsToInsert.push({
-                 id: txIdIn,
-                 user_id: userData.id,
-                 type: 'transfer',
-                 amount: -amount,
-                 currency_code: currency,
-                 wallet_id: destWalletId !== 'create' ? destWalletId : null,
-                 description: 'Transferencia (Auto-fusionada) - Destino',
-                 date: dateObj.toISOString(),
-                 invoiced_at: null,
-                 import_batch: importBatchId,
-                 related_transaction_id: txIdOut
-              });
-              continue;
-           } else {
-              pendingTransfers.push({ dateStr: row.FECHA, type, amount, walletId, currency, dateObj });
-              continue;
-           }
-        }
-
-        // --- NORMAL LOGIC ---
-        let cVal = row.CATEGORIA?.trim() || '';
-        let sVal = row.SUBCATEGORIA?.trim() || '';
-        
-        if (!cVal && sVal) {
-           cVal = sVal;
-           sVal = '';
-        }
-
-        const groupName = sVal ? cVal : 'General';
-        const catName = sVal ? sVal : cVal;
-        const mapKey = `${type}-${groupName}-${catName}`;
-        const cMapping = finalCats[mapKey];
-
-        if (cMapping && cMapping.mappedId === 'ignore') continue;
-
-        transactionsToInsert.push({
-           id: crypto.randomUUID(),
-           user_id: userData.id,
-           type: type,
-           amount: amount,
-           currency_code: currency,
-           wallet_id: walletId !== 'create' ? walletId : null,
-           category_id: (cMapping && cMapping.mappedId !== 'create') ? cMapping.mappedId : null,
-           description: description || 'Importado',
-           date: dateObj.toISOString(),
-           invoiced_at: invoicedAt,
-           import_batch: importBatchId
-        });
-      }
-
-      if (pendingTransfers.length > 0) {
-         addLog(`⚠️ Quedaron ${pendingTransfers.length} 'MOVIMIENTOS' sin pareja.`);
-         pendingTransfers.forEach(pt => {
-            transactionsToInsert.push({
-               id: crypto.randomUUID(),
-               user_id: userData.id,
-               type: pt.type,
-               amount: pt.amount,
-               currency_code: pt.currency,
-               wallet_id: pt.walletId !== 'create' ? pt.walletId : null,
-               description: 'Movimiento huérfano',
-               date: pt.dateObj.toISOString(),
-               invoiced_at: null,
-               import_batch: importBatchId
-            });
-         });
-      }
-
-      addLog(`⏳ Insertando ${transactionsToInsert.length} movimientos...`);
-      const rowsWithWs = transactionsToInsert.map((t) => ({ ...t, ...wsPatch }));
-      const chunkSize = 500;
-      for (let i = 0; i < rowsWithWs.length; i += chunkSize) {
-         const chunk = rowsWithWs.slice(i, i + chunkSize);
-         const { error } = await supabase.from('transactions').insert(chunk);
-         if (error) throw error;
-      }
-
-      addLog(`✅ ¡Importación finalizada con éxito!`);
-      setStep('done');
-      await state.hydrate();
-      fetchBatches();
-
-    } catch (err: any) {
-      addLog(`❌ Error Crítico: ${err.message}`);
-      setStep('error');
+      setLectura({
+        origen,
+        archivo: archivo.name,
+        detalle,
+        movimientos,
+        descartadas,
+        yaImportadas,
+        pares: pares.length,
+        huerfanos: huerfanos.length,
+        avisos,
+      });
+      setPaso('revision');
+    } catch (e) {
+      setPaso('error');
+      anotar(
+        e instanceof ErrorDePlanilla || e instanceof ErrorDePdf
+          ? `No pude leer el archivo: ${e.message}`
+          : `Error inesperado leyendo el archivo: ${(e as Error).message}`
+      );
     }
   };
 
-  const handleRevert = async (batchId: string) => {
-     setConfirmingId(null);
-     const { revertImportBatch } = useFinanceStore.getState();
-     try {
-       await revertImportBatch(batchId);
-       await fetchBatches();
-       window.location.reload();
-     } catch(e: any) {
-       console.error("Error revirtiendo el lote", e);
-     }
+  /** Una planilla: CSV o TSV exportado de Excel o de Google Sheets. */
+  const leerComoPlanilla = (bytes: Uint8Array) => {
+    const planilla = leerPlanilla(bytes);
+    const { movimientos, descartadas } = interpretar(planilla);
+    const repetidas = marcarRepetidas(movimientos);
+    return {
+      origen: 'planilla' as Origen,
+      detalle: `${planilla.codificacion} · separador "${planilla.delimitador}" · encabezado en la línea ${planilla.filaEncabezado + 1}`,
+      movimientos,
+      descartadas,
+      avisos: repetidas.size ? [`${repetidas.size} filas se repiten dentro del archivo.`] : [],
+    };
   };
 
+  /**
+   * Un resumen de tarjeta.
+   *
+   * El pago del resumen no entra: es una transferencia desde el banco y de qué
+   * cuenta salió no está en el PDF. Se avisa con el importe para que nadie crea
+   * que se perdió.
+   */
+  const leerComoPdf = async (bytes: Uint8Array) => {
+    const paginas = await leerPdf(bytes);
+    if (!esResumenVisa(paginas)) {
+      throw new ErrorDePdf('Es un PDF, pero no reconozco el formato. Por ahora leo resúmenes de Visa.');
+    }
+
+    const resumen = leerResumenVisa(paginas);
+    const { movimientos, pagos } = resumenAMovimientos(resumen, BILLETERA_VISA);
+    const plata = (n: number) => n.toLocaleString('es-AR', { minimumFractionDigits: 2 });
+
+    const avisos = pagos.map(
+      (p) =>
+        `El pago del resumen (${p.moneda} ${plata(p.monto)}) no se importa: es una transferencia desde tu banco, y de qué cuenta salió no figura en el PDF.`
+    );
+    const enCuotas = resumen.filas.filter((f) => f.cuota).length;
+    if (enCuotas) {
+      avisos.push(`${enCuotas} compras vienen en cuotas: se importa sólo la cuota de este mes.`);
+    }
+
+    return {
+      origen: 'visa' as Origen,
+      detalle: `Resumen Visa · ${resumen.tarjetas.length} tarjetas · total ${plata(resumen.totalArs ?? 0)} y USD ${plata(resumen.totalUsd ?? 0)}`,
+      movimientos,
+      descartadas: [] as Descartada[],
+      avisos,
+    };
+  };
+
+  /**
+   * Propone un destino para cada billetera y categoría del archivo.
+   *
+   * Sólo se da por resuelto lo que matchea con confianza alta o exacta. Lo
+   * dudoso queda como sugerencia visible en vez de aplicarse solo: el
+   * importador anterior aceptaba cualquier par que compartiera cuatro letras y
+   * mandaba "Comidas" a "Comisiones" sin que nadie se enterara.
+   */
+  const prepararDestinos = (movimientos: Movimiento[], origen: Origen): Map<string, string> => {
+    const conteoB = new Map<string, { m: Movimiento; filas: number }>();
+    const conteoC = new Map<string, { m: Movimiento; filas: number }>();
+    /** Billeteras del archivo que ya existen en el espacio, por clave. */
+    const resueltas = new Map<string, string>();
+
+    for (const m of movimientos) {
+      if (m.billetera) {
+        const k = claveBilletera(m);
+        const prev = conteoB.get(k);
+        conteoB.set(k, { m, filas: (prev?.filas ?? 0) + 1 });
+      }
+      const k = claveCategoria(m);
+      const prev = conteoC.get(k);
+      conteoC.set(k, { m, filas: (prev?.filas ?? 0) + 1 });
+    }
+
+    setBilleteras(
+      [...conteoB.entries()]
+        .map(([k, { m, filas }]) => {
+          // Sin moneda en el archivo, cualquier billetera es candidata y la
+          // moneda sale de la que se elija.
+          const candidatas = m.moneda
+            ? cuentas.filter((c) => c.currency_id.toUpperCase() === m.moneda)
+            : cuentas;
+          // La regla aprendida gana sobre el parecido: alguien ya afirmó qué
+          // significa este texto, y eso pesa más que cualquier heurística.
+          const regla = buscarRegla(m, reglas, 'billetera', origen);
+          const porRegla = candidatas.find((c) => c.id === regla?.walletId) ?? null;
+
+          const match = porRegla ? null : emparejar(m.billetera, candidatas, (c) => c.name);
+          const auto = match && match.confianza !== 'sugerida';
+          const elegida = porRegla?.id ?? (auto ? match.item.id : null);
+          if (elegida) resueltas.set(k, elegida);
+
+          return {
+            clave: k,
+            etiqueta: m.billetera,
+            contexto: m.moneda ?? 'moneda no declarada',
+            filas,
+            confianza: match?.confianza ?? null,
+            sugerido: porRegla?.name ?? match?.item.name ?? null,
+            decision: elegida ?? CREAR,
+            porRegla: Boolean(porRegla),
+            reglaId: porRegla ? (regla?.id ?? null) : null,
+          };
+        })
+        .sort(ordenarPendientesPrimero)
+    );
+
+    setCategorias(
+      [...conteoC.entries()]
+        .map(([k, { m, filas }]) => {
+          const candidatas = categoriasDb.filter((c) => c.type === m.tipo);
+          // El par grupo + nombre identifica la categoría; el nombre solo
+          // alcanza para sugerir, no para decidir.
+          const exacta = candidatas.find(
+            (c) =>
+              clave(c.name) === clave(m.categoria) &&
+              clave(c.group_name || 'General') === clave(m.grupo)
+          );
+          const regla = buscarRegla(m, reglas, campoDeRegla(origen), origen);
+          const porRegla = candidatas.find((c) => c.id === regla?.categoryId) ?? null;
+
+          const match = porRegla
+            ? null
+            : exacta
+              ? { item: exacta, confianza: 'exacta' as Confianza }
+              : emparejar(m.categoria, candidatas, (c) => c.name);
+          const auto = match && match.confianza !== 'sugerida';
+          const nombrar = (c: { group_name?: string; name: string }) =>
+            `${c.group_name || 'General'} › ${c.name}`;
+
+          return {
+            clave: k,
+            etiqueta: `${m.grupo} › ${m.categoria}`,
+            contexto: m.tipo === 'income' ? 'Ingreso' : 'Gasto',
+            filas,
+            confianza: match?.confianza ?? null,
+            sugerido: porRegla ? nombrar(porRegla) : match ? nombrar(match.item) : null,
+            decision: porRegla?.id ?? (auto ? match.item.id : CREAR),
+            porRegla: Boolean(porRegla),
+            reglaId: porRegla ? (regla?.id ?? null) : null,
+          };
+        })
+        .sort(ordenarPendientesPrimero)
+    );
+
+    return resueltas;
+  };
+
+  // ------------------------------------------------------------- paso 2
+
+  const pendientes = useMemo(
+    () =>
+      [...billeteras, ...categorias].filter((d) => d.decision === CREAR || d.confianza === 'sugerida')
+        .length,
+    [billeteras, categorias]
+  );
+
+  const opcionesBilletera = (d: Destino): PickerOption[] => {
+    const moneda = d.contexto;
+    const compatibles = cuentas.filter(
+      (c) => !/^[A-Z]{3}$/.test(moneda) || c.currency_id.toUpperCase() === moneda
+    );
+    return [
+      { value: CREAR, label: `Crear "${d.etiqueta}"`, hint: /^[A-Z]{3}$/.test(moneda) ? moneda : undefined },
+      { value: IGNORAR, label: 'No importar estas filas' },
+      ...compatibles.map((c) => ({
+        value: c.id,
+        label: c.name,
+        hint: c.currency_id.toUpperCase(),
+      })),
+    ];
+  };
+
+  const opcionesCategoria = (d: Destino): PickerOption[] => {
+    const tipo = d.contexto === 'Ingreso' ? 'income' : 'expense';
+    return [
+      { value: CREAR, label: `Crear "${d.etiqueta}"` },
+      { value: IGNORAR, label: 'No importar estas filas' },
+      ...categoriasDb
+        .filter((c) => c.type === tipo)
+        .map((c) => ({
+          value: c.id,
+          label: c.name,
+          hint: c.group_name || 'General',
+        })),
+    ];
+  };
+
+  const decidir = (
+    set: React.Dispatch<React.SetStateAction<Destino[]>>,
+    clave: string,
+    valor: string
+  ) => {
+    set((prev) =>
+      prev.map((d) =>
+        d.clave === clave
+          ? {
+              ...d,
+              decision: valor,
+              confianza: valor === CREAR || valor === IGNORAR ? null : 'exacta',
+              porRegla: false,
+              reglaId: null,
+            }
+          : d
+      )
+    );
+  };
+
+  // ------------------------------------------------------------- importar
+
+  const importar = async () => {
+    if (!lectura) return;
+
+    const { appUserId, currentWorkspaceId, _resolveGroupId, hydrate } = useFinanceStore.getState();
+
+    // La base exige espacio y usuario en cada movimiento. Antes se mandaba el
+    // insert igual y fallaba con un error de constraint a mitad de camino.
+    if (!currentWorkspaceId) {
+      setPaso('error');
+      anotar('No hay un espacio activo. Elegí uno antes de importar.');
+      return;
+    }
+    if (!appUserId) {
+      setPaso('error');
+      anotar('No hay sesión activa.');
+      return;
+    }
+
+    setPaso('importando');
+    setRegistro([]);
+
+    // El lote se crea PRIMERO y con identidad propia: así los movimientos
+    // apuntan a una fila real y la importación queda registrada aunque después
+    // haya que deshacerla. Antes el lote era una cadena suelta en cada fila.
+    const { data: loteRow, error: errorLote } = await supabase
+      .from('import_batches')
+      .insert({
+        workspace_id: currentWorkspaceId,
+        user_id: appUserId,
+        source: lectura.origen,
+        file_name: lectura.archivo,
+        encoding: lectura.detalle.slice(0, 200),
+        delimiter: null,
+        rows_read: lectura.movimientos.length,
+      })
+      .select('id')
+      .single();
+
+    if (errorLote || !loteRow) {
+      setPaso('error');
+      anotar(`No pude registrar el lote: ${errorLote?.message ?? 'sin respuesta'}`);
+      return;
+    }
+
+    const lote = loteRow.id as string;
+    const base = {
+      user_id: appUserId,
+      workspace_id: currentWorkspaceId,
+      import_batch: lote,
+      import_batch_id: lote,
+    };
+
+    try {
+      // 1. Crear las billeteras que hagan falta.
+      const idBilletera = new Map<string, string>();
+      for (const d of billeteras) {
+        if (d.decision === IGNORAR) continue;
+        if (d.decision !== CREAR) {
+          idBilletera.set(d.clave, d.decision);
+          continue;
+        }
+        const moneda = /^[A-Z]{3}$/.test(d.contexto) ? d.contexto : 'ARS';
+        anotar(`Creando billetera "${d.etiqueta}" en ${moneda}`);
+        const { data, error } = await supabase
+          .from('wallets')
+          .insert({
+            user_id: appUserId,
+            workspace_id: currentWorkspaceId,
+            name: d.etiqueta,
+            type: 'bank',
+            currency_code: moneda,
+          })
+          .select('id')
+          .single();
+        if (error) throw new Error(`No pude crear la billetera "${d.etiqueta}": ${error.message}`);
+        idBilletera.set(d.clave, data.id);
+      }
+
+      // 2. Crear las categorías que hagan falta, con su grupo.
+      //    `group_id` es obligatorio en la base y no tiene default: el
+      //    importador anterior mandaba sólo `group_name`, el insert fallaba, el
+      //    error no se miraba y las filas entraban sin categoría.
+      const idCategoria = new Map<string, string>();
+      for (const d of categorias) {
+        if (d.decision === IGNORAR) continue;
+        if (d.decision !== CREAR) {
+          idCategoria.set(d.clave, d.decision);
+          continue;
+        }
+        const [grupo, nombre] = d.etiqueta.split(' › ');
+        const tipo = d.contexto === 'Ingreso' ? 'income' : 'expense';
+        anotar(`Creando categoría "${grupo} › ${nombre}"`);
+        const grupoId = await _resolveGroupId(grupo);
+        if (!grupoId) throw new Error(`No pude resolver el grupo "${grupo}".`);
+        const { data, error } = await supabase
+          .from('categories')
+          .insert({
+            user_id: appUserId,
+            workspace_id: currentWorkspaceId,
+            name: nombre,
+            group_name: grupo,
+            group_id: grupoId,
+            type: tipo,
+          })
+          .select('id')
+          .single();
+        if (error) throw new Error(`No pude crear la categoría "${d.etiqueta}": ${error.message}`);
+        idCategoria.set(d.clave, data.id);
+      }
+
+      // 3. Armar los movimientos.
+      const { pares, huerfanos } = emparejarTransferencias(lectura.movimientos);
+      const esHuerfano = new Set(huerfanos);
+      const filas: Record<string, unknown>[] = [];
+      let salteadasRepetidas = 0;
+      let salteadasSinDestino = 0;
+
+      const monedaDe = (m: Movimiento, cuentaId: string | undefined) =>
+        m.moneda ?? cuentas.find((c) => c.id === cuentaId)?.currency_id.toUpperCase() ?? 'ARS';
+
+      // 3a. Transferencias emparejadas: un par de filas ligadas entre sí.
+      for (const par of pares) {
+        const salida = idBilletera.get(claveBilletera(par.salida));
+        const entrada = idBilletera.get(claveBilletera(par.entrada));
+        if (!salida || !entrada) {
+          salteadasSinDestino += 2;
+          continue;
+        }
+        const idSalida = crypto.randomUUID();
+        const moneda = monedaDe(par.salida, salida);
+        const detalle = par.salida.detalle || 'Transferencia';
+
+        filas.push({
+          ...base,
+          id: idSalida,
+          type: 'transfer',
+          amount: par.salida.monto,
+          currency_code: moneda,
+          wallet_id: salida,
+          category_id: null,
+          description: detalle,
+          date: par.salida.fecha,
+          invoiced_at: null,
+          status: 'draft',
+          // El enlace va en un solo sentido, igual que en `addTransaction`: la
+          // FK no es diferible, así que dos filas que se apuntan entre sí sólo
+          // entran si comparten statement, y acá van en bloques de 500.
+          related_transaction_id: null,
+        });
+        // La pata entrante va con monto negativo: así el saldo de la billetera
+        // destino sube, porque tanto `wallet_expected_balance` como `hydrate()`
+        // restan el monto de toda transferencia.
+        filas.push({
+          ...base,
+          id: crypto.randomUUID(),
+          type: 'transfer',
+          amount: -par.entrada.monto,
+          currency_code: moneda,
+          wallet_id: entrada,
+          category_id: null,
+          description: `Transferencia entrante: ${detalle}`,
+          date: par.entrada.fecha,
+          invoiced_at: null,
+          status: 'draft',
+          related_transaction_id: idSalida,
+        });
+      }
+
+      // 3b. El resto, incluidos los pases que se quedaron sin pareja.
+      // Copia de las cuentas: cada fila que se saltea consume una de las que ya
+      // están cargadas, así dos filas idénticas contra una sola en la base
+      // saltean una y cargan la otra.
+      const restantes = new Map(huellasCargadas);
+      for (const m of lectura.movimientos) {
+        if (m.esTransferencia && !esHuerfano.has(m)) continue; // ya fue como par
+
+        const cuenta = idBilletera.get(claveBilletera(m));
+        if (!cuenta) {
+          salteadasSinDestino++;
+          continue;
+        }
+
+        const h = huellaDe(m, cuenta);
+        const yaHay = restantes.get(h) ?? 0;
+        if (saltearRepetidas && !m.esTransferencia && yaHay > 0) {
+          restantes.set(h, yaHay - 1);
+          salteadasRepetidas++;
+          continue;
+        }
+
+        let categoriaId: string | null = null;
+        if (!m.esTransferencia) {
+          const destino = categorias.find((d) => d.clave === claveCategoria(m));
+          if (destino?.decision === IGNORAR) continue;
+          categoriaId = idCategoria.get(claveCategoria(m)) ?? null;
+        }
+
+        filas.push({
+          ...base,
+          id: crypto.randomUUID(),
+          type: m.tipo,
+          amount: m.monto,
+          currency_code: monedaDe(m, cuenta),
+          wallet_id: cuenta,
+          category_id: categoriaId,
+          description: m.detalle || 'Importado',
+          date: m.fecha,
+          invoiced_at: m.fechaFacturado,
+          // Un pase sin pareja entra como ingreso o gasto suelto y queda
+          // marcado para revisar, en vez de perderse como "movimiento huérfano".
+          status: esHuerfano.has(m) ? 'warning' : 'draft',
+        });
+      }
+
+      if (!filas.length) throw new Error('No quedó ninguna fila para importar.');
+
+      anotar(`Insertando ${filas.length} movimientos…`);
+      const TAMANIO = 500;
+      for (let i = 0; i < filas.length; i += TAMANIO) {
+        const { error } = await supabase.from('transactions').insert(filas.slice(i, i + TAMANIO));
+        // Sin esto, un error a mitad de camino dejaba los primeros bloques
+        // cargados y la importación a medias, sin forma de saber cuánto entró.
+        if (error) {
+          await supabase
+            .from('transactions')
+            .delete()
+            .eq('workspace_id', currentWorkspaceId)
+            .eq('import_batch_id', lote);
+          throw new Error(`${error.message} — no se cargó nada, la importación se deshizo entera.`);
+        }
+      }
+
+      if (salteadasRepetidas) anotar(`${salteadasRepetidas} filas salteadas por estar repetidas.`);
+      if (salteadasSinDestino) anotar(`${salteadasSinDestino} filas salteadas por billetera ignorada.`);
+      if (huerfanos.length) {
+        anotar(`${huerfanos.length} pases quedaron sin pareja y entraron marcados para revisar.`);
+      }
+      await supabase
+        .from('import_batches')
+        .update({
+          rows_imported: filas.length,
+          rows_skipped: salteadasRepetidas + salteadasSinDestino,
+        })
+        .eq('id', lote);
+
+      await aprenderDeLoDecidido(currentWorkspaceId, lectura.origen, idBilletera, idCategoria);
+
+      anotar(`Listo: ${filas.length} movimientos importados.`);
+      setPaso('listo');
+
+      await hydrate();
+      await cargarLotes();
+    } catch (e) {
+      // El lote se creó antes de escribir nada, así que si la importación no
+      // llegó a término tiene que irse con ella: si no, queda listado como una
+      // importación de cero filas que nadie hizo.
+      await supabase.from('import_batches').delete().eq('id', lote);
+      anotar((e as Error).message);
+      setPaso('error');
+    }
+  };
+
+  /**
+   * Guarda lo que se acaba de decidir, para que el archivo siguiente no vuelva a
+   * preguntarlo.
+   *
+   * Sólo escribe lo que NO vino ya de una regla: en una importación repetida no
+   * hay nada nuevo que aprender y no tiene sentido mandar ochenta llamadas para
+   * reafirmar lo mismo. Si algo falla acá, la importación ya está hecha y no se
+   * toca: perder el aprendizaje es molesto, deshacer la carga sería peor.
+   */
+  const aprenderDeLoDecidido = async (
+    ws: string,
+    origen: Origen,
+    idBilletera: Map<string, string>,
+    idCategoria: Map<string, string>
+  ) => {
+    // El builder de supabase es un thenable, no una Promise: se junta y se
+    // espera todo junto, y los errores vienen en la respuesta, no como throw.
+    const nuevas: PromiseLike<{ error: { message: string } | null }>[] = [];
+
+    for (const d of billeteras) {
+      const destino = idBilletera.get(d.clave);
+      if (!destino || d.porRegla || !d.etiqueta) continue;
+      nuevas.push(
+        supabase.rpc('aprender_regla', {
+          ws,
+          p_field: 'billetera',
+          p_pattern: d.etiqueta,
+          p_source: origen,
+          p_wallet: destino,
+          p_match: 'exact',
+        })
+      );
+    }
+
+    for (const d of categorias) {
+      const destino = idCategoria.get(d.clave);
+      if (!destino || d.porRegla) continue;
+      const [grupo, nombre] = d.etiqueta.split(' › ');
+      nuevas.push(
+        supabase.rpc('aprender_regla', {
+          ws,
+          p_field: campoDeRegla(origen),
+          // En una planilla el patrón es grupo|categoría, con el mismo formato
+          // que arma `textoParaRegla`, porque "Comidas|Salmón" y "Bebidas|Salmón"
+          // no son lo mismo. En un resumen de tarjeta el patrón es el comercio, y
+          // la coincidencia tiene que ser `contains`: el detalle trae pegada una
+          // referencia que cambia todos los meses ("ANTHROPIC in1U54iPB"), así
+          // que una regla exacta no volvería a matchear nunca.
+          p_pattern: origen === 'visa' ? d.etiqueta : `${grupo}|${nombre}`,
+          p_source: origen,
+          p_type: d.contexto === 'Ingreso' ? 'income' : 'expense',
+          p_category: destino,
+          p_match: origen === 'visa' ? 'contains' : 'exact',
+        })
+      );
+    }
+
+    const usadas = [...billeteras, ...categorias]
+      .filter((d) => d.porRegla && d.reglaId)
+      .map((d) => d.reglaId as string);
+
+    const aprendidas = nuevas.length;
+
+    // Un solo update para todas: la misma regla se aplica a cientos de filas y
+    // no tiene sentido escribir un update por fila.
+    if (usadas.length) {
+      nuevas.push(supabase.rpc('registrar_uso_reglas', { ws, ids: usadas }));
+    }
+
+    try {
+      const fallidas = (await Promise.all(nuevas)).filter((r) => r.error);
+      const ok = aprendidas - fallidas.length;
+      if (ok > 0) anotar(`${ok} mapeos aprendidos para la próxima.`);
+      if (usadas.length) anotar(`${usadas.length} se resolvieron solos con lo aprendido antes.`);
+      if (fallidas.length) {
+        anotar(`No pude guardar ${fallidas.length} mapeos: ${fallidas[0].error?.message}`);
+      }
+      await cargarReglas();
+    } catch (e) {
+      anotar(`Los movimientos se cargaron, pero no pude guardar los mapeos: ${(e as Error).message}`);
+    }
+  };
+
+  const revertir = async (id: string) => {
+    setConfirmando(null);
+    try {
+      await useFinanceStore.getState().revertImportBatch(id);
+      await cargarLotes();
+    } catch (e) {
+      anotar(`No pude deshacer el lote: ${(e as Error).message}`);
+    }
+  };
+
+  // ------------------------------------------------------------- render
+
+  const acciones =
+    paso === 'revision' ? (
+      <>
+        <Button variant="outline" size="sm" onClick={reiniciar}>
+          Cancelar
+        </Button>
+        <Button size="sm" onClick={importar}>
+          Importar {lectura?.movimientos.length ?? 0} filas
+        </Button>
+      </>
+    ) : paso === 'listo' || paso === 'error' ? (
+      <Button size="sm" onClick={reiniciar}>
+        Importar otro archivo
+      </Button>
+    ) : null;
+
   return (
-    <PageLayout title="Importar" icon={FileSpreadsheet} description="Cargá movimientos desde un CSV">
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="flex size-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
-          <FileSpreadsheet className="size-5" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Importador Masivo (Wizard)</h1>
-          <p className="text-muted-foreground">Mapea tus Excel con control total antes de inyectar a la base.</p>
-        </div>
-      </div>
+    <PageLayout
+      title="Importar"
+      icon={FileSpreadsheet}
+      description="Cargá movimientos desde una planilla"
+      actions={acciones}
+    >
+      {paso === 'archivo' && (
+        <Panel
+          icon={Upload}
+          title="Elegí la planilla"
+          description="CSV de Excel o Google Sheets, o el PDF del resumen de Visa. El formato se detecta solo."
+        >
+          <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border p-10 text-center transition-colors hover:border-ring/40">
+            <Upload className="mb-3 size-8 text-muted-foreground" />
+            <span className="text-sm font-medium">Arrastrá el archivo acá, o hacé clic</span>
+            <span className="mt-1 text-xs text-muted-foreground">
+              Planillas con FECHA, TIPO, CATEGORIA, SUBCATEGORIA, DETALLE, FIAT, BILLETERA y TOTAL,
+              o el resumen de tarjeta Visa en PDF
+            </span>
+            <input
+              ref={inputArchivo}
+              type="file"
+              accept=".csv,.txt,.tsv,.pdf,text/csv,application/pdf"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) tomarArchivo(f);
+              }}
+            />
+          </label>
+        </Panel>
+      )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            
-            {step === 'upload' && (
-                <Card className="shadow-soft-sm">
-                  <CardHeader>
-                    <CardTitle className="text-lg font-semibold tracking-tight">Paso 1: Sube tu Excel</CardTitle>
-                    <CardDescription>
-                      Formato esperado: FECHA, TIPO, CATEGORIA, SUBCATEGORIA, DETALLE, FIAT, BILLETERA, TOTAL...
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-card p-8 hover:border-primary/50 transition-colors relative">
-                       <Upload className="size-10 text-muted-foreground mb-4" />
-                       <p className="text-sm font-medium">Arrastra tu archivo CSV aquí, o haz clic</p>
-                       <input
-                         type="file" accept=".csv" 
-                         className="absolute inset-0 opacity-0 cursor-pointer" 
-                         onChange={handleFileUpload}
-                       />
-                    </div>
-                  </CardContent>
-                </Card>
+      {paso === 'revision' && lectura && (
+        <>
+          <Panel
+            icon={lectura.origen === 'visa' ? CreditCard : FileSpreadsheet}
+            title={lectura.archivo}
+            description={lectura.detalle}
+          >
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Dato valor={lectura.movimientos.length} etiqueta="Movimientos leídos" />
+              <Dato valor={lectura.pares} etiqueta="Transferencias emparejadas" />
+              <Dato
+                valor={lectura.yaImportadas}
+                etiqueta="Ya cargadas"
+                alerta={lectura.yaImportadas > 0}
+              />
+              <Dato
+                valor={lectura.descartadas.length}
+                etiqueta="Filas descartadas"
+                alerta={lectura.descartadas.some((d) => d.motivo === 'ilegible')}
+              />
+            </div>
+
+            {lectura.avisos.length > 0 && (
+              <ul className="mt-4 space-y-2">
+                {lectura.avisos.map((aviso, i) => (
+                  <li key={i} className="rounded-xl bg-accent/40 px-3 py-2.5 text-sm">
+                    {aviso}
+                  </li>
+                ))}
+              </ul>
             )}
 
-            {step === 'mapping' && (
-               <Card className="shadow-soft-sm animate-in fade-in zoom-in-95 duration-300">
-                  <CardHeader className="border-b border-border/60">
-                      <div className="flex items-center justify-between">
-                         <div>
-                            <CardTitle className="text-lg font-semibold tracking-tight">Paso 2: Verifica Mapeos</CardTitle>
-                            <CardDescription>Asegúrate de que tus datos de Excel coincidan con la DB.</CardDescription>
-                         </div>
-                         <Button onClick={processImport} className="gap-2 shrink-0">
-                            Inyectar Todo <ChevronRight className="size-4" />
-                         </Button>
-                      </div>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                      <div className="p-4 space-y-3 border-b border-border/60">
-                          <h3 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">🏦 Billeteras detectadas ({Object.keys(walletMappings).length})</h3>
-                          <div className="space-y-2">
-                             {Object.values(walletMappings).map((w, idx) => (
-                                 <div key={idx} className={cn(
-                                     "flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl",
-                                     w.isAutoMatched ? "bg-income/12" : "bg-warning/15"
-                                 )}>
-                                     <div className="flex flex-col w-full sm:w-1/2">
-                                         <span className="font-medium text-sm">{w.originalName || '(Vacío)'}</span>
-                                         <span className="text-xs text-muted-foreground opacity-70">Moneda asignada: {w.currency}</span>
-                                     </div>
-                                     <select
-                                         className="flex h-10 w-full rounded-xl border border-input bg-card px-3 py-1 text-sm font-medium"
-                                         value={w.mappedId}
-                                         onChange={(e) => setWalletMappings(prev => ({...prev, [w.original]: {...w, mappedId: e.target.value, isAutoMatched: e.target.value !== 'create' && e.target.value !== 'ignore'}}))}
-                                     >
-                                         <option value="create">✨ Crear Nueva Billetera en {w.currency}</option>
-                                         <option value="ignore">🗑️ Ignorar y no importar</option>
-                                         <optgroup label="Billeteras Existentes Compatibles">
-                                            {accounts.filter(acc => acc.currency_id.toLowerCase() === w.currency?.toLowerCase()).map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
-                                         </optgroup>
-                                     </select>
-                                 </div>
-                             ))}
-                          </div>
-                      </div>
-
-                      <div className="p-4 space-y-3">
-                          <h3 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">📂 Categorías detectadas ({Object.keys(catMappings).length})</h3>
-                          <div className="space-y-2">
-                             {Object.values(catMappings).map((c, idx) => (
-                                 <div key={idx} className={cn(
-                                     "flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl",
-                                     c.isAutoMatched ? "bg-income/12" : "bg-warning/15"
-                                 )}>
-                                     <div className="flex flex-col w-full sm:w-1/2">
-                                        <span className="font-medium text-sm">{c.originalGroup} &gt; {c.originalName}</span>
-                                        <span className="text-xs text-muted-foreground opacity-70">Tipo: {c.type === 'income' ? 'Ingreso' : 'Gasto'}</span>
-                                     </div>
-                                     <select
-                                         className="flex h-10 w-full rounded-xl border border-input bg-card px-3 py-1 text-sm"
-                                         value={c.mappedId}
-                                         onChange={(e) => setCatMappings(prev => ({...prev, [c.original]: {...c, mappedId: e.target.value, isAutoMatched: e.target.value !== 'create' && e.target.value !== 'ignore'}}))}
-                                     >
-                                         <option value="create">✨ Crear Nueva Categoría</option>
-                                         <option value="ignore">🗑️ Ignorar y no importar</option>
-                                         <optgroup label="Categorías Existentes">
-                                            {categories.filter(dbC => dbC.type === c.type).map(dbC => (
-                                                <option key={dbC.id} value={dbC.id}>{dbC.group_name || 'General'} &gt; {dbC.name}</option>
-                                            ))}
-                                         </optgroup>
-                                     </select>
-                                 </div>
-                             ))}
-                          </div>
-                      </div>
-                  </CardContent>
-               </Card>
+            {lectura.yaImportadas > 0 && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-warning/15 px-3 py-2.5">
+                <span className="text-sm">
+                  {lectura.yaImportadas} de estas filas ya están cargadas en este espacio.
+                </span>
+                <Button variant="outline" size="sm" onClick={() => setSaltearRepetidas((v) => !v)}>
+                  {saltearRepetidas ? 'Importarlas igual' : 'Saltearlas'}
+                </Button>
+              </div>
             )}
 
-            {['importing', 'done', 'error'].includes(step) && (
-              <Card className="shadow-soft-sm">
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold tracking-tight flex items-center gap-2">
-                    {step === 'done' ? <CheckCircle2 className="size-5 text-income" /> : <ArrowRightLeft className="size-5 text-primary animate-pulse" />}
-                    Progreso y Logs
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="bg-accent/40 rounded-xl p-4 font-mono text-xs text-muted-foreground h-64 overflow-y-auto space-y-2">
-                    {logs.map((log, i) => (
-                      <div key={i} className={
-                        log.startsWith('❌') ? 'text-destructive font-semibold' : 
-                        log.startsWith('✅') ? 'text-income font-medium' : 
-                        log.startsWith('✨') ? 'text-primary' : ''
-                      }>
-                        {log}
-                      </div>
-                    ))}
+            {lectura.descartadas.some((d) => d.motivo === 'ilegible') && (
+              <ul className="mt-4 space-y-1 text-xs text-muted-foreground">
+                {lectura.descartadas
+                  .filter((d) => d.motivo === 'ilegible')
+                  .slice(0, 8)
+                  .map((d) => (
+                    <li key={d.linea}>
+                      Línea {d.linea}: {d.problemas.join(' · ')}
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </Panel>
+
+          {pendientes > 0 && (
+            <Panel
+              icon={AlertTriangle}
+              title={`${pendientes} sin resolver`}
+              description="Todo lo que no matcheó solo, o que matcheó con dudas, está primero en las listas de abajo."
+            />
+          )}
+
+          <ListaDestinos
+            icono={Wallet}
+            titulo="Billeteras"
+            destinos={billeteras}
+            opciones={opcionesBilletera}
+            onDecidir={(k, v) => decidir(setBilleteras, k, v)}
+          />
+
+          <ListaDestinos
+            icono={Tags}
+            titulo="Categorías"
+            destinos={categorias}
+            opciones={opcionesCategoria}
+            onDecidir={(k, v) => decidir(setCategorias, k, v)}
+          />
+        </>
+      )}
+
+      {(paso === 'importando' || paso === 'listo' || paso === 'error') && (
+        <Panel
+          icon={paso === 'listo' ? CheckCircle2 : paso === 'error' ? AlertTriangle : ArrowRightLeft}
+          title={
+            paso === 'listo' ? 'Importación terminada' : paso === 'error' ? 'No se importó' : 'Importando…'
+          }
+        >
+          <div className="space-y-1.5 font-mono text-xs text-muted-foreground">
+            {registro.map((linea, i) => (
+              <div key={i} className={cn(paso === 'error' && i === registro.length - 1 && 'text-destructive')}>
+                {linea}
+              </div>
+            ))}
+          </div>
+        </Panel>
+      )}
+
+      <Panel
+        icon={RotateCcw}
+        title="Importaciones anteriores"
+        description="Deshacer un lote da de baja todos sus movimientos."
+      >
+        {lotes.length === 0 ? (
+          <p className="py-2 text-sm text-muted-foreground">Todavía no importaste nada en este espacio.</p>
+        ) : (
+          <ul className="divide-y divide-border/60">
+            {lotes.map((lote) => (
+              <li key={lote.id} className="flex flex-wrap items-center gap-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium">{nombrarLote(lote)}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {fechaLarga(lote.created_at)} · {lote.source}
                   </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-          
-          <div className="space-y-6">
-            <Card className="shadow-soft-sm overflow-hidden">
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold tracking-tight flex items-center gap-2">
-                    <RotateCcw className="size-5 text-muted-foreground" />
-                    Lotes Importados
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {batches.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-4">No hay importaciones aún.</p>
-                  ) : (
-                      <div className="space-y-3">
-                         {batches.map(batch => (
-                             <div key={batch.id} className="bg-accent/40 p-3 rounded-xl flex flex-col gap-2 hover:bg-accent/60 transition-colors">
-                                 <div className="flex justify-between items-center">
-                                    <span className="font-mono text-xs font-semibold text-foreground">{batch.id}</span>
-                                    <Badge variant="outline" className="text-xs bg-expense/12 border-transparent text-expense tabular-nums">
-                                        {batch.count} filas
-                                    </Badge>
-                                 </div>
-                                 {confirmingId === batch.id ? (
-                                    <div className="flex gap-2">
-                                        <Button variant="destructive" size="sm" className="w-full text-xs font-semibold" onClick={() => handleRevert(batch.id)}>Confirmar Peligro ⚠️</Button>
-                                        <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => setConfirmingId(null)}>Cancelar</Button>
-                                    </div>
-                                 ) : (
-                                    <Button variant="outline" size="sm" className="w-full text-xs text-destructive hover:bg-destructive hover:text-white" onClick={() => setConfirmingId(batch.id)}>
-                                        Revertir Lote Completo
-                                    </Button>
-                                 )}
-                             </div>
-                         ))}
-                      </div>
-                  )}
-                </CardContent>
-            </Card>
-          </div>
-      </div>
-    </div>
+                </div>
+                <Badge variant="outline" className="tabular-nums">
+                  {lote.rows_imported} filas
+                </Badge>
+                {confirmando === lote.id ? (
+                  <span className="flex gap-2">
+                    <Button variant="destructive" size="sm" onClick={() => revertir(lote.id)}>
+                      Deshacer
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setConfirmando(null)}>
+                      Cancelar
+                    </Button>
+                  </span>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={() => setConfirmando(lote.id)}>
+                    Deshacer
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
     </PageLayout>
+  );
+}
+
+function Dato({ valor, etiqueta, alerta }: { valor: number; etiqueta: string; alerta?: boolean }) {
+  return (
+    <div className="rounded-xl bg-accent/40 px-3 py-2.5">
+      <div className={cn('text-lg font-semibold tabular-nums', alerta && 'text-warning')}>{valor}</div>
+      <div className="text-xs text-muted-foreground">{etiqueta}</div>
+    </div>
+  );
+}
+
+function ListaDestinos({
+  icono,
+  titulo,
+  destinos,
+  opciones,
+  onDecidir,
+}: {
+  icono: React.ElementType;
+  titulo: string;
+  destinos: Destino[];
+  opciones: (d: Destino) => PickerOption[];
+  onDecidir: (clave: string, valor: string) => void;
+}) {
+  if (destinos.length === 0) return null;
+
+  const sinResolver = destinos.filter((d) => d.decision === CREAR || d.confianza === 'sugerida').length;
+
+  return (
+    <Panel
+      icon={icono}
+      title={`${titulo} (${destinos.length})`}
+      description={sinResolver ? `${sinResolver} sin resolver` : 'Todas reconocidas'}
+      padded={false}
+    >
+      <ul className="divide-y divide-border/60">
+        {destinos.map((d) => (
+          <li
+            key={d.clave}
+            className="flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:gap-4 md:px-5"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="truncate text-sm font-medium">{d.etiqueta || '(vacío)'}</span>
+                <MarcaConfianza destino={d} />
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {d.contexto} · {d.filas} {d.filas === 1 ? 'fila' : 'filas'}
+                {d.confianza === 'sugerida' && d.sugerido ? ` · ¿será "${d.sugerido}"?` : ''}
+              </p>
+            </div>
+            <div className="w-full md:w-72">
+              <Picker
+                value={d.decision}
+                onValueChange={(v) => onDecidir(d.clave, v)}
+                options={opciones(d)}
+              />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </Panel>
+  );
+}
+
+function MarcaConfianza({ destino }: { destino: Destino }) {
+  if (destino.decision === IGNORAR) {
+    return <Badge variant="outline">Sin importar</Badge>;
+  }
+  if (destino.decision === CREAR) {
+    return (
+      <Badge variant="outline" className="border-transparent bg-warning/15 text-warning">
+        <Sparkles className="mr-1 size-3" />
+        Nueva
+      </Badge>
+    );
+  }
+  if (destino.porRegla) {
+    return (
+      <Badge variant="outline" className="border-transparent bg-primary/12 text-primary">
+        Aprendida
+      </Badge>
+    );
+  }
+  if (destino.confianza === 'sugerida') {
+    return (
+      <Badge variant="outline" className="border-transparent bg-warning/15 text-warning">
+        A confirmar
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="border-transparent bg-income/12 text-income">
+      Reconocida
+    </Badge>
   );
 }

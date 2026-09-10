@@ -1,9 +1,9 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T19:02:05.896Z
+> Generated: 2026-09-10T19:16:28.638Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] RLS Policies (49)
+## [PUBLIC] RLS Policies (50)
 
 ### `activity_log` (1 policies)
 
@@ -298,6 +298,17 @@ is_workspace_member(workspace_id)
 is_workspace_member(workspace_id)
 ```
 - **WITH CHECK**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+### `purges` (1 policies)
+
+#### purges_select
+
+- **Command**: SELECT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
 ```sql
 is_workspace_member(workspace_id)
 ```

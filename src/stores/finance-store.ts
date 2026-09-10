@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase/client';
-import type { Account, Category, Transaction, Budget, Currency, Debt, Workspace, WorkspaceRole, WorkspaceMember, Person, ActivityEntry, Reconciliation, Partner, PartnerPosition, RegisteredUser } from '@/lib/types';
+import type { Account, Category, Transaction, Budget, Currency, Debt, Workspace, WorkspaceRole, WorkspaceMember, Person, ActivityEntry, Purge, Reconciliation, Partner, PartnerPosition, RegisteredUser } from '@/lib/types';
 import { CURRENCIES, EXCHANGE_RATES } from '@/lib/mock-data';
 import { toast } from '@/stores/toast-store';
 import { signoEnCaja } from '@/lib/money';
@@ -187,6 +187,8 @@ interface FinanceState {
   people: Record<string, Person>;
   /** Arqueos del espacio, del más reciente al más viejo. */
   reconciliations: Reconciliation[];
+  /** Vaciados de caja, del más reciente al más viejo. Se pueden deshacer. */
+  purges: Purge[];
   /** Socios del espacio. Existen aunque todavía no tengan cuenta en la app. */
   partners: Partner[];
 
@@ -214,6 +216,8 @@ interface FinanceState {
   loadRegisteredUsers: () => Promise<RegisteredUser[]>;
   /** Registra un arqueo. El esperado lo calcula la base, no el cliente. */
   recordReconciliation: (walletId: string, counted: number, note?: string) => Promise<Reconciliation>;
+  /** Deshace un vaciado: revive sus movimientos y devuelve los saldos iniciales. */
+  restaurarPurga: (purgeId: string) => Promise<number>;
   resolveReconciliation: (
     id: string,
     resolution: 'adjusted' | 'explained',
@@ -271,6 +275,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   members: [],
   people: {},
   reconciliations: [],
+  purges: [],
   partners: [],
   primaryCurrencyId: 'ars',
   isHydrated: false,
@@ -384,6 +389,14 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
           .order('counted_at', { ascending: false })
       : { data: [] as any[] };
 
+    const purgesRes = currentWorkspaceId
+      ? await supabase
+          .from('purges')
+          .select('id, user_id, reason, transactions_count, created_at, restored_at')
+          .eq('workspace_id', currentWorkspaceId)
+          .order('created_at', { ascending: false })
+      : { data: [] as any[] };
+
     const partnersRes = currentWorkspaceId
       ? await supabase
           .from('partners')
@@ -445,6 +458,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         counted_amount: Number(r.counted_amount),
         expected_amount: Number(r.expected_amount),
       })) as Reconciliation[],
+      purges: ((purgesRes as any).data || []) as Purge[],
       partners: ((partnersRes as any).data || []).map((p: any) => ({
         ...p,
         ownership_pct: Number(p.ownership_pct ?? 0),
@@ -479,6 +493,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         category_id: t.category_id,
         partner_id: t.partner_id ?? null,
         settles_at: t.settles_at ?? null,
+        reference: t.reference ?? null,
         account_id: t.wallet_id,
         destination_account_id: t.related_transaction_id ? t.related_transaction_id : null,
         description: t.description,
@@ -610,6 +625,19 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       .limit(limit);
     if (error) throw error;
     return (data || []) as ActivityEntry[];
+  },
+
+  restaurarPurga: async (purgeId) => {
+    const { currentWorkspaceId } = get();
+    if (!currentWorkspaceId) throw new Error('No hay un espacio activo.');
+
+    const { data, error } = await supabase.rpc('restaurar_purga', { purga: purgeId });
+    if (error) throw new Error(error.message);
+
+    // Revivir movimientos cambia saldos, totales y gráficos de toda la app: se
+    // recarga entero en vez de intentar parchear el estado a mano.
+    await get().hydrate();
+    return Number(data ?? 0);
   },
 
   recordReconciliation: async (walletId, counted, note) => {
@@ -868,6 +896,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       partner_id: tx.partner_id ?? null,
       // NULL = contado. Sólo se guarda cuando el pago es a plazo.
       settles_at: tx.settles_at || null,
+      reference: tx.reference || null,
       currency_code: tx.currency_id.toUpperCase(),
       date,
     };
@@ -917,6 +946,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     if (data.category_id !== undefined) patch.category_id = data.category_id;
     if (data.partner_id !== undefined) patch.partner_id = data.partner_id;
     if (data.settles_at !== undefined) patch.settles_at = data.settles_at || null;
+    if (data.reference !== undefined) patch.reference = data.reference || null;
     if (data.account_id) patch.wallet_id = data.account_id;
     if (data.description !== undefined) patch.description = data.description;
     if (data.date) patch.date = data.date;

@@ -163,6 +163,12 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
                       <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                         {isReviewed && <CheckCircle2 className="size-3 shrink-0 text-income" />}
                         <span className="truncate">{account?.name || 'Sin billetera'}</span>
+                        {tx.reference && (
+                          <>
+                            <span aria-hidden>·</span>
+                            <span className="shrink-0 tabular-nums">{tx.reference}</span>
+                          </>
+                        )}
                         {author && (
                           <>
                             <span aria-hidden>·</span>

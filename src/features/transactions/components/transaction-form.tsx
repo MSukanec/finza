@@ -67,6 +67,7 @@ export function TransactionForm() {
   const [partnerId, setPartnerId] = useState('');
   // Vacío = contado. Sólo se completa cuando la plata se mueve otro día.
   const [settlesAt, setSettlesAt] = useState('');
+  const [reference, setReference] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -105,6 +106,7 @@ export function TransactionForm() {
       setCategoryId(editing.category_id || '');
       setPartnerId(editing.partner_id || '');
       setSettlesAt(editing.settles_at ? editing.settles_at.split('T')[0] : '');
+      setReference(editing.reference || '');
       setGroupName(
         categories.find((c) => c.id === editing.category_id)?.group_name || ''
       );
@@ -113,6 +115,7 @@ export function TransactionForm() {
       setType((d.type as TransactionType) || 'expense');
       setPartnerId((d.partner_id as string) || '');
       setSettlesAt('');
+      setReference('');
       setAmount(d.amount != null ? String(d.amount) : '');
       setDescription((d.description as string) || '');
       setDate((d.date as string) || today());
@@ -222,9 +225,6 @@ export function TransactionForm() {
       return setError('Ingresá un monto mayor a cero.');
     }
     if (!account) return setError('Elegí una billetera.');
-    if (settlesAt && settlesAt < date) {
-      return setError('El pago no puede ser anterior al movimiento.');
-    }
     if (isEquity && !partnerId) {
       return setError(type === 'contribution' ? 'Elegí quién aportó.' : 'Elegí quién retiró.');
     }
@@ -254,6 +254,9 @@ export function TransactionForm() {
         // Mediodía local, igual que `date`, para que no se corra un día.
         settles_at:
           aplazable && settlesAt ? new Date(`${settlesAt}T12:00:00`).toISOString() : null,
+        // Mismo criterio que la fecha de pago: sólo donde hay un comprobante de
+        // por medio. Una transferencia entre billeteras propias no tiene factura.
+        reference: aplazable ? reference.trim() || null : null,
         account_id: account.id,
         destination_account_id: isTransfer ? destination!.id : null,
         description: description.trim() || defaultDescription(type),
@@ -337,11 +340,13 @@ export function TransactionForm() {
                 )
               }
             >
+              {/* Sin `min`: pagar por adelantado existe. En los datos hay un
+                  servicio de mayo pagado en marzo por $666.000. Poner el pago
+                  siempre después del hecho bloquearía un caso real. */}
               <Input
                 id="tx-pago"
                 type="date"
                 value={settlesAt}
-                min={date}
                 onChange={(e) => setSettlesAt(e.target.value)}
               />
             </Field>
@@ -460,6 +465,18 @@ export function TransactionForm() {
               maxRows={4}
             />
           </Field>
+
+          {aplazable && (
+            <Field label="Referencia" hint="opcional" htmlFor="tx-ref">
+              <Input
+                id="tx-ref"
+                placeholder="FC 1083"
+                autoComplete="off"
+                value={reference}
+                onChange={(e) => setReference(e.target.value)}
+              />
+            </Field>
+          )}
 
           {isEquity && (
             <p className="px-1 text-xs text-muted-foreground">

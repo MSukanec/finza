@@ -1,9 +1,9 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T19:02:05.896Z
+> Generated: 2026-09-10T19:16:28.638Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Indexes (31, excluding PKs)
+## [PUBLIC] Indexes (34, excluding PKs)
 
 | Table | Index | Definition |
 |-------|-------|------------|
@@ -22,10 +22,13 @@
 | partners | partners_espacio_idx | `CREATE INDEX partners_espacio_idx ON public.partners USING btree (workspace_id)` |
 | partners | partners_espacio_nombre_uniq | `CREATE UNIQUE INDEX partners_espacio_nombre_uniq ON public.partners USING btr...` |
 | partners | partners_espacio_usuario_uniq | `CREATE UNIQUE INDEX partners_espacio_usuario_uniq ON public.partners USING bt...` |
+| purges | purges_espacio_idx | `CREATE INDEX purges_espacio_idx ON public.purges USING btree (workspace_id, c...` |
 | transactions | idx_transactions_workspace | `CREATE INDEX idx_transactions_workspace ON public.transactions USING btree (w...` |
 | transactions | transactions_huella_idx | `CREATE INDEX transactions_huella_idx ON public.transactions USING btree (work...` |
 | transactions | transactions_lote_idx | `CREATE INDEX transactions_lote_idx ON public.transactions USING btree (import...` |
 | transactions | transactions_partner_idx | `CREATE INDEX transactions_partner_idx ON public.transactions USING btree (par...` |
+| transactions | transactions_purga_idx | `CREATE INDEX transactions_purga_idx ON public.transactions USING btree (purge...` |
+| transactions | transactions_reference_idx | `CREATE INDEX transactions_reference_idx ON public.transactions USING btree (w...` |
 | transactions | transactions_settles_idx | `CREATE INDEX transactions_settles_idx ON public.transactions USING btree (wor...` |
 | users | users_auth_id_key | `CREATE UNIQUE INDEX users_auth_id_key ON public.users USING btree (auth_id)` |
 | users | users_email_key | `CREATE UNIQUE INDEX users_email_key ON public.users USING btree (email)` |

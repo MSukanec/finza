@@ -68,7 +68,13 @@ export function TransactionsView() {
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      result = result.filter((t) => t.description.toLowerCase().includes(q));
+      // También por número de comprobante: cuando un proveedor reclama, lo hace
+      // con la factura en la mano, no con la descripción.
+      result = result.filter(
+        (t) =>
+          t.description.toLowerCase().includes(q) ||
+          (t.reference ?? '').toLowerCase().includes(q)
+      );
     }
     if (filterCategoryId !== 'all') {
       result = result.filter((t) => t.category_id === filterCategoryId);
