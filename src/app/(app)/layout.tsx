@@ -16,6 +16,7 @@ import {
   Landmark,
   Repeat,
   History,
+  Eye,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -30,11 +31,15 @@ import { ReconciliationForm } from '@/features/accounts/components/reconciliatio
 import { UserProfile } from '@/components/user-profile';
 import { WorkspaceSwitcher } from '@/components/workspace-switcher';
 import { DialogProvider } from '@/components/providers/dialog-provider';
+import { Toaster } from '@/components/ui/toaster';
 
 /**
  * `adminOnly` esconde secciones que todavía no están listas para un usuario
  * común. No es seguridad de datos —de eso se ocupa RLS—, es qué se ofrece.
  * Las rutas además se protegen en cada página con <AdminOnly>.
+ *
+ * En el menú se muestran apagadas y con un ojo, para que quien las ve sepa de
+ * un vistazo que las está viendo sólo él y que nadie más las tiene.
  */
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Inicio', icon: LayoutDashboard },
@@ -48,6 +53,9 @@ const NAV_ITEMS = [
   { href: '/debts', label: 'Deudas', icon: Landmark, adminOnly: true },
   { href: '/importar', label: 'Importar', icon: FileSpreadsheet, adminOnly: true },
 ];
+
+/** Lo que dice el ojo de las secciones que todavía no ve nadie más. */
+const SOLO_ADMIN = 'Solo vos: esta sección está oculta para el resto del equipo';
 
 /** Los 4 accesos del bottom nav; el resto vive en el menú "Más". */
 const PRIMARY_MOBILE = ['/dashboard', '/transactions', '/accounts', '/reports'];
@@ -110,20 +118,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <nav className="flex-1 space-y-1 overflow-y-auto p-3">
             {navItems.map((item) => {
               const active = isActive(pathname, item.href);
+              const onlyMe = !!item.adminOnly;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   aria-current={active ? 'page' : undefined}
+                  title={onlyMe ? SOLO_ADMIN : undefined}
                   className={cn(
                     'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
                     active
                       ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                      : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                    // Apagadas: se distinguen de un vistazo del resto del menú.
+                    onlyMe && !active && 'text-muted-foreground/55'
                   )}
                 >
-                  <item.icon className="size-[18px]" />
-                  {item.label}
+                  <item.icon className={cn('size-[18px]', onlyMe && !active && 'opacity-60')} />
+                  <span className="flex-1 truncate">{item.label}</span>
+                  {onlyMe && (
+                    <Eye className="size-3.5 shrink-0 opacity-70" aria-label={SOLO_ADMIN} />
+                  )}
                 </Link>
               );
             })}
@@ -135,7 +150,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </aside>
 
         {/* ===== Contenido ===== */}
-        <main className="flex min-h-0 flex-1 flex-col">
+        {/* `min-w-0` no es decorativo: sin él este flex item hereda
+            `min-width: auto` y no puede achicarse por debajo del ancho de su
+            contenido. Una sola fila ancha (la descripción larga de un
+            movimiento) estiraba el <main> más allá de la pantalla, y como el
+            contenedor de arriba tiene `overflow-hidden`, lo que sobraba se
+            recortaba: el botón "Nuevo" del header, alineado a la derecha,
+            quedaba fuera de la vista y parecía haber desaparecido. */}
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border/60 bg-background/80 px-4 backdrop-blur-md md:hidden">
             <div className="flex items-center gap-2">
               <span className="flex size-8 items-center justify-center rounded-xl bg-primary text-primary-foreground">
@@ -210,16 +232,31 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
 
               <div className="grid grid-cols-3 gap-2.5">
-                {moreNav.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className="flex flex-col items-center gap-2 rounded-2xl bg-accent/50 p-4 transition-colors hover:bg-accent"
-                  >
-                    <item.icon className="size-5 text-primary" />
-                    <span className="text-center text-xs font-medium leading-tight">{item.label}</span>
-                  </Link>
-                ))}
+                {moreNav.map((item) => {
+                  const onlyMe = !!item.adminOnly;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      title={onlyMe ? SOLO_ADMIN : undefined}
+                      className={cn(
+                        'relative flex flex-col items-center gap-2 rounded-2xl p-4 transition-colors',
+                        onlyMe
+                          ? 'bg-accent/25 text-muted-foreground/70 hover:bg-accent/50'
+                          : 'bg-accent/50 hover:bg-accent'
+                      )}
+                    >
+                      {onlyMe && (
+                        <Eye
+                          className="absolute right-2 top-2 size-3.5 opacity-70"
+                          aria-label={SOLO_ADMIN}
+                        />
+                      )}
+                      <item.icon className={cn('size-5', onlyMe ? 'opacity-60' : 'text-primary')} />
+                      <span className="text-center text-xs font-medium leading-tight">{item.label}</span>
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -232,6 +269,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <DebtForm />
         <BudgetForm />
         <ReconciliationForm />
+
+        {/* Las escrituras son optimistas: si el servidor rechaza una, el cambio
+            se deshace y el aviso sale por aca. */}
+        <Toaster />
       </div>
     </DialogProvider>
   );

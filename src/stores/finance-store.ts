@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { supabase } from '@/lib/supabase/client';
 import type { Account, Category, Transaction, Budget, Currency, Debt, Workspace, WorkspaceRole, WorkspaceMember, Person, ActivityEntry, Reconciliation } from '@/lib/types';
 import { CURRENCIES, EXCHANGE_RATES } from '@/lib/mock-data';
+import { toast } from '@/stores/toast-store';
 
 // Todo borrado es lógico: se marca `deleted_at` y la fila queda. Ver DB/021.
 const nowIso = () => new Date().toISOString();
@@ -62,6 +63,72 @@ async function ensureAdjustmentCategory(
     .single();
   if (error) throw error;
   return created.id;
+}
+
+
+/**
+ * El saldo de una billetera es DERIVADO, nunca guardado: saldo inicial más los
+ * movimientos que hay en memoria. Así, apenas se agrega un movimiento de forma
+ * optimista, el saldo de la billetera ya queda bien sin pedirle nada al
+ * servidor. Misma regla que usa hydrate().
+ */
+function withBalances(accounts: Account[], transactions: Transaction[]): Account[] {
+  const delta = new Map<string, number>();
+  for (const tx of transactions) {
+    if (!tx.account_id) continue;
+    // Solo los ingresos suman; gastos, transferencias y cambios restan.
+    const d = tx.type === 'income' ? Number(tx.amount) : -Number(tx.amount);
+    delta.set(tx.account_id, (delta.get(tx.account_id) ?? 0) + d);
+  }
+  return accounts.map((a) => ({
+    ...a,
+    balance: Number(a.initial_balance ?? 0) + (delta.get(a.id) ?? 0),
+  }));
+}
+
+const byDateDesc = <T extends { date: string }>(list: T[]) =>
+  [...list].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+type ListKey = 'transactions' | 'accounts' | 'categories' | 'categoryGroups' | 'debts' | 'budgets';
+
+/**
+ * Escritura optimista: el cambio se aplica en memoria YA y la escritura se
+ * confirma contra el servidor después. La función vuelve enseguida, así que el
+ * modal cierra y la lista se actualiza sin esperar la red.
+ *
+ * `undo` deshace SOLO este cambio sobre la lista que haya en ese momento, en
+ * vez de restaurar una foto del estado anterior. Es la diferencia que importa
+ * cuando hay dos escrituras en vuelo: si falla la primera, la segunda no se
+ * pierde.
+ */
+function optimistic(
+  key: ListKey,
+  apply: (list: any[]) => any[],
+  undo: (list: any[]) => any[],
+  write: () => Promise<unknown>,
+  errorMessage: string
+): void {
+  const commit = (fn: (list: any[]) => any[]) =>
+    useFinanceStore.setState((s: any) => {
+      const next: any = { [key]: fn(s[key]) };
+      // Los saldos cuelgan de movimientos y billeteras: si cambia cualquiera de
+      // los dos, hay que rederivarlos.
+      if (key === 'transactions' || key === 'accounts') {
+        next.accounts = withBalances(
+          key === 'accounts' ? next.accounts : s.accounts,
+          key === 'transactions' ? next.transactions : s.transactions
+        );
+      }
+      return next;
+    });
+
+  commit(apply);
+
+  void write().catch((e) => {
+    console.error(errorMessage, e);
+    commit(undo);
+    toast.error(errorMessage);
+  });
 }
 
 const WS_KEY = 'finza:workspace';
@@ -131,6 +198,9 @@ interface FinanceState {
   toggleCheckpoint: (id: string, current: boolean) => Promise<void>;
   toggleTransactionStatus: (id: string, status: 'draft' | 'warning' | 'reviewed') => Promise<void>;
   
+  addDebt: (debt: { name: string; description: string; total_amount: number; currency_code: string }) => Promise<void>;
+  updateDebt: (id: string, data: { name: string; description: string; total_amount: number; currency_code: string }) => Promise<void>;
+  removeDebt: (id: string) => Promise<void>;
   addAccount: (acc: any) => Promise<void>;
   updateAccount: (id: string, data: Partial<Account>) => Promise<void>;
   removeAccount: (id: string) => Promise<void>;
@@ -138,6 +208,8 @@ interface FinanceState {
   addCategory: (cat: any) => Promise<void>;
   updateCategory: (id: string, data: Partial<Category>) => Promise<void>;
   removeCategory: (id: string) => Promise<void>;
+  /** Interno: resuelve (o crea) el grupo de categorias por nombre. */
+  _resolveGroupId: (groupName: string) => Promise<string | null>;
   removeCategoryAndTransfer: (oldId: string, newId: string) => Promise<void>;
   renameCategoryGroup: (oldName: string, newName: string) => Promise<void>;
   
@@ -464,13 +536,20 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     });
     if (error) throw error;
 
-    await get().hydrate();
     const row = Array.isArray(data) ? data[0] : data;
-    return {
+    const saved = {
       ...row,
       counted_amount: Number(row.counted_amount),
       expected_amount: Number(row.expected_amount),
     } as Reconciliation;
+
+    // Este es el unico caso donde esperar al servidor es correcto: el saldo
+    // esperado lo calcula la base dentro de la misma transaccion, para que
+    // nadie pueda arquear contra un numero calculado en el cliente. Pero una
+    // vez que volvio, se inserta en memoria y listo: no hay motivo para
+    // recargar los 1000 movimientos.
+    set((st) => ({ reconciliations: [saved, ...st.reconciliations] }));
+    return saved;
   },
 
   /**
@@ -499,26 +578,47 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         // mezclen con el gasto real del negocio.
         const type = diff > 0 ? 'income' : 'expense';
         const categoryId = await ensureAdjustmentCategory(currentWorkspaceId, appUserId, type);
+        const txId = crypto.randomUUID();
+        const description = `Ajuste por arqueo del ${new Date(rec.counted_at).toLocaleDateString('es-AR')}`;
 
-        const { data: tx, error: txError } = await supabase
-          .from('transactions')
-          .insert({
-            user_id: appUserId,
-            workspace_id: currentWorkspaceId,
-            wallet_id: rec.wallet_id,
-            category_id: categoryId,
-            type,
-            amount: Math.abs(diff),
-            currency_code: (wallet.currency_id || 'ars').toUpperCase(),
-            description: `Ajuste por arqueo del ${new Date(rec.counted_at).toLocaleDateString('es-AR')}`,
-            date: rec.counted_at,
-            is_checkpoint: false,
-            status: 'reviewed',
-          })
-          .select('id')
-          .single();
+        const { error: txError } = await supabase.from('transactions').insert({
+          id: txId,
+          user_id: appUserId,
+          workspace_id: currentWorkspaceId,
+          wallet_id: rec.wallet_id,
+          category_id: categoryId,
+          type,
+          amount: Math.abs(diff),
+          currency_code: (wallet.currency_id || 'ars').toUpperCase(),
+          description,
+          date: rec.counted_at,
+          is_checkpoint: false,
+          status: 'reviewed',
+        });
         if (txError) throw txError;
-        adjustmentId = tx.id;
+        adjustmentId = txId;
+
+        // El movimiento de ajuste entra a la lista y mueve el saldo en el acto:
+        // sin esto habria que recargar la app para verlo.
+        const adjustment: Transaction = {
+          id: txId,
+          user_id: appUserId,
+          type,
+          amount: Math.abs(diff),
+          currency_id: wallet.currency_id || 'ars',
+          category_id: categoryId,
+          account_id: rec.wallet_id,
+          destination_account_id: null,
+          description,
+          status: 'reviewed',
+          date: rec.counted_at,
+          is_checkpoint: false,
+          created_at: nowIso(),
+        };
+        set((st) => ({
+          transactions: byDateDesc([adjustment, ...st.transactions]),
+          accounts: withBalances(st.accounts, byDateDesc([adjustment, ...st.transactions])),
+        }));
       }
     }
 
@@ -533,7 +633,13 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       .eq('id', id);
     if (error) throw error;
 
-    await get().hydrate();
+    set((st) => ({
+      reconciliations: st.reconciliations.map((r) =>
+        r.id === id
+          ? { ...r, status: 'resolved', resolution, adjustment_transaction_id: adjustmentId, note: note ?? null }
+          : r
+      ),
+    }));
   },
 
   inviteMember: async (workspaceId: string, email: string) => {
@@ -625,87 +731,159 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
 
   // === TRANSACTIONS ===
   addTransaction: async (tx) => {
-    const state = get();
-    const { data: userData } = await supabase.from('users').select('id').eq('auth_id', state.user?.id).single();
-    if (!userData) throw new Error("Usuario no encontrado en la BD. auth_id: " + state.user?.id);
+    const { appUserId, currentWorkspaceId } = get();
+    if (!appUserId) throw new Error('No hay sesión activa.');
 
-    const payload = {
-       user_id: userData.id,
-       ...wsPatch(state.currentWorkspaceId),
-       wallet_id: tx.account_id,
-       category_id: tx.category_id || null,
-       type: tx.type,
-       amount: tx.amount,
-       currency_code: tx.currency_id.toUpperCase(),
-       description: tx.description,
-       date: tx.date || new Date().toISOString(),
-       period_month: tx.period_month || null,
-       invoiced_at: tx.invoiced_at || null
+    // El id se genera acá y no en la base: la fila que se pinta al instante ya
+    // es la definitiva, así que no hay que reemplazarla cuando el servidor
+    // responde ni queda un id provisorio dando vueltas.
+    const id = crypto.randomUUID();
+    const date = tx.date || nowIso();
+    const isTransfer = tx.type === 'transfer' && !!tx.destination_account_id;
+    const pairId = isTransfer ? crypto.randomUUID() : null;
+
+    const local: Transaction = {
+      id,
+      user_id: appUserId,
+      type: tx.type,
+      amount: tx.amount,
+      currency_id: tx.currency_id,
+      category_id: tx.category_id || null,
+      account_id: tx.account_id,
+      destination_account_id: tx.destination_account_id ?? null,
+      description: tx.description,
+      status: 'draft',
+      date,
+      period_month: tx.period_month || undefined,
+      invoiced_at: tx.invoiced_at || undefined,
+      is_checkpoint: false,
+      created_at: nowIso(),
     };
 
-    const { data, error } = await supabase.from('transactions').insert(payload).select().single();
-
-    if (error) console.error("Error creating tx:", error);
-
-    if (tx.type === 'transfer' && tx.destination_account_id && data) {
-       await supabase.from('transactions').insert({
-           user_id: userData.id,
-           ...wsPatch(state.currentWorkspaceId),
-           wallet_id: tx.destination_account_id,
-           type: 'transfer',
-           amount: -Math.abs(tx.amount),
-           currency_code: tx.currency_id.toUpperCase(),
+    // La pata entrante de una transferencia con monto negativo: así el saldo de
+    // la billetera destino sube igual que lo hace en hydrate().
+    const localPair: Transaction | null = pairId
+      ? {
+          ...local,
+          id: pairId,
+          account_id: tx.destination_account_id,
+          destination_account_id: null,
+          amount: -Math.abs(tx.amount),
           description: `Transferencia entrante: ${tx.description}`,
-          date: tx.date || new Date().toISOString(),
-          related_transaction_id: data.id
-       });
-    }
+        }
+      : null;
 
-    await get().hydrate();
+    const base = {
+      user_id: appUserId,
+      ...wsPatch(currentWorkspaceId),
+      category_id: tx.category_id || null,
+      currency_code: tx.currency_id.toUpperCase(),
+      date,
+    };
+
+    optimistic(
+      'transactions',
+      (list) => byDateDesc([local, ...(localPair ? [localPair] : []), ...list]),
+      (list) => list.filter((t: Transaction) => t.id !== id && t.id !== pairId),
+      async () => {
+        const { error } = await supabase.from('transactions').insert({
+          ...base,
+          id,
+          wallet_id: tx.account_id,
+          type: tx.type,
+          amount: tx.amount,
+          description: tx.description,
+          period_month: tx.period_month || null,
+          invoiced_at: tx.invoiced_at || null,
+        });
+        if (error) throw error;
+
+        if (localPair) {
+          const { error: pairError } = await supabase.from('transactions').insert({
+            ...base,
+            id: pairId,
+            wallet_id: tx.destination_account_id,
+            type: 'transfer',
+            amount: -Math.abs(tx.amount),
+            description: localPair.description,
+            related_transaction_id: id,
+          });
+          if (pairError) throw pairError;
+        }
+      },
+      'No se pudo guardar el movimiento.'
+    );
   },
-  removeTransaction: async (id) => {
-    const { error } = await supabase.from('transactions').update({ deleted_at: new Date().toISOString() }).eq('id', id);
-    if (error) {
-      console.error('Delete Error:', error);
-      throw error;
-    }
-    await get().hydrate();
-  },
-  revertImportBatch: async (batchId) => {
-    const { error } = await supabase
-      .from('transactions')
-      .update({ deleted_at: nowIso() })
-      .eq('import_batch', batchId)
-      .is('deleted_at', null);
-    if (error) {
-       console.error("Revert Error:", error);
-       throw error;
-    }
-    await get().hydrate();
-  },
+
   updateTransaction: async (id, data) => {
-    const state = get();
-    // Validate destination existence if it's a transfer
-    const updatePayload: any = {};
-    if (data.type) updatePayload.type = data.type;
-    if (data.amount) updatePayload.amount = data.amount;
-    if (data.currency_id) updatePayload.currency_code = data.currency_id.toUpperCase();
-    if (data.category_id !== undefined) updatePayload.category_id = data.category_id;
-    if (data.account_id) updatePayload.wallet_id = data.account_id;
-    if (data.description !== undefined) updatePayload.description = data.description;
-    if (data.date) updatePayload.date = data.date;
-    if (data.period_month !== undefined) updatePayload.period_month = data.period_month;
+    const before = get().transactions.find((t) => t.id === id);
+    if (!before) return;
 
-    const { error } = await supabase.from('transactions').update(updatePayload).eq('id', id);
-    if (error) {
-      console.error("Error updating tx:", error);
-      throw error;
-    }
-    
-    // Simplification for MVP: If they changed transfer logic, we'd need to sync related_transaction_id.
-    // But basic updates on date, amount, description run safely.
-    
-    await get().hydrate();
+    const patch: Record<string, unknown> = {};
+    if (data.type) patch.type = data.type;
+    if (data.amount) patch.amount = data.amount;
+    if (data.currency_id) patch.currency_code = data.currency_id.toUpperCase();
+    if (data.category_id !== undefined) patch.category_id = data.category_id;
+    if (data.account_id) patch.wallet_id = data.account_id;
+    if (data.description !== undefined) patch.description = data.description;
+    if (data.date) patch.date = data.date;
+    if (data.period_month !== undefined) patch.period_month = data.period_month;
+
+    optimistic(
+      'transactions',
+      (list) => byDateDesc(list.map((t: Transaction) => (t.id === id ? { ...t, ...data } : t))),
+      (list) => byDateDesc(list.map((t: Transaction) => (t.id === id ? before : t))),
+      async () => {
+        const { error } = await supabase.from('transactions').update(patch).eq('id', id);
+        if (error) throw error;
+      },
+      'No se pudo guardar el cambio.'
+    );
+  },
+
+  removeTransaction: async (id) => {
+    const before = get().transactions.find((t) => t.id === id);
+    if (!before) return;
+
+    optimistic(
+      'transactions',
+      (list) => list.filter((t: Transaction) => t.id !== id),
+      (list) => byDateDesc([before, ...list]),
+      async () => {
+        const { error } = await supabase
+          .from('transactions')
+          .update({ deleted_at: nowIso() })
+          .eq('id', id);
+        if (error) throw error;
+      },
+      'No se pudo eliminar el movimiento.'
+    );
+  },
+
+  revertImportBatch: async (batchId) => {
+    const { currentWorkspaceId } = get();
+    if (!currentWorkspaceId) throw new Error('No hay un espacio activo.');
+
+    const removed = get().transactions.filter((t) => t.import_batch === batchId);
+
+    optimistic(
+      'transactions',
+      (list) => list.filter((t: Transaction) => t.import_batch !== batchId),
+      (list) => byDateDesc([...removed, ...list]),
+      async () => {
+        // El id de lote es `batch_<timestamp>`, no un uuid: dos espacios pueden
+        // generar el mismo si importan en el mismo milisegundo. Acotar al
+        // espacio activo hace que deshacer una importación nunca alcance a otro.
+        const { error } = await supabase
+          .from('transactions')
+          .update({ deleted_at: nowIso() })
+          .eq('workspace_id', currentWorkspaceId)
+          .eq('import_batch', batchId)
+          .is('deleted_at', null);
+        if (error) throw error;
+      },
+      'No se pudo deshacer la importación.'
+    );
   },
 
   toggleCheckpoint: async (id: string, current: boolean) => {
@@ -751,246 +929,584 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     }
   },
 
+  // === DEBTS ===
+  // Una deuda son dos filas: la deuda y una categoria homonima donde se
+  // imputan los pagos. Las dos se crean y se dan de baja juntas.
+  addDebt: async (debt) => {
+    const { appUserId, currentWorkspaceId } = get();
+    if (!appUserId) throw new Error('No hay sesión activa.');
+
+    const debtId = crypto.randomUUID();
+    const categoryId = crypto.randomUUID();
+
+    const localCategory: Category = {
+      id: categoryId,
+      name: debt.name,
+      type: 'expense',
+      group_name: 'Deudas',
+      color: '#6366f1',
+      icon: 'folder',
+      is_default: false,
+      is_recurring: false,
+      created_at: nowIso(),
+    };
+    const localDebt: Debt = {
+      id: debtId,
+      category_id: categoryId,
+      total_amount: debt.total_amount,
+      currency_code: debt.currency_code,
+      description: debt.description,
+      created_at: nowIso(),
+    };
+
+    set((st) => ({ categories: [...st.categories, localCategory] }));
+
+    optimistic(
+      'debts',
+      (list) => [...list, localDebt],
+      (list) => {
+        set((st) => ({ categories: st.categories.filter((c) => c.id !== categoryId) }));
+        return list.filter((d: Debt) => d.id !== debtId);
+      },
+      async () => {
+        const { data: groupData, error: groupError } = await supabase
+          .from('category_groups')
+          .select('id')
+          .eq('name', 'Deudas')
+          .is('is_system', true)
+          .single();
+        if (groupError) throw groupError;
+
+        const { error: catError } = await supabase.from('categories').insert({
+          id: categoryId,
+          user_id: appUserId,
+          ...wsPatch(currentWorkspaceId),
+          name: debt.name,
+          group_id: groupData.id,
+          type: 'expense',
+        });
+        if (catError) throw catError;
+
+        const { error: debtError } = await supabase.from('debts').insert({
+          id: debtId,
+          user_id: appUserId,
+          ...wsPatch(currentWorkspaceId),
+          category_id: categoryId,
+          total_amount: debt.total_amount,
+          currency_code: debt.currency_code,
+          description: debt.description,
+        });
+        if (debtError) throw debtError;
+
+        set((st) => ({
+          categories: st.categories.map((c) =>
+            c.id === categoryId ? { ...c, group_id: groupData.id } : c
+          ),
+        }));
+      },
+      'No se pudo crear la deuda.'
+    );
+  },
+
+  updateDebt: async (id, data) => {
+    const before = get().debts.find((d) => d.id === id);
+    if (!before) return;
+    const beforeCategory = get().categories.find((c) => c.id === before.category_id);
+
+    set((st) => ({
+      categories: st.categories.map((c) =>
+        c.id === before.category_id ? { ...c, name: data.name } : c
+      ),
+    }));
+
+    optimistic(
+      'debts',
+      (list) =>
+        list.map((d: Debt) =>
+          d.id === id
+            ? {
+                ...d,
+                total_amount: data.total_amount,
+                currency_code: data.currency_code,
+                description: data.description,
+              }
+            : d
+        ),
+      (list) => {
+        if (beforeCategory) {
+          set((st) => ({
+            categories: st.categories.map((c) => (c.id === beforeCategory.id ? beforeCategory : c)),
+          }));
+        }
+        return list.map((d: Debt) => (d.id === id ? before : d));
+      },
+      async () => {
+        const { error: catError } = await supabase
+          .from('categories')
+          .update({ name: data.name })
+          .eq('id', before.category_id);
+        if (catError) throw catError;
+
+        const { error } = await supabase
+          .from('debts')
+          .update({
+            total_amount: data.total_amount,
+            currency_code: data.currency_code,
+            description: data.description,
+          })
+          .eq('id', id);
+        if (error) throw error;
+      },
+      'No se pudo guardar la deuda.'
+    );
+  },
+
+  removeDebt: async (id) => {
+    const before = get().debts.find((d) => d.id === id);
+    if (!before) return;
+    const beforeCategory = get().categories.find((c) => c.id === before.category_id);
+
+    set((st) => ({ categories: st.categories.filter((c) => c.id !== before.category_id) }));
+
+    optimistic(
+      'debts',
+      (list) => list.filter((d: Debt) => d.id !== id),
+      (list) => {
+        if (beforeCategory) set((st) => ({ categories: [...st.categories, beforeCategory] }));
+        return [...list, before];
+      },
+      async () => {
+        // Antes se borraba la categoria y el CASCADE se llevaba la deuda. Ahora
+        // el borrado es logico en las dos, asi que hay que marcarlas a mano.
+        const stamp = nowIso();
+        const { error: e1 } = await supabase.from('debts').update({ deleted_at: stamp }).eq('id', id);
+        if (e1) throw e1;
+        const { error: e2 } = await supabase
+          .from('categories')
+          .update({ deleted_at: stamp })
+          .eq('id', before.category_id);
+        if (e2) throw e2;
+      },
+      'No se pudo eliminar la deuda.'
+    );
+  },
+
   // === ACCOUNTS ===
   addAccount: async (acc) => {
-    const state = get();
-    const { data: userData } = await supabase.from('users').select('id').eq('auth_id', state.user?.id).single();
-    if (!userData) throw new Error("Usario público no encontrado. auth_id: " + state.user?.id);
+    const { appUserId, currentWorkspaceId } = get();
+    if (!appUserId) throw new Error('No hay sesión activa.');
 
-    const { error } = await supabase.from('wallets').insert({
-       user_id: userData.id,
-       ...wsPatch(state.currentWorkspaceId),
-       name: acc.name,
-       type: acc.type,
-       initial_balance: acc.initial_balance || 0,
-       currency_code: acc.currency_id.toUpperCase()
-    });
-    if (error) {
-      console.error("SUPABASE WALLET INSERT ERROR:", error);
-      throw error;
-    }
-    await get().hydrate();
+    const id = crypto.randomUUID();
+    const local: Account = {
+      id,
+      name: acc.name,
+      type: acc.type,
+      currency_id: acc.currency_id,
+      initial_balance: Number(acc.initial_balance || 0),
+      balance: Number(acc.initial_balance || 0),
+      color: '#3b82f6',
+      icon: 'wallet',
+      created_at: nowIso(),
+    };
+
+    optimistic(
+      'accounts',
+      (list) => [...list, local],
+      (list) => list.filter((a: Account) => a.id !== id),
+      async () => {
+        const { error } = await supabase.from('wallets').insert({
+          id,
+          user_id: appUserId,
+          ...wsPatch(currentWorkspaceId),
+          name: acc.name,
+          type: acc.type,
+          initial_balance: acc.initial_balance || 0,
+          currency_code: acc.currency_id.toUpperCase(),
+        });
+        if (error) throw error;
+      },
+      'No se pudo crear la billetera.'
+    );
   },
+
   updateAccount: async (id, data) => {
-    const updateData: any = {};
-    if (data.name) updateData.name = data.name;
-    if (data.type) updateData.type = data.type;
-    if (data.currency_id) updateData.currency_code = data.currency_id.toUpperCase();
-    if (data.initial_balance !== undefined) updateData.initial_balance = data.initial_balance;
-    
-    const { error } = await supabase.from('wallets').update(updateData).eq('id', id);
-    if (error) throw error;
-    await get().hydrate();
+    const before = get().accounts.find((a) => a.id === id);
+    if (!before) return;
+
+    const patch: Record<string, unknown> = {};
+    if (data.name) patch.name = data.name;
+    if (data.type) patch.type = data.type;
+    if (data.currency_id) patch.currency_code = data.currency_id.toUpperCase();
+    if (data.initial_balance !== undefined) patch.initial_balance = data.initial_balance;
+
+    optimistic(
+      'accounts',
+      (list) => list.map((a: Account) => (a.id === id ? { ...a, ...data } : a)),
+      (list) => list.map((a: Account) => (a.id === id ? before : a)),
+      async () => {
+        const { error } = await supabase.from('wallets').update(patch).eq('id', id);
+        if (error) throw error;
+      },
+      'No se pudo guardar la billetera.'
+    );
   },
+
   removeAccount: async (id) => {
-    const { error } = await supabase.from('wallets').update({ deleted_at: nowIso() }).eq('id', id);
-    if (error) throw error;
-    await get().hydrate();
+    const before = get().accounts.find((a) => a.id === id);
+    if (!before) return;
+
+    optimistic(
+      'accounts',
+      (list) => list.filter((a: Account) => a.id !== id),
+      (list) => [...list, before],
+      async () => {
+        const { error } = await supabase.from('wallets').update({ deleted_at: nowIso() }).eq('id', id);
+        if (error) throw error;
+      },
+      'No se pudo eliminar la billetera.'
+    );
   },
 
   // === CATEGORIES ===
+  /**
+   * Resuelve el grupo por nombre, creandolo si no existe. Corre DENTRO de la
+   * escritura optimista, no antes: la categoria ya se ve en pantalla mientras
+   * esto pasa.
+   */
+  _resolveGroupId: async (groupName: string): Promise<string | null> => {
+    const { appUserId, currentWorkspaceId, categoryGroups } = get();
+    const existing = categoryGroups.find((g: any) => g.name === groupName);
+    if (existing) return existing.id;
+    if (!appUserId) return null;
+
+    const { data, error } = await supabase
+      .from('category_groups')
+      .insert({ name: groupName, user_id: appUserId, is_system: false, ...wsPatch(currentWorkspaceId) })
+      .select()
+      .single();
+    if (error) throw error;
+
+    set((st) => ({ categoryGroups: [...st.categoryGroups, data] }));
+    return data.id;
+  },
+
   addCategory: async (cat) => {
-    const state = get();
-    const { data: userData } = await supabase.from('users').select('id').eq('auth_id', state.user?.id).single();
-    if (!userData) return;
+    const { appUserId, currentWorkspaceId } = get();
+    if (!appUserId) throw new Error('No hay sesión activa.');
 
-    // Optimistic UI
-    const tempId = 'temp-' + Date.now();
-    set(s => ({
-      categories: [...s.categories, {
-        id: tempId,
-        name: cat.name,
-        type: cat.type,
-        group_id: undefined,
-        group_name: cat.group_name,
-        color: '#6366f1',
-        icon: 'folder',
-        is_default: false,
-        is_recurring: cat.is_recurring || false,
-        created_at: new Date().toISOString()
-      }]
-    }));
+    const id = crypto.randomUUID();
+    const groupName = cat.group_name || 'General';
+    const local: Category = {
+      id,
+      name: cat.name,
+      type: cat.type,
+      group_id: get().categoryGroups.find((g: any) => g.name === groupName)?.id,
+      group_name: groupName,
+      color: '#6366f1',
+      icon: 'folder',
+      is_default: false,
+      is_recurring: cat.is_recurring || false,
+      created_at: nowIso(),
+    };
 
-    let groupId = null;
-    const groupNameStr = cat.group_name || 'General';
-    const group = get().categoryGroups.find((g: any) => g.name === groupNameStr);
-    
-    if (group) {
-        groupId = group.id;
-    } else {
-        const { data: newGroup } = await supabase.from('category_groups')
-            .insert({ name: groupNameStr, user_id: userData.id, is_system: false, ...wsPatch(state.currentWorkspaceId) })
-            .select()
-            .single();
-        if (newGroup) groupId = newGroup.id;
-    }
-
-    const { error } = await supabase.from('categories').insert({
-       user_id: userData.id,
-       ...wsPatch(state.currentWorkspaceId),
-       name: cat.name,
-       type: cat.type,
-       group_name: groupNameStr,
-       group_id: groupId,
-       is_recurring: cat.is_recurring || false
-    });
-    
-    if (error) {
-       console.error("Error adding category:", error);
-       // Revert
-       set(s => ({ categories: s.categories.filter(c => c.id !== tempId) }));
-    }
-    await get().hydrate();
-  },
-  updateCategory: async (id, data) => {
-    // Optimistic UI
-    const prevCategories = get().categories;
-    set(s => ({
-       categories: s.categories.map(c => c.id === id ? { ...c, ...data } : c)
-    }));
-
-    let groupId = null;
-    if (data.group_name) {
-        const group = get().categoryGroups.find((g: any) => g.name === data.group_name);
-        if (group) {
-            groupId = group.id;
-        } else {
-            const userData = get().user;
-            if (userData) {
-                const { data: newGroup } = await supabase.from('category_groups')
-                    .insert({ name: data.group_name, user_id: userData.id, is_system: false, ...wsPatch(get().currentWorkspaceId) })
-                    .select()
-                    .single();
-                if (newGroup) groupId = newGroup.id;
-            }
+    optimistic(
+      'categories',
+      (list) => [...list, local],
+      (list) => list.filter((c: Category) => c.id !== id),
+      async () => {
+        const groupId = await get()._resolveGroupId(groupName);
+        const { error } = await supabase.from('categories').insert({
+          id,
+          user_id: appUserId,
+          ...wsPatch(currentWorkspaceId),
+          name: cat.name,
+          type: cat.type,
+          group_name: groupName,
+          group_id: groupId,
+          is_recurring: cat.is_recurring || false,
+        });
+        if (error) throw error;
+        // El grupo puede haberse creado recién: que la categoría en memoria
+        // apunte al id real y no quede huérfana.
+        if (groupId) {
+          set((st) => ({
+            categories: st.categories.map((c) => (c.id === id ? { ...c, group_id: groupId } : c)),
+          }));
         }
-    }
-
-    const updateData: any = {};
-    if (data.name) updateData.name = data.name;
-    if (data.type) updateData.type = data.type;
-    if (data.group_name) {
-       updateData.group_name = data.group_name;
-       if (groupId) updateData.group_id = groupId;
-    }
-    if (data.is_recurring !== undefined) updateData.is_recurring = data.is_recurring;
-    
-    const { error } = await supabase.from('categories').update(updateData).eq('id', id);
-    if (error) {
-       console.error("Error updating category:", error);
-       set({ categories: prevCategories });
-       throw error;
-    }
-    // Fire and forget refetch for long term consistency
-    get().hydrate();
+      },
+      'No se pudo crear la categoría.'
+    );
   },
+
+  updateCategory: async (id, data) => {
+    const before = get().categories.find((c) => c.id === id);
+    if (!before) return;
+
+    optimistic(
+      'categories',
+      (list) => list.map((c: Category) => (c.id === id ? { ...c, ...data } : c)),
+      (list) => list.map((c: Category) => (c.id === id ? before : c)),
+      async () => {
+        const patch: Record<string, unknown> = {};
+        if (data.name) patch.name = data.name;
+        if (data.type) patch.type = data.type;
+        if (data.is_recurring !== undefined) patch.is_recurring = data.is_recurring;
+        if (data.group_name) {
+          patch.group_name = data.group_name;
+          // Antes esto usaba `get().user.id`, que es el id de auth.users y no el
+          // de public.users: el grupo se creaba con un user_id inexistente.
+          const groupId = await get()._resolveGroupId(data.group_name);
+          if (groupId) patch.group_id = groupId;
+        }
+
+        const { error } = await supabase.from('categories').update(patch).eq('id', id);
+        if (error) throw error;
+      },
+      'No se pudo guardar la categoría.'
+    );
+  },
+
   removeCategory: async (id) => {
-    // Optimistic UI
-    const prevCategories = get().categories;
-    set(s => ({ categories: s.categories.filter(c => c.id !== id) }));
-    
-    const { error } = await supabase.from('categories').update({ deleted_at: nowIso() }).eq('id', id);
-    if (error) {
-       console.error("Error removing category:", error);
-       set({ categories: prevCategories });
-    }
-    // hydrate later
-    get().hydrate();
-  },
-  removeCategoryAndTransfer: async (oldId: string, newId: string) => {
-    // Update transactions
-    await supabase.from('transactions').update({ category_id: newId }).eq('category_id', oldId);
-    // Update debts
-    await supabase.from('debts').update({ category_id: newId }).eq('category_id', oldId);
-    // Delete old category
-    await supabase.from('categories').update({ deleted_at: nowIso() }).eq('id', oldId);
-    
-    await get().hydrate();
-  },
-  renameCategoryGroup: async (oldName: string, newName: string) => {
-    // We update both category_groups (if exists) and categories tables to keep them in sync
-    await supabase.from('category_groups').update({ name: newName }).eq('name', oldName);
-    await supabase.from('categories').update({ group_name: newName }).eq('group_name', oldName);
-    await get().hydrate();
+    const before = get().categories.find((c) => c.id === id);
+    if (!before) return;
+
+    optimistic(
+      'categories',
+      (list) => list.filter((c: Category) => c.id !== id),
+      (list) => [...list, before],
+      async () => {
+        const { error } = await supabase
+          .from('categories')
+          .update({ deleted_at: nowIso() })
+          .eq('id', id);
+        if (error) throw error;
+      },
+      'No se pudo eliminar la categoría.'
+    );
   },
 
-  // === BUDGETS (Local/Stub for now) ===
-  // Antes esto vivía sólo en memoria con Date.now() como id y se perdía al
+  removeCategoryAndTransfer: async (oldId: string, newId: string) => {
+    const { currentWorkspaceId } = get();
+    if (!currentWorkspaceId) throw new Error('No hay un espacio activo.');
+
+    const before = get().categories.find((c) => c.id === oldId);
+    if (!before) return;
+    const movedTxIds = get().transactions.filter((t) => t.category_id === oldId).map((t) => t.id);
+
+    // Los movimientos se reapuntan en memoria junto con la baja de la categoría:
+    // si no, la lista mostraría "Sin categoría" hasta la próxima recarga.
+    set((st) => ({
+      transactions: st.transactions.map((t) =>
+        t.category_id === oldId ? { ...t, category_id: newId } : t
+      ),
+    }));
+
+    optimistic(
+      'categories',
+      (list) => list.filter((c: Category) => c.id !== oldId),
+      (list) => {
+        set((st) => ({
+          transactions: st.transactions.map((t) =>
+            movedTxIds.includes(t.id) ? { ...t, category_id: oldId } : t
+          ),
+        }));
+        return [...list, before];
+      },
+      async () => {
+        const ws = (q: any) => q.eq('workspace_id', currentWorkspaceId);
+        const r1 = await ws(
+          supabase.from('transactions').update({ category_id: newId }).eq('category_id', oldId)
+        );
+        if (r1.error) throw r1.error;
+        const r2 = await ws(
+          supabase.from('debts').update({ category_id: newId }).eq('category_id', oldId)
+        );
+        if (r2.error) throw r2.error;
+        const r3 = await ws(
+          supabase.from('categories').update({ deleted_at: nowIso() }).eq('id', oldId)
+        );
+        if (r3.error) throw r3.error;
+      },
+      'No se pudo reasignar la categoría.'
+    );
+  },
+
+  renameCategoryGroup: async (oldName: string, newName: string) => {
+    const { currentWorkspaceId } = get();
+    if (!currentWorkspaceId) throw new Error('No hay un espacio activo.');
+
+    const renameIn = (list: any[], from: string, to: string) =>
+      list.map((g: any) => (g.name === from ? { ...g, name: to } : g));
+
+    set((st) => ({
+      categories: st.categories.map((c) =>
+        c.group_name === oldName ? { ...c, group_name: newName } : c
+      ),
+    }));
+
+    optimistic(
+      'categoryGroups',
+      (list) => renameIn(list, oldName, newName),
+      (list) => {
+        set((st) => ({
+          categories: st.categories.map((c) =>
+            c.group_name === newName ? { ...c, group_name: oldName } : c
+          ),
+        }));
+        return renameIn(list, newName, oldName);
+      },
+      async () => {
+        // El match es por nombre, no por id: sin acotar al espacio activo esto
+        // renombraba el grupo en todos los espacios donde el usuario es miembro
+        // —incluidos los compartidos con socios—. Los grupos de sistema
+        // (workspace_id NULL) tampoco se tocan: son de todos.
+        const r1 = await supabase
+          .from('category_groups')
+          .update({ name: newName })
+          .eq('workspace_id', currentWorkspaceId)
+          .eq('name', oldName);
+        if (r1.error) throw r1.error;
+
+        const r2 = await supabase
+          .from('categories')
+          .update({ group_name: newName })
+          .eq('workspace_id', currentWorkspaceId)
+          .eq('group_name', oldName);
+        if (r2.error) throw r2.error;
+      },
+      'No se pudo renombrar el grupo.'
+    );
+  },
+
+  // === BUDGETS ===
+  // Antes esto vivia solo en memoria con Date.now() como id y se perdia al
   // recargar. Ahora persiste en budgets + budget_categories.
   addBudget: async (budget) => {
     const { appUserId, currentWorkspaceId } = get();
     if (!appUserId || !currentWorkspaceId) throw new Error('No hay un espacio activo.');
 
-    const { data: created, error } = await supabase
-      .from('budgets')
-      .insert({
-        user_id: appUserId,
-        workspace_id: currentWorkspaceId,
-        name: budget.name,
-        period: budget.period,
-        currency_code: (budget.currency_id || 'ars').toUpperCase(),
-      })
-      .select()
-      .single();
-    if (error) throw error;
+    const id = crypto.randomUUID();
+    const lines = (budget.categories || []).filter((c: any) => c.category_id);
+    const local: Budget = {
+      id,
+      name: budget.name,
+      period: budget.period,
+      currency_id: budget.currency_id || 'ars',
+      created_at: nowIso(),
+      categories: lines.map((c: any) => ({
+        category_id: c.category_id,
+        limit_amount: c.limit_amount,
+        spent_amount: 0,
+      })),
+    };
 
-    const lines = (budget.categories || []).filter((c) => c.category_id);
-    if (lines.length) {
-      const { error: lineError } = await supabase.from('budget_categories').insert(
-        lines.map((c) => ({
-          budget_id: created.id,
-          category_id: c.category_id,
-          limit_amount: c.limit_amount,
-        }))
-      );
-      // Sin líneas el presupuesto no significa nada: se deshace para no dejar
-      // un registro a medias.
-      if (lineError) {
-        // No es un borrado del usuario: se deshace algo que acaba de fallar.
-        await supabase.from('budgets').delete().eq('id', created.id);
-        throw lineError;
-      }
-    }
+    optimistic(
+      'budgets',
+      (list) => [...list, local],
+      (list) => list.filter((b: Budget) => b.id !== id),
+      async () => {
+        const { error } = await supabase.from('budgets').insert({
+          id,
+          user_id: appUserId,
+          workspace_id: currentWorkspaceId,
+          name: budget.name,
+          period: budget.period,
+          currency_code: (budget.currency_id || 'ars').toUpperCase(),
+        });
+        if (error) throw error;
 
-    await get().hydrate();
+        if (lines.length) {
+          const { error: lineError } = await supabase.from('budget_categories').insert(
+            lines.map((c: any) => ({
+              budget_id: id,
+              category_id: c.category_id,
+              limit_amount: c.limit_amount,
+            }))
+          );
+          // Sin lineas el presupuesto no significa nada: se deshace para no
+          // dejar un registro a medias. No es un borrado del usuario.
+          if (lineError) {
+            await supabase.from('budgets').delete().eq('id', id);
+            throw lineError;
+          }
+        }
+      },
+      'No se pudo crear el presupuesto.'
+    );
   },
 
   updateBudget: async (id, data) => {
-    const patch: Record<string, unknown> = {};
-    if (data.name !== undefined) patch.name = data.name;
-    if (data.period !== undefined) patch.period = data.period;
-    if (data.currency_id !== undefined) patch.currency_code = data.currency_id.toUpperCase();
+    const before = get().budgets.find((b) => b.id === id);
+    if (!before) return;
 
-    if (Object.keys(patch).length) {
-      const { error } = await supabase.from('budgets').update(patch).eq('id', id);
-      if (error) throw error;
-    }
+    optimistic(
+      'budgets',
+      (list) =>
+        list.map((b: Budget) =>
+          b.id === id
+            ? {
+                ...b,
+                ...data,
+                categories: data.categories
+                  ? data.categories.map((c: any) => ({ ...c, spent_amount: 0 }))
+                  : b.categories,
+              }
+            : b
+        ),
+      (list) => list.map((b: Budget) => (b.id === id ? before : b)),
+      async () => {
+        const patch: Record<string, unknown> = {};
+        if (data.name !== undefined) patch.name = data.name;
+        if (data.period !== undefined) patch.period = data.period;
+        if (data.currency_id !== undefined) patch.currency_code = data.currency_id.toUpperCase();
 
-    if (data.categories) {
-      // Reemplazo completo: es más simple y predecible que diferenciar altas,
-      // bajas y cambios de una lista corta.
-      // Tampoco es un borrado del usuario: se reemplazan las líneas hijas del
-      // presupuesto, que no tienen identidad propia fuera de él.
-      const { error: delError } = await supabase.from('budget_categories').delete().eq('budget_id', id);
-      if (delError) throw delError;
+        if (Object.keys(patch).length) {
+          const { error } = await supabase.from('budgets').update(patch).eq('id', id);
+          if (error) throw error;
+        }
 
-      const lines = data.categories.filter((c) => c.category_id);
-      if (lines.length) {
-        const { error: insError } = await supabase.from('budget_categories').insert(
-          lines.map((c) => ({ budget_id: id, category_id: c.category_id, limit_amount: c.limit_amount }))
-        );
-        if (insError) throw insError;
-      }
-    }
+        if (data.categories) {
+          // Reemplazo completo: es mas simple y predecible que diferenciar
+          // altas, bajas y cambios de una lista corta. Tampoco es un borrado
+          // del usuario: son lineas hijas sin identidad propia fuera del
+          // presupuesto.
+          const { error: delError } = await supabase
+            .from('budget_categories')
+            .delete()
+            .eq('budget_id', id);
+          if (delError) throw delError;
 
-    await get().hydrate();
+          const lines = data.categories.filter((c: any) => c.category_id);
+          if (lines.length) {
+            const { error: insError } = await supabase.from('budget_categories').insert(
+              lines.map((c: any) => ({
+                budget_id: id,
+                category_id: c.category_id,
+                limit_amount: c.limit_amount,
+              }))
+            );
+            if (insError) throw insError;
+          }
+        }
+      },
+      'No se pudo guardar el presupuesto.'
+    );
   },
 
   removeBudget: async (id) => {
-    // budget_categories cae por ON DELETE CASCADE.
-    const { error } = await supabase.from('budgets').update({ deleted_at: nowIso() }).eq('id', id);
-    if (error) throw error;
-    set((state) => ({ budgets: state.budgets.filter((b) => b.id !== id) }));
+    const before = get().budgets.find((b) => b.id === id);
+    if (!before) return;
+
+    optimistic(
+      'budgets',
+      (list) => list.filter((b: Budget) => b.id !== id),
+      (list) => [...list, before],
+      async () => {
+        const { error } = await supabase.from('budgets').update({ deleted_at: nowIso() }).eq('id', id);
+        if (error) throw error;
+      },
+      'No se pudo eliminar el presupuesto.'
+    );
   },
 
   setPrimaryCurrency: (id) => set({ primaryCurrencyId: id }),

@@ -16,7 +16,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase/client';
 import { Trash2 } from 'lucide-react';
 
 export function DebtForm() {
@@ -25,7 +24,9 @@ export function DebtForm() {
   const closeSheet = useUIStore((s) => s.closeSheet);
 
   const currencies = useFinanceStore((s) => s.currencies);
-  const user = useFinanceStore((s) => s.user);
+  const addDebt = useFinanceStore((s) => s.addDebt);
+  const updateDebt = useFinanceStore((s) => s.updateDebt);
+  const removeDebt = useFinanceStore((s) => s.removeDebt);
 
   const isEdit = activeSheet === 'edit-debt';
   const isOpen = activeSheet === 'new-debt' || isEdit;
@@ -34,7 +35,6 @@ export function DebtForm() {
   const [description, setDescription] = useState('');
   const [currencyCode, setCurrencyCode] = useState('ARS');
   const [totalAmount, setTotalAmount] = useState('');
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dialog = useGlobalDialog();
 
@@ -58,90 +58,34 @@ export function DebtForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !totalAmount) return;
-    setLoading(true);
 
+    const payload = {
+      name,
+      description,
+      total_amount: Number(totalAmount),
+      currency_code: currencyCode,
+    };
+
+    // Las escrituras del store son optimistas: vuelven apenas aplican el cambio
+    // en memoria, asi que el modal cierra sin esperar a la red. Si el servidor
+    // rechaza algo, el store lo deshace y avisa.
     try {
-        const { data: userData } = await supabase.from('users').select('id').eq('auth_id', user?.id).single();
-        if (!userData) throw new Error("Usario no encontrado.");
-
-        if (isEdit) {
-            const d = sheetData?.debt as any;
-            
-            // 1. Update Category Name
-            await supabase.from('categories').update({ name }).eq('id', d.category_id);
-            
-            // 2. Update Debt Info
-            await supabase.from('debts').update({
-                total_amount: Number(totalAmount),
-                currency_code: currencyCode,
-                description
-            }).eq('id', d.id);
-            
-        } else {
-            // Find Deudas group
-            const { data: groupData } = await supabase.from('category_groups')
-                 .select('id')
-                 .eq('name', 'Deudas')
-                 .is('is_system', true)
-                 .single();
-                 
-            if (!groupData) throw new Error("No se encontro el grupo de Deudas del sistema.");
-
-            const workspaceId = useFinanceStore.getState().currentWorkspaceId;
-            const wsPatch = workspaceId ? { workspace_id: workspaceId } : {};
-
-            // 1. Create Category
-            const { data: newCat } = await supabase.from('categories').insert({
-                user_id: userData.id,
-                ...wsPatch,
-                name,
-                group_id: groupData.id,
-                type: 'expense' // Debts are generally expenses to pay off
-            }).select().single();
-
-            if (!newCat) throw new Error("Error creando categoría de la deuda.");
-
-            // 2. Create Debt
-            await supabase.from('debts').insert({
-                user_id: userData.id,
-                ...wsPatch,
-                category_id: newCat.id,
-                total_amount: Number(totalAmount),
-                currency_code: currencyCode,
-                description
-            });
-        }
-        
-        await useFinanceStore.getState().hydrate();
-        closeSheet();
+      if (isEdit) await updateDebt((sheetData?.debt as any).id, payload);
+      else await addDebt(payload);
+      closeSheet();
     } catch (err: any) {
-        console.error("Error saving debt:", err);
-        setError(err?.message || 'No se pudo guardar la deuda.');
-    } finally {
-        setLoading(false);
+      setError(err?.message || 'No se pudo guardar la deuda.');
     }
   };
 
   const handleDelete = async () => {
-    const ok = await dialog.confirm('Eliminar deuda', 'Se elimina la deuda y su categoría, pero no los movimientos de pago ya registrados. No se puede deshacer.');
+    const ok = await dialog.confirm(
+      'Eliminar deuda',
+      'Se elimina la deuda y su categoría, pero no los movimientos de pago ya registrados.'
+    );
     if (!ok) return;
-    setLoading(true);
-    try {
-        const d = sheetData?.debt as any;
-        // Antes se borraba la categoría y el CASCADE se llevaba la deuda. Ahora
-        // es lógico en las dos, así que hay que marcar ambas explícitamente.
-        const stamp = new Date().toISOString();
-        const { error: e1 } = await supabase.from('debts').update({ deleted_at: stamp }).eq('id', d.id);
-        if (e1) throw e1;
-        const { error: e2 } = await supabase.from('categories').update({ deleted_at: stamp }).eq('id', d.category_id);
-        if (e2) throw e2;
-        await useFinanceStore.getState().hydrate();
-        closeSheet();
-    } catch (e) {
-        console.error("Error deleting", e);
-    } finally {
-        setLoading(false);
-    }
+    await removeDebt((sheetData?.debt as any).id);
+    closeSheet();
   };
 
   return (
@@ -214,17 +158,17 @@ export function DebtForm() {
         <ResponsiveModalFooter>
           <div className="flex items-center justify-between">
             {isEdit ? (
-                <Button type="button" variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10" onClick={handleDelete} disabled={loading}>
+                <Button type="button" variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10" onClick={handleDelete}>
                    <Trash2 className="size-4" />
                 </Button>
             ) : <div/>}
 
             <div className="flex gap-2">
-                <Button type="button" variant="outline" className="w-full" onClick={closeSheet} disabled={loading}>
+                <Button type="button" variant="outline" className="w-full" onClick={closeSheet}>
                 Cancelar
                 </Button>
-                <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Guardando...' : (isEdit ? 'Actualizar' : 'Crear')}
+                <Button type="submit" className="w-full">
+                {isEdit ? 'Actualizar' : 'Crear'}
                 </Button>
             </div>
           </div>

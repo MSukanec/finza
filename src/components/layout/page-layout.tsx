@@ -27,6 +27,14 @@ interface PageLayoutProps {
  * El header mide siempre lo mismo (56px) y tiene UNA fila. Todo control
  * —botones, filtros, buscador, selectores de rango— va en `actions`, alineado a
  * la derecha. El body es solo contenido: sin botoneras ni barras de filtros.
+ *
+ * REGLA de ancho: nada acá adentro puede ensanchar la página. El contenedor de
+ * `actions` NO lleva `shrink-0`; si no entra, algo dentro tiene que ceder
+ * (esconderse en un breakpoint más alto, o encogerse). Cuando llevaba
+ * `shrink-0`, su ancho máximo pasaba a ser el mínimo de toda la página: entre
+ * 1024px y ~1250px los filtros de Movimientos no entraban, la página crecía
+ * más que la pantalla y el botón de la derecha quedaba recortado fuera de la
+ * vista. Se leía como "desapareció el botón Nuevo".
  */
 export function PageLayout({
   title,
@@ -38,7 +46,7 @@ export function PageLayout({
   className,
 }: PageLayoutProps) {
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
       <header className="shrink-0 border-b border-border/60 bg-background">
         <div className="flex h-14 items-center gap-3 px-4 md:px-6">
           {Icon && (
@@ -47,20 +55,24 @@ export function PageLayout({
             </span>
           )}
 
-          <div className="flex min-w-0 items-baseline gap-2.5">
+          {/* El título cede el espacio primero: se trunca para que los
+              controles de la derecha entren siempre enteros. */}
+          <div className="flex min-w-0 flex-1 items-baseline gap-2.5">
             <h1 className="truncate text-base font-semibold tracking-tight">{title}</h1>
             {description && (
               <p className="hidden truncate text-sm text-muted-foreground lg:block">{description}</p>
             )}
           </div>
 
-          {actions && <div className="ml-auto flex shrink-0 items-center gap-2">{actions}</div>}
+          {actions && <div className="flex min-w-0 items-center gap-2">{actions}</div>}
         </div>
       </header>
 
       <div
         className={cn(
-          'custom-scrollbar min-h-0 flex-1 overflow-y-auto',
+          // `overflow-x-hidden` es la red de contención: ningún contenido del
+          // body puede sacar una barra horizontal ni ensanchar la página.
+          'custom-scrollbar min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden',
           // Separación por defecto entre los bloques del body. Ninguna vista
           // debería declarar su propio gap: si dos tarjetas quedan pegadas, es
           // porque alguien envolvió el contenido en un div y rompió el ritmo.

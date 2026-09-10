@@ -122,22 +122,28 @@ export function TransactionsImportView() {
 
   const accounts = useFinanceStore(s => s.accounts);
   const categories = useFinanceStore(s => s.categories);
+  const currentWorkspaceId = useFinanceStore(s => s.currentWorkspaceId);
 
   const addLog = (msg: string) => setLogs(prev => [...prev, msg]);
 
   const fetchBatches = async () => {
+     // Sin este filtro la consulta trae los lotes de todos los espacios donde el
+     // usuario es miembro: RLS acota por membresía, no por espacio activo.
+     if (!currentWorkspaceId) { setBatches([]); return; }
+
      let allData: any[] = [];
      let hasMore = true;
      let page = 0;
      const PAGE_SIZE = 1000;
-     
+
      while (hasMore) {
        const { data } = await supabase.from('transactions')
            .select('import_batch')
+           .eq('workspace_id', currentWorkspaceId)
            .not('import_batch', 'is', null)
            .is('deleted_at', null)
            .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-       
+
        if (!data || data.length === 0) break;
        allData = allData.concat(data);
        if (data.length < PAGE_SIZE) break;
@@ -162,9 +168,11 @@ export function TransactionsImportView() {
      }
   };
 
+  // Depende del espacio: al cambiar de espacio la lista tiene que rehacerse, no
+  // quedar mostrando los lotes del anterior.
   useEffect(() => {
     fetchBatches();
-  }, []);
+  }, [currentWorkspaceId]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -328,7 +336,9 @@ export function TransactionsImportView() {
       // 3. Build Transactions
       const transactionsToInsert = [];
       const pendingTransfers: any[] = [];
-      const importBatchId = `batch_${Date.now()}`;
+      // El timestamp mantiene el orden en la lista; el sufijo evita que dos
+      // importaciones del mismo milisegundo compartan id.
+      const importBatchId = `batch_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
 
       for (const row of parsedRows) {
         if (!row.TIPO || !row.TOTAL) continue;

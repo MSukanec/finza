@@ -74,8 +74,11 @@ export function TransactionFilters({
 
   return (
     /* Una sola fila: vive en el header de la página, no en el body. */
-    <div className="flex items-center gap-2">
-      <div className="hidden h-9 shrink-0 items-center gap-0.5 rounded-lg bg-muted p-0.5 lg:inline-flex">
+    <div className="flex min-w-0 items-center gap-2">
+      {/* Antes aparecían en `lg`, pero entre 1024 y ~1250px no entraban junto
+          al buscador y al botón "Nuevo": el header se pasaba de ancho. Debajo
+          de `xl` el tipo se elige desde el popover de filtros. */}
+      <div className="hidden h-9 shrink-0 items-center gap-0.5 rounded-lg bg-muted p-0.5 xl:inline-flex">
         {TABS.map((tab) => {
           const active = filterType === tab.value;
           return (
@@ -97,8 +100,10 @@ export function TransactionFilters({
         })}
       </div>
 
-      <div className="flex items-center gap-2">
-        <div className="relative w-36 sm:w-52">
+      <div className="flex min-w-0 items-center gap-2">
+        {/* El buscador es lo único elástico de la fila: se encoge hasta 7rem
+            para que los botones nunca se recorten ni empujen el ancho. */}
+        <div className="relative w-36 min-w-[7rem] shrink sm:w-52">
           <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Buscar movimiento…"
@@ -151,7 +156,7 @@ export function TransactionFilters({
               )}
             </div>
 
-            <div className="space-y-1.5 lg:hidden">
+            <div className="space-y-1.5 xl:hidden">
               <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                 <SlidersHorizontal className="size-3.5" />
                 Tipo

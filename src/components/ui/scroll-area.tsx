@@ -23,6 +23,10 @@ function ScrollArea({
         {children}
       </ScrollAreaPrimitive.Viewport>
       <ScrollBar />
+      {/* La tabla de recurrentes mide 840px fijos: sin barra horizontal el
+          contenido que sobra solo se alcanza con la rueda del trackpad. Base UI
+          la oculta sola cuando no hay nada que scrollear. */}
+      <ScrollBar orientation="horizontal" />
       <ScrollAreaPrimitive.Corner />
     </ScrollAreaPrimitive.Root>
   )
