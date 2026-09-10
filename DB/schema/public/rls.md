@@ -1,9 +1,9 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T17:13:34.087Z
+> Generated: 2026-09-10T17:29:43.542Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] RLS Policies (43)
+## [PUBLIC] RLS Policies (46)
 
 ### `activity_log` (1 policies)
 
@@ -191,6 +191,39 @@ is_workspace_member(workspace_id)
 ```
 
 #### debts_update
+
+- **Command**: UPDATE | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_member(workspace_id)
+```
+- **WITH CHECK**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+### `import_batches` (3 policies)
+
+#### import_batches_insert
+
+- **Command**: INSERT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **WITH CHECK**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+#### import_batches_select
+
+- **Command**: SELECT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+#### import_batches_update
 
 - **Command**: UPDATE | **Permissive**: PERMISSIVE
 - **Roles**: {authenticated}

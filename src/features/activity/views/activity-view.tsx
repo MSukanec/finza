@@ -8,7 +8,7 @@ import { Picker } from '@/components/ui/picker';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { useFinanceStore } from '@/stores/finance-store';
 import { cn } from '@/lib/utils';
-import type { ActivityEntry } from '@/lib/types';
+import type { ActivityEntry, Person } from '@/lib/types';
 
 const ACTION_META = {
   insert: { icon: Plus, label: 'Creó', chip: 'bg-income/10 text-income' },
@@ -172,9 +172,19 @@ export function ActivityView() {
   );
 }
 
-function Entry({ entry, person }: { entry: ActivityEntry; person?: any }) {
+function Entry({ entry, person }: { entry: ActivityEntry; person?: Person }) {
   const meta = ACTION_META[entry.action];
   const Icon = meta.icon;
+
+  /**
+   * "Sistema" decía dos cosas distintas y eso escondía el problema: una acción
+   * que de verdad no hizo nadie (una migración, un disparador de la base) y
+   * una persona que la app no supo resolver. Ahora sólo lo primero se llama
+   * Sistema; lo segundo se dice como lo que es.
+   */
+  const autor = entry.user_id
+    ? (person?.full_name || person?.email || 'Alguien que ya no podemos identificar')
+    : 'Sistema';
 
   const changes = Object.entries(entry.changes ?? {}).filter(([k]) => !HIDDEN_FIELDS.has(k));
 
@@ -194,7 +204,10 @@ function Entry({ entry, person }: { entry: ActivityEntry; person?: any }) {
 
       <div className="min-w-0 flex-1">
         <p className="text-sm leading-snug">
-          <span className="font-medium">{person?.full_name || person?.email || 'Sistema'}</span>{' '}
+          <span className="font-medium">{autor}</span>{' '}
+          {person && person.es_miembro === false && (
+            <span className="text-xs text-muted-foreground">(ya no está en el espacio)</span>
+          )}{' '}
           <span className="text-muted-foreground">{lowerFirst(entry.summary)}</span>
         </p>
 

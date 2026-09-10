@@ -345,9 +345,12 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
 
     // Autores del espacio: sin esto el historial y los movimientos mostrarían
     // ids sueltos, porque la política de `users` deja ver sólo la fila propia.
-    let people: Record<string, Person> = {};
+    const people: Record<string, Person> = {};
     if (currentWorkspaceId) {
-      const { data: peopleData } = await supabase.rpc('list_workspace_people', { ws: currentWorkspaceId });
+      // `activity_authors` y no `list_workspace_people`: incluye a quien haya
+      // hecho algo aunque hoy ya no sea miembro. Si no, al sacar a alguien del
+      // espacio todo su historial pasaría a decir "Sistema".
+      const { data: peopleData } = await supabase.rpc('activity_authors', { ws: currentWorkspaceId });
       for (const p of peopleData || []) people[p.id] = p as Person;
     }
 
@@ -376,7 +379,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         .is('deleted_at', null)
         .order('created_at', { ascending: true }) as any
     );
-    let accounts = (walletsRes.data || []).map((w: any) => ({
+    const accounts = (walletsRes.data || []).map((w: any) => ({
       id: w.id,
       name: w.name,
       type: w.type,
@@ -461,6 +464,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         period_month: t.period_month,
         invoiced_at: t.invoiced_at,
         import_batch: t.import_batch,
+        import_batch_id: t.import_batch_id ?? null,
         is_checkpoint: t.is_checkpoint,
         status: t.status || 'draft',
         created_at: t.created_at
@@ -549,6 +553,20 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   },
 
   loadActivity: async (workspaceId: string, limit = 200) => {
+    // Los autores se releen acá: `people` se cargó al iniciar sesión, y un
+    // socio que entró después aparecería sin nombre hasta recargar la app.
+    // Fue exactamente lo que pasó con el primer socio invitado.
+    supabase
+      .rpc('activity_authors', { ws: workspaceId })
+      .then(({ data: gente }) => {
+        if (!gente?.length) return;
+        set((st) => {
+          const people = { ...st.people };
+          for (const p of gente) people[p.id] = p as Person;
+          return { people };
+        });
+      });
+
     const { data, error } = await supabase
       .from('activity_log')
       .select('id,user_id,action,entity,entity_id,summary,changes,created_at')
@@ -896,27 +914,36 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     );
   },
 
-  revertImportBatch: async (batchId) => {
+  revertImportBatch: async (loteId) => {
     const { currentWorkspaceId } = get();
     if (!currentWorkspaceId) throw new Error('No hay un espacio activo.');
 
-    const removed = get().transactions.filter((t) => t.import_batch === batchId);
+    const removed = get().transactions.filter((t) => t.import_batch_id === loteId);
 
     optimistic(
       'transactions',
-      (list) => list.filter((t: Transaction) => t.import_batch !== batchId),
+      (list) => list.filter((t: Transaction) => t.import_batch_id !== loteId),
       (list) => byDateDesc([...removed, ...list]),
       async () => {
-        // El id de lote es `batch_<timestamp>`, no un uuid: dos espacios pueden
-        // generar el mismo si importan en el mismo milisegundo. Acotar al
-        // espacio activo hace que deshacer una importación nunca alcance a otro.
+        // El lote se identifica por `import_batch_id` (uuid de import_batches) y
+        // no por la cadena vieja `import_batch`, que no era única entre espacios:
+        // dos espacios que importaban en el mismo milisegundo generaban la misma.
+        // Igual se acota al espacio activo, que es barato y cierra el tema.
         const { error } = await supabase
           .from('transactions')
           .update({ deleted_at: nowIso() })
           .eq('workspace_id', currentWorkspaceId)
-          .eq('import_batch', batchId)
+          .eq('import_batch_id', loteId)
           .is('deleted_at', null);
         if (error) throw error;
+
+        // El lote queda, marcado: sirve para saber que esa importación existió
+        // y se deshizo, en vez de desaparecer sin dejar rastro.
+        await supabase
+          .from('import_batches')
+          .update({ reverted_at: nowIso() })
+          .eq('id', loteId)
+          .eq('workspace_id', currentWorkspaceId);
       },
       'No se pudo deshacer la importación.'
     );

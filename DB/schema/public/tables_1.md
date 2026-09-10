@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T17:13:34.087Z
+> Generated: 2026-09-10T17:29:43.542Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -85,6 +85,23 @@
 | workspace_id | uuid | ✗ |  | FK → workspaces.id |
 | deleted_at | timestamptz | ✓ |  |  |
 
+### `import_batches`
+
+| Column | Type | Nullable | Default | Constraints |
+|--------|------|----------|---------|-------------|
+| id | uuid | ✗ | gen_random_uuid() | PK |
+| workspace_id | uuid | ✗ |  | FK → workspaces.id |
+| user_id | uuid | ✗ |  | FK → users.id |
+| source | text | ✗ | 'planilla'::text |  |
+| file_name | text | ✓ |  |  |
+| encoding | text | ✓ |  |  |
+| delimiter | text | ✓ |  |  |
+| rows_read | int4 | ✗ | 0 |  |
+| rows_imported | int4 | ✗ | 0 |  |
+| rows_skipped | int4 | ✗ | 0 |  |
+| created_at | timestamptz | ✗ | now() |  |
+| reverted_at | timestamptz | ✓ |  |  |
+
 ### `partners`
 
 | Column | Type | Nullable | Default | Constraints |
@@ -125,6 +142,8 @@
 | period_month | varchar(7) | ✓ |  |  |
 | workspace_id | uuid | ✗ |  | FK → workspaces.id |
 | partner_id | uuid | ✓ |  | FK → partners.id |
+| fingerprint | text | ✓ |  |  |
+| import_batch_id | uuid | ✓ |  | FK → import_batches.id |
 
 ### `users`
 

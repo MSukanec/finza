@@ -1,9 +1,56 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T17:13:34.087Z
+> Generated: 2026-09-10T17:29:43.542Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Functions (chunk 1: clone_workspace — wallet_expected_balance)
+## [PUBLIC] Functions (chunk 1: activity_authors — transaction_fingerprint)
+
+### `activity_authors(ws uuid)` 🔐
+
+- **Returns**: TABLE(id uuid, full_name text, email text, avatar_url text, es_miembro boolean)
+- **Kind**: function | STABLE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.activity_authors(ws uuid)
+ RETURNS TABLE(id uuid, full_name text, email text, avatar_url text, es_miembro boolean)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+    IF NOT public.is_workspace_member(ws) THEN
+        RAISE EXCEPTION 'No sos miembro de este espacio';
+    END IF;
+
+    RETURN QUERY
+    SELECT u.id,
+           u.full_name,
+           u.email,
+           u.avatar_url,
+           EXISTS (
+               SELECT 1 FROM public.workspace_members m
+                WHERE m.workspace_id = ws AND m.user_id = u.id
+           )
+      FROM public.users u
+     WHERE u.id IN (
+        -- Quien figure en el historial...
+        SELECT a.user_id FROM public.activity_log a
+         WHERE a.workspace_id = ws AND a.user_id IS NOT NULL
+        UNION
+        -- ...y quien haya cargado un movimiento, para los avatares de la lista.
+        SELECT t.user_id FROM public.transactions t
+         WHERE t.workspace_id = ws AND t.user_id IS NOT NULL
+        UNION
+        -- ...más los miembros actuales, aunque todavía no hayan hecho nada.
+        SELECT m.user_id FROM public.workspace_members m
+         WHERE m.workspace_id = ws
+     );
+END;
+$function$
+```
+</details>
 
 ### `clone_workspace(source_ws uuid, new_name text)`
 
@@ -484,6 +531,31 @@ $function$
 ```
 </details>
 
+### `normalizar_texto(t text)`
+
+- **Returns**: text
+- **Kind**: function | IMMUTABLE | SECURITY INVOKER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.normalizar_texto(t text)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE PARALLEL SAFE
+AS $function$
+    SELECT btrim(regexp_replace(
+        translate(
+            lower(coalesce(t, '')),
+            'áàäâãéèëêíìïîóòöôõúùüûñç' || chr(65279),
+            'aaaaaeeeeiiiiooooouuuunc'
+        ),
+        '\s+', ' ', 'g'
+    ))
+$function$
+```
+</details>
+
 ### `partner_positions(ws uuid)` 🔐
 
 - **Returns**: TABLE(id uuid, name text, user_id uuid, ownership_pct numeric, aportes numeric, retiros numeric, saldo numeric, retiros_pct numeric, ultimo_mov timestamp with time zone)
@@ -650,44 +722,48 @@ $function$
 ```
 </details>
 
-### `wallet_expected_balance(w uuid, at_time timestamp with time zone DEFAULT now())` 🔐
+### `set_transaction_fingerprint()`
 
-- **Returns**: numeric
-- **Kind**: function | STABLE | SECURITY DEFINER
+- **Returns**: trigger
+- **Kind**: function | VOLATILE | SECURITY INVOKER
 
 <details><summary>Source</summary>
 
 ```sql
-CREATE OR REPLACE FUNCTION public.wallet_expected_balance(w uuid, at_time timestamp with time zone DEFAULT now())
- RETURNS numeric
+CREATE OR REPLACE FUNCTION public.set_transaction_fingerprint()
+ RETURNS trigger
  LANGUAGE plpgsql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
 AS $function$
-DECLARE
-    v_ws  uuid;
-    v_bal numeric;
 BEGIN
-    SELECT workspace_id INTO v_ws FROM public.wallets WHERE id = w;
-
-    -- Mismo mensaje para "no existe" y "no sos miembro": distinguirlos
-    -- convertiría la función en un detector de billeteras ajenas.
-    IF v_ws IS NULL OR NOT public.is_workspace_member(v_ws) THEN
-        RAISE EXCEPTION 'La billetera no existe o no tenés acceso';
-    END IF;
-
-    SELECT COALESCE((SELECT initial_balance FROM public.wallets WHERE id = w), 0)
-         + COALESCE((
-             SELECT SUM(CASE WHEN t.type = 'income' THEN t.amount ELSE -t.amount END)
-               FROM public.transactions t
-              WHERE t.wallet_id = w
-                AND t.deleted_at IS NULL
-                AND t.date <= at_time
-           ), 0)
-      INTO v_bal;
-
-    RETURN v_bal;
+    NEW.fingerprint := public.transaction_fingerprint(
+        NEW.wallet_id, NEW.date, NEW.amount, NEW.type::text, NEW.description
+    );
+    RETURN NEW;
 END;
+$function$
+```
+</details>
+
+### `transaction_fingerprint(p_wallet uuid, p_date timestamp with time zone, p_amount numeric, p_type text, p_description text)`
+
+- **Returns**: text
+- **Kind**: function | IMMUTABLE | SECURITY INVOKER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.transaction_fingerprint(p_wallet uuid, p_date timestamp with time zone, p_amount numeric, p_type text, p_description text)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE PARALLEL SAFE
+AS $function$
+    SELECT concat_ws('|',
+        to_char(p_date AT TIME ZONE 'UTC', 'YYYY-MM-DD'),
+        to_char(abs(p_amount), 'FM9999999999990.00'),
+        coalesce(p_wallet::text, ''),
+        p_type,
+        public.normalizar_texto(p_description)
+    )
 $function$
 ```
 </details>

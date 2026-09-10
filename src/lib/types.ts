@@ -76,6 +76,13 @@ export interface Person {
   full_name: string | null;
   email: string;
   avatar_url: string | null;
+  /**
+   * Si hoy sigue perteneciendo al espacio.
+   *
+   * El historial guarda lo que pasó, y que alguien se vaya no cambia quién
+   * hizo qué: se lo sigue mostrando con su nombre, aclarando que ya no está.
+   */
+  es_miembro?: boolean;
 }
 
 /**
@@ -164,6 +171,8 @@ export interface Transaction {
   period_month?: string;
   invoiced_at?: string;
   import_batch?: string;
+  /** Lote de importación al que pertenece (tabla `import_batches`). */
+  import_batch_id?: string | null;
   is_checkpoint?: boolean;
   deleted_at?: string;
   created_at: string;
