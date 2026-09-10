@@ -1,78 +1,248 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-04-08T15:29:43.752Z
+> Generated: 2026-09-10T14:41:35.436Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] RLS Policies (11)
+## [PUBLIC] RLS Policies (40)
 
-### `categories` (3 policies)
+### `activity_log` (1 policies)
 
-#### USERS INSERT OWN_CATEGORIES
-
-- **Command**: INSERT | **Permissive**: PERMISSIVE
-- **Roles**: {public}
-- **WITH CHECK**:
-```sql
-(user_id = ( SELECT users.id
-   FROM users
-  WHERE (users.auth_id = auth.uid())))
-```
-
-#### USERS SELECT OWN_CATEGORIES
+#### activity_log_select
 
 - **Command**: SELECT | **Permissive**: PERMISSIVE
-- **Roles**: {public}
+- **Roles**: {authenticated}
 - **USING**:
 ```sql
-(user_id = ( SELECT users.id
-   FROM users
-  WHERE (users.auth_id = auth.uid())))
+is_workspace_member(workspace_id)
 ```
 
-#### USERS UPDATE OWN_CATEGORIES
+### `budget_categories` (1 policies)
 
-- **Command**: UPDATE | **Permissive**: PERMISSIVE
-- **Roles**: {public}
+#### budget_categories_all
+
+- **Command**: ALL | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
 - **USING**:
 ```sql
-(user_id = ( SELECT users.id
-   FROM users
-  WHERE (users.auth_id = auth.uid())))
+(EXISTS ( SELECT 1
+   FROM budgets b
+  WHERE ((b.id = budget_categories.budget_id) AND is_workspace_member(b.workspace_id))))
 ```
-
-### `transactions` (3 policies)
-
-#### USERS INSERT OWN_TRANSACTIONS
-
-- **Command**: INSERT | **Permissive**: PERMISSIVE
-- **Roles**: {public}
 - **WITH CHECK**:
 ```sql
-(user_id = ( SELECT users.id
-   FROM users
-  WHERE (users.auth_id = auth.uid())))
+(EXISTS ( SELECT 1
+   FROM budgets b
+  WHERE ((b.id = budget_categories.budget_id) AND is_workspace_member(b.workspace_id))))
 ```
 
-#### USERS SELECT OWN_TRANSACTIONS
+### `budgets` (4 policies)
+
+#### budgets_delete
+
+- **Command**: DELETE | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+#### budgets_insert
+
+- **Command**: INSERT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **WITH CHECK**:
+```sql
+(is_workspace_member(workspace_id) AND (user_id = current_user_id()))
+```
+
+#### budgets_select
 
 - **Command**: SELECT | **Permissive**: PERMISSIVE
-- **Roles**: {public}
+- **Roles**: {authenticated}
 - **USING**:
 ```sql
-(user_id = ( SELECT users.id
-   FROM users
-  WHERE (users.auth_id = auth.uid())))
+is_workspace_member(workspace_id)
 ```
 
-#### USERS UPDATE OWN_TRANSACTIONS
+#### budgets_update
 
 - **Command**: UPDATE | **Permissive**: PERMISSIVE
-- **Roles**: {public}
+- **Roles**: {authenticated}
 - **USING**:
 ```sql
-(user_id = ( SELECT users.id
-   FROM users
-  WHERE (users.auth_id = auth.uid())))
+is_workspace_member(workspace_id)
+```
+- **WITH CHECK**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+### `categories` (4 policies)
+
+#### categories_delete
+
+- **Command**: DELETE | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+#### categories_insert
+
+- **Command**: INSERT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **WITH CHECK**:
+```sql
+(is_workspace_member(workspace_id) AND (user_id = current_user_id()))
+```
+
+#### categories_select
+
+- **Command**: SELECT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+#### categories_update
+
+- **Command**: UPDATE | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_member(workspace_id)
+```
+- **WITH CHECK**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+### `category_groups` (4 policies)
+
+#### category_groups_delete
+
+- **Command**: DELETE | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+(is_workspace_member(workspace_id) AND (NOT COALESCE(is_system, false)))
+```
+
+#### category_groups_insert
+
+- **Command**: INSERT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **WITH CHECK**:
+```sql
+(is_workspace_member(workspace_id) AND (user_id = current_user_id()))
+```
+
+#### category_groups_select
+
+- **Command**: SELECT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+((workspace_id IS NULL) OR is_workspace_member(workspace_id))
+```
+
+#### category_groups_update
+
+- **Command**: UPDATE | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+(is_workspace_member(workspace_id) AND (NOT COALESCE(is_system, false)))
+```
+- **WITH CHECK**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+### `debts` (4 policies)
+
+#### debts_delete
+
+- **Command**: DELETE | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+#### debts_insert
+
+- **Command**: INSERT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **WITH CHECK**:
+```sql
+(is_workspace_member(workspace_id) AND (user_id = current_user_id()))
+```
+
+#### debts_select
+
+- **Command**: SELECT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+#### debts_update
+
+- **Command**: UPDATE | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_member(workspace_id)
+```
+- **WITH CHECK**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+### `transactions` (4 policies)
+
+#### transactions_delete
+
+- **Command**: DELETE | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+#### transactions_insert
+
+- **Command**: INSERT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **WITH CHECK**:
+```sql
+(is_workspace_member(workspace_id) AND (user_id = current_user_id()))
+```
+
+#### transactions_select
+
+- **Command**: SELECT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+#### transactions_update
+
+- **Command**: UPDATE | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_member(workspace_id)
+```
+- **WITH CHECK**:
+```sql
+is_workspace_member(workspace_id)
 ```
 
 ### `users` (2 policies)
@@ -95,37 +265,176 @@
 (auth_id = auth.uid())
 ```
 
-### `wallets` (3 policies)
+### `wallet_reconciliations` (3 policies)
 
-#### USERS INSERT OWN_WALLETS
+#### reconciliations_insert
 
 - **Command**: INSERT | **Permissive**: PERMISSIVE
-- **Roles**: {public}
+- **Roles**: {authenticated}
 - **WITH CHECK**:
 ```sql
-(user_id = ( SELECT users.id
-   FROM users
-  WHERE (users.auth_id = auth.uid())))
+(is_workspace_member(workspace_id) AND (user_id = current_user_id()))
 ```
 
-#### USERS SELECT OWN_WALLETS
+#### reconciliations_select
 
 - **Command**: SELECT | **Permissive**: PERMISSIVE
-- **Roles**: {public}
+- **Roles**: {authenticated}
 - **USING**:
 ```sql
-(user_id = ( SELECT users.id
-   FROM users
-  WHERE (users.auth_id = auth.uid())))
+is_workspace_member(workspace_id)
 ```
 
-#### USERS UPDATE OWN_WALLETS
+#### reconciliations_update
 
 - **Command**: UPDATE | **Permissive**: PERMISSIVE
-- **Roles**: {public}
+- **Roles**: {authenticated}
 - **USING**:
 ```sql
-(user_id = ( SELECT users.id
-   FROM users
-  WHERE (users.auth_id = auth.uid())))
+is_workspace_member(workspace_id)
+```
+- **WITH CHECK**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+### `wallets` (4 policies)
+
+#### wallets_delete
+
+- **Command**: DELETE | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+#### wallets_insert
+
+- **Command**: INSERT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **WITH CHECK**:
+```sql
+(is_workspace_member(workspace_id) AND (user_id = current_user_id()))
+```
+
+#### wallets_select
+
+- **Command**: SELECT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+#### wallets_update
+
+- **Command**: UPDATE | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_member(workspace_id)
+```
+- **WITH CHECK**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+### `workspace_invitations` (1 policies)
+
+#### invitations_all
+
+- **Command**: ALL | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_owner(workspace_id)
+```
+- **WITH CHECK**:
+```sql
+is_workspace_owner(workspace_id)
+```
+
+### `workspace_members` (4 policies)
+
+#### members_delete
+
+- **Command**: DELETE | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+(is_workspace_owner(workspace_id) OR (user_id = current_user_id()))
+```
+
+#### members_insert
+
+- **Command**: INSERT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **WITH CHECK**:
+```sql
+is_workspace_owner(workspace_id)
+```
+
+#### members_select
+
+- **Command**: SELECT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_member(workspace_id)
+```
+
+#### members_update
+
+- **Command**: UPDATE | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_owner(workspace_id)
+```
+- **WITH CHECK**:
+```sql
+is_workspace_owner(workspace_id)
+```
+
+### `workspaces` (4 policies)
+
+#### workspaces_delete
+
+- **Command**: DELETE | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_owner(id)
+```
+
+#### workspaces_insert
+
+- **Command**: INSERT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **WITH CHECK**:
+```sql
+(user_id = current_user_id())
+```
+
+#### workspaces_select
+
+- **Command**: SELECT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+((user_id = current_user_id()) OR is_workspace_member(id))
+```
+
+#### workspaces_update
+
+- **Command**: UPDATE | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+is_workspace_owner(id)
+```
+- **WITH CHECK**:
+```sql
+is_workspace_owner(id)
 ```

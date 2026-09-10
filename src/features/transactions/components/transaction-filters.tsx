@@ -2,14 +2,12 @@
 
 import type { TransactionType } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { Search, Calendar, Wallet, Filter, Tags, CheckSquare } from 'lucide-react';
+import { Search, Calendar, Wallet, SlidersHorizontal, Tags, Layers, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useFinanceStore } from '@/stores/finance-store';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { buttonVariants } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 
 interface TransactionFiltersProps {
   filterType: TransactionType | 'all';
@@ -28,8 +26,8 @@ interface TransactionFiltersProps {
   onDateToChange: (d: string) => void;
 }
 
-const filterTabs: { value: TransactionType | 'all'; label: string }[] = [
-  { value: 'all', label: 'Todos los tipos' },
+const TABS: { value: TransactionType | 'all'; label: string }[] = [
+  { value: 'all', label: 'Todos' },
   { value: 'income', label: 'Ingresos' },
   { value: 'expense', label: 'Gastos' },
   { value: 'transfer', label: 'Transferencias' },
@@ -49,154 +47,213 @@ export function TransactionFilters({
   dateFrom,
   onDateFromChange,
   dateTo,
-  onDateToChange
+  onDateToChange,
 }: TransactionFiltersProps) {
   const accounts = useFinanceStore((s) => s.accounts);
   const categories = useFinanceStore((s) => s.categories);
   const groups = useFinanceStore((s) => s.categoryGroups);
 
-  // Active filters count for badge
-  let activeFiltersCount = 0;
-  if (filterType !== 'all') activeFiltersCount++;
-  if (filterWalletId !== 'all') activeFiltersCount++;
-  if (filterCategoryId !== 'all') activeFiltersCount++;
-  if (filterGroupId !== 'all') activeFiltersCount++;
-  if (dateFrom) activeFiltersCount++;
-  if (dateTo) activeFiltersCount++;
+  // El tipo no cuenta acá: vive en los chips, a la vista.
+  const advancedCount =
+    (filterWalletId !== 'all' ? 1 : 0) +
+    (filterCategoryId !== 'all' ? 1 : 0) +
+    (filterGroupId !== 'all' ? 1 : 0) +
+    (dateFrom ? 1 : 0) +
+    (dateTo ? 1 : 0);
 
-  const handleClearFilters = () => {
-     onFilterChange('all');
-     onWalletChange('all');
-     onCategoryChange('all');
-     onGroupChange('all');
-     onDateFromChange('');
-     onDateToChange('');
+  const clearAll = () => {
+    onWalletChange('all');
+    onCategoryChange('all');
+    onGroupChange('all');
+    onDateFromChange('');
+    onDateToChange('');
   };
 
-  const filteredCategories = filterGroupId !== 'all' 
-       ? categories.filter(c => c.group_id === filterGroupId) 
-       : categories;
+  const visibleCategories =
+    filterGroupId !== 'all' ? categories.filter((c) => c.group_id === filterGroupId) : categories;
 
   return (
-    <div className="flex items-center gap-2 w-full">
-      {/* Search Input */}
-      <div className="relative flex-1">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar movimiento..."
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="pl-9 h-10 bg-accent/20 border-border/50"
-        />
+    /* Una sola fila: vive en el header de la página, no en el body. */
+    <div className="flex items-center gap-2">
+      <div className="hidden h-9 shrink-0 items-center gap-0.5 rounded-lg bg-muted p-0.5 lg:inline-flex">
+        {TABS.map((tab) => {
+          const active = filterType === tab.value;
+          return (
+            <button
+              key={tab.value}
+              type="button"
+              onClick={() => onFilterChange(tab.value)}
+              aria-pressed={active}
+              className={cn(
+                'flex h-8 shrink-0 items-center rounded-md px-2.5 text-sm transition-colors',
+                active
+                  ? 'bg-card font-medium text-foreground shadow-soft-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Popover Filters */}
-      <Popover>
-        <PopoverTrigger className={buttonVariants({ variant: 'outline', className: 'h-10 gap-2 px-4 shadow-sm relative' })}>
-            <Filter className="w-4 h-4 text-muted-foreground" />
-            <span className="hidden sm:inline font-medium">Filtros</span>
-            {activeFiltersCount > 0 && (
-                <span className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground font-bold shadow-sm">
-                   {activeFiltersCount}
-                </span>
+      <div className="flex items-center gap-2">
+        <div className="relative w-36 sm:w-52">
+          <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Buscar movimiento…"
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="h-9 pl-8 text-sm"
+            aria-label="Buscar movimiento"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => onSearchChange('')}
+              aria-label="Limpiar búsqueda"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-muted-foreground hover:bg-accent"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
+
+        <Popover>
+          <PopoverTrigger
+            aria-label="Filtros avanzados"
+            className={cn(
+              'relative flex h-9 shrink-0 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium transition-colors hover:bg-accent'
             )}
-        </PopoverTrigger>
-        <PopoverContent side="left" align="start" className="w-[340px] p-4 space-y-4 shadow-xl border-border/50">
-           
-           <div className="flex items-center justify-between border-b pb-3">
-              <h4 className="font-semibold text-sm">Filtros Avanzados</h4>
-              {activeFiltersCount > 0 && (
-                  <button onClick={handleClearFilters} className="text-xs text-muted-foreground hover:text-foreground transition-colors font-medium">
-                     Limpiar todo
-                  </button>
+          >
+            <SlidersHorizontal className="size-4 text-muted-foreground" />
+            <span className="hidden sm:inline">Filtros</span>
+            {advancedCount > 0 && (
+              <span className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+                {advancedCount}
+              </span>
+            )}
+          </PopoverTrigger>
+
+          <PopoverContent
+            align="end"
+            className="w-[min(340px,calc(100vw-2rem))] space-y-4 p-4 shadow-soft-md"
+          >
+            <div className="flex items-center justify-between border-b border-border/60 pb-3">
+              <h4 className="text-sm font-semibold">Filtros avanzados</h4>
+              {advancedCount > 0 && (
+                <button
+                  onClick={clearAll}
+                  className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Limpiar
+                </button>
               )}
-           </div>
+            </div>
 
-           <div className="space-y-4">
-              
-              {/* Tipo de Gasto */}
-              <div className="space-y-1.5">
-                 <Label className="text-xs text-muted-foreground font-medium">Tipo de Registro</Label>
-                 <Select value={filterType} onValueChange={(v: any) => onFilterChange(v)}>
-                    <SelectTrigger className="h-9">
-                       <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                       {filterTabs.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                    </SelectContent>
-                 </Select>
-              </div>
+            <div className="space-y-1.5 lg:hidden">
+              <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <SlidersHorizontal className="size-3.5" />
+                Tipo
+              </Label>
+              <Select value={filterType} onValueChange={(v) => v && onFilterChange(v as TransactionType | 'all')}>
+                <SelectTrigger className="h-9">
+                  <SelectValue>{TABS.find((t) => t.value === filterType)?.label}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {TABS.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-              {/* Cuenta/Billetera */}
-              <div className="space-y-1.5">
-                 <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><Wallet className="w-3.5 h-3.5" /> Billetera o Cuenta</Label>
-                 <Select value={filterWalletId} onValueChange={(val) => { if (val) onWalletChange(val); }}>
-                    <SelectTrigger className="h-9">
-                       <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                       <SelectItem value="all">Cualquier cuenta</SelectItem>
-                       {accounts.map(a => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
-                    </SelectContent>
-                 </Select>
-              </div>
+            <Field icon={Wallet} label="Billetera">
+              <Select value={filterWalletId} onValueChange={(v) => v && onWalletChange(v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Cualquiera</SelectItem>
+                  {accounts.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
 
-              {/* Grupo y Categoría */}
-              <div className="space-y-4">
-                 <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><CheckSquare className="w-3.5 h-3.5" /> Grupo</Label>
-                    <Select value={filterGroupId} onValueChange={(val) => { if (val) { onGroupChange(val); onCategoryChange('all'); } }}>
-                       <SelectTrigger className="h-9">
-                          <SelectValue />
-                       </SelectTrigger>
-                       <SelectContent>
-                          <SelectItem value="all">Todos</SelectItem>
-                          {groups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
-                       </SelectContent>
-                    </Select>
-                 </div>
-                 
-                 <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><Tags className="w-3.5 h-3.5" /> Categoría</Label>
-                    <Select value={filterCategoryId} onValueChange={(val) => { if (val) onCategoryChange(val); }}>
-                       <SelectTrigger className="h-9">
-                          <SelectValue />
-                       </SelectTrigger>
-                       <SelectContent>
-                          <SelectItem value="all">Todas</SelectItem>
-                          {filteredCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                       </SelectContent>
-                    </Select>
-                 </div>
-              </div>
+            <Field icon={Layers} label="Grupo">
+              <Select
+                value={filterGroupId}
+                onValueChange={(v) => {
+                  if (!v) return;
+                  onGroupChange(v);
+                  onCategoryChange('all');
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {groups.map((g) => (
+                    <SelectItem key={g.id} value={g.id}>
+                      {g.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
 
-              {/* Rango de Fechas */}
-              <div className="space-y-4">
-                 <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Fecha Desde</Label>
-                    <Input 
-                       type="date" 
-                       value={dateFrom} 
-                       onChange={(e) => onDateFromChange(e.target.value)} 
-                       className="h-9 text-xs" 
-                    />
-                 </div>
-                 <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Fecha Hasta</Label>
-                    <Input 
-                       type="date" 
-                       value={dateTo} 
-                       onChange={(e) => onDateToChange(e.target.value)} 
-                       className="h-9 text-xs" 
-                    />
-                 </div>
-              </div>
+            <Field icon={Tags} label="Categoría">
+              <Select value={filterCategoryId} onValueChange={(v) => v && onCategoryChange(v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  {visibleCategories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
 
-           </div>
-           
-        </PopoverContent>
-      </Popover>
+            <div className="grid grid-cols-2 gap-3">
+              <Field icon={Calendar} label="Desde">
+                <Input type="date" value={dateFrom} onChange={(e) => onDateFromChange(e.target.value)} />
+              </Field>
+              <Field icon={Calendar} label="Hasta">
+                <Input type="date" value={dateTo} onChange={(e) => onDateToChange(e.target.value)} />
+              </Field>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+    </div>
+  );
+}
 
+function Field({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: React.ElementType;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <Icon className="size-3.5" />
+        {label}
+      </Label>
+      {children}
     </div>
   );
 }

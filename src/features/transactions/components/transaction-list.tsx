@@ -2,17 +2,45 @@
 
 import type { Transaction } from '@/lib/types';
 import { useFinanceStore } from '@/stores/finance-store';
-import { formatMoney, getAmountColorClass } from '@/lib/money';
-import { getIcon } from '@/lib/icons';
+import { formatMoney } from '@/lib/money';
 import { cn, parseLocalDate } from '@/lib/utils';
-import { ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Trash2, CheckCircle2, CheckSquare, Flag, AlertTriangle } from 'lucide-react';
-import { useState } from 'react';
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  ArrowLeftRight,
+  Trash2,
+  CheckCircle2,
+  Flag,
+  AlertTriangle,
+  Receipt,
+} from 'lucide-react';
 import { useGlobalDialog } from '@/components/providers/dialog-provider';
+import { UserAvatar, personName } from '@/components/ui/user-avatar';
 
 interface TransactionListProps {
   transactions: Transaction[];
   onEdit?: (tx: Transaction) => void;
 }
+
+const TYPE_ICON = {
+  income: ArrowDownLeft,
+  expense: ArrowUpRight,
+  transfer: ArrowLeftRight,
+} as const;
+
+/** El chip del ícono: neutro y discreto, el color fuerte lo lleva el monto. */
+const TYPE_CHIP = {
+  income: 'bg-income/10 text-income',
+  expense: 'bg-muted text-muted-foreground',
+  transfer: 'bg-transfer/10 text-transfer',
+} as const;
+
+/** Colores semánticos: verde entra, rojo sale. Antes el egreso iba en tinta. */
+const AMOUNT_TONE = {
+  income: 'text-income',
+  expense: 'text-expense',
+  transfer: 'text-transfer',
+} as const;
 
 export function TransactionList({ transactions, onEdit }: TransactionListProps) {
   const accounts = useFinanceStore((s) => s.accounts);
@@ -21,152 +49,203 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
   const removeTransaction = useFinanceStore((s) => s.removeTransaction);
   const toggleCheckpoint = useFinanceStore((s) => s.toggleCheckpoint);
   const toggleTransactionStatus = useFinanceStore((s) => s.toggleTransactionStatus);
-  const [swipedId, setSwipedId] = useState<string | null>(null);
+  const people = useFinanceStore((s) => s.people);
   const dialog = useGlobalDialog();
-
-  const grouped = groupByDate(transactions);
-
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'income': return ArrowDownLeft;
-      case 'expense': return ArrowUpRight;
-      case 'transfer': return ArrowLeftRight;
-      default: return ArrowUpRight;
-    }
-  };
 
   if (transactions.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-accent/50 flex items-center justify-center mb-4">
-          <ArrowLeftRight className="w-8 h-8 text-muted-foreground" />
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div className="flex size-14 items-center justify-center rounded-2xl bg-muted mb-4">
+          <Receipt className="size-6 text-muted-foreground" />
         </div>
-        <p className="text-muted-foreground text-sm">Sin movimientos encontrados</p>
+        <p className="text-sm font-medium">Todavía no hay movimientos</p>
+        <p className="text-sm text-muted-foreground mt-1">Los que cargues van a aparecer acá.</p>
       </div>
     );
   }
 
+  const grouped = groupByDate(transactions);
+
   return (
     <div className="space-y-6">
       {Object.entries(grouped).map(([dateLabel, txs]) => (
-        <div key={dateLabel}>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
-            {dateLabel}
-          </p>
-          <div className="space-y-1">
+        <section key={dateLabel}>
+          <h3 className="text-xs font-medium text-muted-foreground mb-2 px-1">{dateLabel}</h3>
+
+          <div className="space-y-2">
             {txs.map((tx) => {
+              const type = (tx.type in TYPE_ICON ? tx.type : 'expense') as keyof typeof TYPE_ICON;
+              const Icon = TYPE_ICON[type];
               const category = categories.find((c) => c.id === tx.category_id);
               const currency = currencies.find((c) => c.id === tx.currency_id) || currencies[0];
               const account = accounts.find((a) => a.id === tx.account_id);
-              const TypeIcon = getTypeIcon(tx.type);
-              const CategoryIcon = category?.icon ? getIcon(category.icon) : TypeIcon;
+              const author = tx.user_id ? people[tx.user_id] : undefined;
               const isReviewed = tx.status === 'reviewed';
               const isWarning = tx.status === 'warning';
 
-              const getNextStatus = (current: string) => {
-                if (current === 'draft') return 'reviewed';
-                if (current === 'reviewed') return 'warning';
-                return 'draft';
-              };
+              // Arriba el "qué": la descripción si existe, si no la categoría.
+              const title = tx.description?.trim() || category?.name || 'Transferencia';
+              const sign = type === 'income' ? '+' : type === 'expense' ? '−' : '';
+
+              const nextStatus =
+                tx.status === 'draft' ? 'reviewed' : tx.status === 'reviewed' ? 'warning' : 'draft';
 
               return (
-                <div key={tx.id} className="relative space-y-1">
-                  
-                  {/* Visual Checkpoint Separator */}
+                <div key={tx.id}>
                   {tx.is_checkpoint && (
-                    <div className="flex items-center gap-3 py-4 opacity-90 my-2">
-                       <div className="h-px bg-emerald-500/40 flex-1"></div>
-                       <div className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 shadow-sm">
-                         <Flag className="w-3.5 h-3.5" />
-                         Revisado hasta aquí
-                       </div>
-                       <div className="h-px bg-emerald-500/40 flex-1"></div>
+                    <div className="flex items-center gap-3 pb-3 pt-1">
+                      <span className="h-px flex-1 bg-border" />
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-income/10 text-income px-2.5 py-1 text-[11px] font-medium">
+                        <Flag className="size-3" />
+                        Revisado hasta acá
+                      </span>
+                      <span className="h-px flex-1 bg-border" />
                     </div>
                   )}
 
-                  <div className={cn("relative group transition-all", 
-                    isReviewed ? "bg-emerald-500/5 rounded-xl border border-emerald-500/10 shadow-sm" : 
-                    isWarning ? "bg-amber-500/5 rounded-xl border border-amber-500/10 shadow-sm" : ""
-                  )}>
-                    <div 
-                      onClick={() => onEdit?.(tx)}
-                      className="flex items-center gap-3 py-3 px-2 -mx-2 rounded-xl hover:bg-accent/30 transition-colors cursor-pointer"
-                    >
-                      <div
-                        className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                        style={{ backgroundColor: `${category?.color || '#6b7280'}20` }}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onEdit?.(tx)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onEdit?.(tx);
+                      }
+                    }}
+                    className={cn(
+                      'group flex items-center gap-3 rounded-2xl bg-card p-3 shadow-soft-xs',
+                      'cursor-pointer transition-shadow hover:shadow-soft-sm',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                      isWarning && 'ring-1 ring-inset ring-expense/25'
+                    )}
+                  >
+                    {/* Quién lo cargó. El tipo de movimiento se lee en el color
+                        y el signo del monto, así que la flecha era redundante. */}
+                    <span className="relative shrink-0">
+                      <UserAvatar person={author} />
+                      <span
+                        className={cn(
+                          'absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full ring-2 ring-card',
+                          isWarning ? 'bg-expense text-background' : TYPE_CHIP[type]
+                        )}
                       >
-                        <CategoryIcon
-                          className="w-5 h-5"
-                          style={{ color: category?.color || '#6b7280' }}
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[15px] sm:text-base font-medium leading-tight truncate text-foreground">
-                          {category ? `${category.group_name || 'General'} > ${category.name}` : 'Transferencia'}
-                        </p>
-                        <div className="flex flex-col mt-1">
-                          <p className="text-xs sm:text-sm text-muted-foreground leading-snug truncate whitespace-normal break-words">
-                            {tx.description}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right flex-shrink-0 ml-4">
-                        <p className={cn('text-[15px] sm:text-base font-semibold leading-tight', getAmountColorClass(0, tx.type))}>
-                          {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}
-                          {formatMoney(tx.amount, currency)}
-                        </p>
-                        <p className="text-xs sm:text-sm text-muted-foreground mt-1 leading-snug">{account?.name || '---'}</p>
-                      </div>
+                        {isWarning ? (
+                          <AlertTriangle className="size-2.5" />
+                        ) : (
+                          <Icon className="size-2.5" />
+                        )}
+                      </span>
+                    </span>
 
-                      {/* Hover Actions */}
-                      <div className={cn("flex items-center gap-1 transition-all", (isReviewed || isWarning) ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleTransactionStatus(tx.id, getNextStatus(tx.status || 'draft'));
-                          }}
-                          className={cn("p-1.5 rounded-lg transition-all", 
-                            isReviewed ? "text-emerald-600 hover:bg-emerald-500/10" : 
-                            isWarning ? "text-amber-500 hover:bg-amber-500/10" :
-                            "text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-500"
-                          )}
-                          title="Cambiar Estado de Revisión"
-                        >
-                          {isWarning ? <AlertTriangle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleCheckpoint(tx.id, !!tx.is_checkpoint);
-                          }}
-                          className={cn("p-1.5 rounded-lg transition-all", tx.is_checkpoint ? "text-emerald-500 hover:bg-emerald-500/10" : "text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-500", isReviewed ? "opacity-0 group-hover:opacity-100" : "")}
-                          title="Fijar Hito de Control (Línea)"
-                        >
-                          <Flag className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            const ok = await dialog.confirm('Eliminar Transacción', '¿Estás seguro de que deseas eliminar este movimiento permanentemente?');
-                            if (ok) removeTransaction(tx.id);
-                          }}
-                          className={cn("p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all", (isReviewed || isWarning) ? "opacity-0 group-hover:opacity-100" : "")}
-                          title="Eliminar"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[15px] font-medium leading-tight">{title}</p>
+                      <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                        {isReviewed && <CheckCircle2 className="size-3 shrink-0 text-income" />}
+                        <span className="truncate">{account?.name || 'Sin billetera'}</span>
+                        {author && (
+                          <>
+                            <span aria-hidden>·</span>
+                            <span className="truncate">{personName(author)}</span>
+                          </>
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="shrink-0 text-right">
+                      <p
+                        className={cn(
+                          'text-[15px] font-semibold leading-tight tabular-nums',
+                          AMOUNT_TONE[type]
+                        )}
+                      >
+                        {sign} {formatMoney(tx.amount, currency)}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+                        {formatShortDate(tx.date)}
+                      </p>
+                    </div>
+
+                    {/* Acciones: solo en desktop, al pasar el mouse. En mobile se toca la fila. */}
+                    <div className="hidden shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 md:flex">
+                      <IconButton
+                        label="Cambiar estado de revisión"
+                        onClick={() => toggleTransactionStatus(tx.id, nextStatus)}
+                        className={cn(
+                          isReviewed && 'text-income',
+                          isWarning && 'text-expense'
+                        )}
+                      >
+                        {isWarning ? <AlertTriangle className="size-4" /> : <CheckCircle2 className="size-4" />}
+                      </IconButton>
+                      <IconButton
+                        label="Fijar hito de control"
+                        onClick={() => toggleCheckpoint(tx.id, !!tx.is_checkpoint)}
+                        className={cn(tx.is_checkpoint && 'text-income')}
+                      >
+                        <Flag className="size-4" />
+                      </IconButton>
+                      <IconButton
+                        label="Eliminar"
+                        destructive
+                        onClick={async () => {
+                          const ok = await dialog.confirm(
+                            'Eliminar movimiento',
+                            '¿Seguro que querés eliminar este movimiento? No se puede deshacer.'
+                          );
+                          if (ok) await removeTransaction(tx.id);
+                        }}
+                      >
+                        <Trash2 className="size-4" />
+                      </IconButton>
                     </div>
                   </div>
                 </div>
               );
             })}
           </div>
-        </div>
+        </section>
       ))}
     </div>
   );
+}
+
+function IconButton({
+  label,
+  onClick,
+  children,
+  className,
+  destructive,
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+  className?: string;
+  destructive?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className={cn(
+        'rounded-lg p-1.5 text-muted-foreground transition-colors',
+        destructive ? 'hover:bg-destructive/10 hover:text-destructive' : 'hover:bg-accent hover:text-accent-foreground',
+        className
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function formatShortDate(date: string) {
+  const d = parseLocalDate(date);
+  return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 function groupByDate(transactions: Transaction[]): Record<string, Transaction[]> {
@@ -181,16 +260,11 @@ function groupByDate(transactions: Transaction[]): Record<string, Transaction[]>
     const txDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
     let label: string;
-    if (txDate.getTime() === today.getTime()) {
-      label = 'Hoy';
-    } else if (txDate.getTime() === yesterday.getTime()) {
-      label = 'Ayer';
-    } else {
-      label = d.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
-    }
+    if (txDate.getTime() === today.getTime()) label = 'Hoy';
+    else if (txDate.getTime() === yesterday.getTime()) label = 'Ayer';
+    else label = d.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
 
-    if (!groups[label]) groups[label] = [];
-    groups[label].push(tx);
+    (groups[label] ||= []).push(tx);
   });
 
   return groups;

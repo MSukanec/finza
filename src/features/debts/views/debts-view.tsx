@@ -22,22 +22,22 @@ export function DebtsView() {
       title="Deudas"
       icon={Landmark}
       actions={
-        <Button onClick={() => openSheet('new-debt')} className="gap-2">
-          <Plus className="w-4 h-4" />
+        <Button size="sm" onClick={() => openSheet('new-debt')} className="gap-2">
+          <Plus className="size-4" />
           <span className="hidden sm:inline">Nueva Deuda</span>
         </Button>
       }
     >
 
       {debts.length === 0 ? (
-        <div className="text-center py-12 border rounded-xl bg-card/50">
-           <Landmark className="w-12 h-12 mx-auto text-muted-foreground mb-4 opacity-50" />
-           <h3 className="text-lg font-medium">No hay deudas activas</h3>
+        <div className="rounded-2xl border border-dashed border-border py-12 text-center">
+           <Landmark className="size-12 mx-auto text-muted-foreground mb-4 opacity-50" />
+           <h3 className="text-lg font-semibold tracking-tight">No hay deudas activas</h3>
            <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-2 mb-6">
               Llevá un registro exacto de cuánto debés y controlá el historial de pagos de cada concepto de forma independiente.
            </p>
-           <Button variant="outline" onClick={() => openSheet('new-debt')} className="gap-2">
-             <Plus className="w-4 h-4" />
+           <Button variant="outline" size="sm" onClick={() => openSheet('new-debt')} className="gap-2">
+             <Plus className="size-4" />
              Crear Deuda
            </Button>
         </div>
@@ -62,19 +62,19 @@ export function DebtsView() {
                  title={
                     <div className="flex items-center justify-between w-full pr-4">
                         <div className="flex items-center gap-3">
-                           <div className={cn("p-2 rounded-lg", isCompleted ? "bg-income/10 text-income" : "bg-destructive/10 text-destructive")}>
-                               <Landmark className="w-5 h-5" />
+                           <div className={cn("flex size-10 items-center justify-center rounded-xl", isCompleted ? "bg-income/12 text-income" : "bg-expense/12 text-expense")}>
+                               <Landmark className="size-5" />
                            </div>
                            <div className="flex flex-col text-left">
-                               <span className="font-semibold">{name}</span>
+                               <span className="font-semibold tracking-tight">{name}</span>
                                <span className="text-xs text-muted-foreground">{debt.description || `Moneda: ${debt.currency_code}`}</span>
                            </div>
                         </div>
                         <div className="flex flex-col items-end text-right">
-                            <span className={cn("font-bold", isCompleted ? "text-income" : "")}>
+                            <span className={cn("font-semibold tabular-nums", isCompleted ? "text-income" : "")}>
                                 {currencySymbol} {debt.total_amount.toLocaleString('es-AR')}
                             </span>
-                            <span className="text-xs text-muted-foreground">
+                            <span className="text-xs text-muted-foreground tabular-nums">
                                 Restante: {currencySymbol} {remaining.toLocaleString('es-AR')}
                             </span>
                         </div>
@@ -86,41 +86,41 @@ export function DebtsView() {
                       <div className="space-y-2 mb-6">
                           <div className="flex items-center justify-between text-sm">
                              <div className="font-medium text-muted-foreground">Progreso de Pago</div>
-                             <div className="font-bold">{progress}%</div>
+                             <div className="font-semibold tabular-nums">{progress}%</div>
                           </div>
                           <div className="h-2.5 w-full bg-accent rounded-full overflow-hidden">
-                              <div 
+                              <div
                                 className={cn("h-full transition-all duration-500", isCompleted ? "bg-income" : "bg-primary")}
                                 style={{ width: `${progress}%` }}
                               />
                           </div>
-                          <div className="flex items-center justify-between text-xs text-muted-foreground font-medium pt-1">
+                          <div className="flex items-center justify-between text-xs text-muted-foreground font-medium pt-1 tabular-nums">
                              <span>Abonado: {currencySymbol} {paidAmount.toLocaleString('es-AR')}</span>
                              <span>Total: {currencySymbol} {debt.total_amount.toLocaleString('es-AR')}</span>
                           </div>
                       </div>
 
                       <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-semibold text-sm">Historial de Pagos</h4>
+                          <h4 className="font-semibold tracking-tight text-sm">Historial de Pagos</h4>
                           <Button variant="ghost" size="sm" className="h-8 gap-2 text-muted-foreground" onClick={(e) => { e.stopPropagation(); openSheet('edit-debt', { debt: { ...debt, category_name: name } }); }}>
-                              <Pencil className="w-3.5 h-3.5" />
+                              <Pencil className="size-4" />
                               Editar Deuda
                           </Button>
                       </div>
 
                       {txs.length === 0 ? (
-                          <div className="text-center py-6 text-sm text-muted-foreground border rounded-lg bg-background/50">
+                          <div className="rounded-2xl border border-dashed border-border py-6 text-center text-sm text-muted-foreground">
                               Aún no has registrado pagos para esta deuda.
                           </div>
                       ) : (
-                          <div className="space-y-2">
+                          <div className="space-y-1">
                              {txs.sort((a,b) => parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime()).map(tx => (
-                                 <div key={tx.id} className="flex items-center justify-between p-3 rounded-lg border bg-background/50 hover:bg-accent/50 transition-colors">
+                                 <div key={tx.id} className="flex items-center justify-between p-3 rounded-xl hover:bg-accent/60 transition-colors">
                                      <div className="flex flex-col">
                                          <span className="text-sm font-medium">{tx.description || 'Abono general'}</span>
                                          <span className="text-xs text-muted-foreground">{new Intl.DateTimeFormat('es-AR', { year: 'numeric', month: 'long', day: 'numeric' }).format(parseLocalDate(tx.date))}</span>
                                      </div>
-                                     <span className="font-semibold text-sm">
+                                     <span className="font-semibold text-sm tabular-nums">
                                          {currencies.find(c => c.id.toUpperCase() === tx.currency_id.toUpperCase())?.symbol || '$'} {tx.amount.toLocaleString('es-AR')}
                                      </span>
                                  </div>

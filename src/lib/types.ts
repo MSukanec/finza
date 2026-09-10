@@ -22,6 +22,64 @@ export interface Account {
   created_at: string;
 }
 
+export type WorkspaceRole = 'owner' | 'member';
+
+export interface Workspace {
+  id: string;
+  name: string;
+  created_at: string;
+  /** Rol del usuario actual en este espacio. */
+  role: WorkspaceRole;
+}
+
+/** Autor de una acción: quién aparece en el historial y en cada movimiento. */
+export interface Person {
+  id: string;
+  full_name: string | null;
+  email: string;
+  avatar_url: string | null;
+}
+
+/**
+ * Arqueo: alguien contó lo que hay de verdad en una billetera y lo registró.
+ * NO modifica el saldo inicial — es un hecho con fecha, no una corrección.
+ */
+export interface Reconciliation {
+  id: string;
+  wallet_id: string;
+  user_id: string;
+  counted_at: string;
+  counted_amount: number;
+  /** Foto de lo que la app calculaba ese día. No se recalcula nunca. */
+  expected_amount: number;
+  status: 'matched' | 'pending' | 'resolved';
+  resolution: 'adjusted' | 'explained' | null;
+  adjustment_transaction_id: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface ActivityEntry {
+  id: string;
+  user_id: string | null;
+  action: 'insert' | 'update' | 'delete';
+  entity: string;
+  entity_id: string | null;
+  summary: string;
+  changes: Record<string, { antes: unknown; despues: unknown }> | null;
+  created_at: string;
+}
+
+export interface WorkspaceMember {
+  id: string;
+  user_id: string;
+  email: string;
+  full_name: string | null;
+  role: WorkspaceRole;
+  /** Invitación por email todavía sin aceptar (el invitado aún no se registró). */
+  pending?: boolean;
+}
+
 export interface CategoryGroup {
   id: string;
   name: string;
@@ -52,6 +110,8 @@ export interface Debt {
 
 export interface Transaction {
   id: string;
+  /** Quién lo cargó (public.users.id). Se muestra como avatar en la lista. */
+  user_id: string | null;
   type: TransactionType;
   amount: number;
   currency_id: string;

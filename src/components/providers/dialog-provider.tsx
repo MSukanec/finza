@@ -10,6 +10,8 @@ type DialogContextType = {
   confirm: (title: string, message: string) => Promise<boolean>;
   prompt: (title: string, message?: string, defaultValue?: string) => Promise<string | null>;
   deleteCategory: (category: any) => Promise<boolean>;
+  /** Aviso de un solo botón. Reemplaza los alert() del navegador. */
+  notify: (title: string, message: string) => void;
 };
 
 const DialogContext = createContext<DialogContextType | undefined>(undefined);
@@ -30,9 +32,14 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
   // Category Delete State
   const [catDeleteState, setCatDeleteState] = useState<{ isOpen: boolean; category: any; targetId: string; resolve: (val: boolean) => void } | null>(null);
 
+  // Aviso simple (errores que no pertenecen a ningún formulario)
+  const [notifyState, setNotifyState] = useState<{ title: string; message: string } | null>(null);
+
   const categories = useFinanceStore(s => s.categories);
   const removeCategoryAndTransfer = useFinanceStore(s => s.removeCategoryAndTransfer);
   const removeCategory = useFinanceStore(s => s.removeCategory);
+
+  const handleNotify = (title: string, message: string) => setNotifyState({ title, message });
 
   const handleConfirm = (title: string, message: string) => {
     return new Promise<boolean>((resolve) => {
@@ -53,7 +60,12 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
       } else {
         handleConfirm('Eliminar Categoría', `¿Estás seguro de que deseas eliminar permanentemente la categoría "${category.name}"?`).then(async (ok) => {
            if (ok) {
-               await removeCategory(category.id);
+               try {
+                 await removeCategory(category.id);
+               } catch (e: any) {
+                 handleNotify('No se pudo eliminar', e?.message || 'Ocurrió un error al eliminar la categoría.');
+                 return resolve(false);
+               }
            }
            resolve(ok);
         });
@@ -62,10 +74,24 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <DialogContext.Provider value={{ confirm: handleConfirm, prompt: handlePrompt, deleteCategory: handleDeleteCategory }}>
+    <DialogContext.Provider value={{ confirm: handleConfirm, prompt: handlePrompt, deleteCategory: handleDeleteCategory, notify: handleNotify }}>
       {children}
 
       {/* CONFIRM MODAL */}
+      <ResponsiveModal open={!!notifyState} onOpenChange={(open) => { if (!open) setNotifyState(null); }}>
+        {notifyState && (
+          <ResponsiveModalContent>
+            <ResponsiveModalHeader>
+              <ResponsiveModalTitle>{notifyState.title}</ResponsiveModalTitle>
+              <ResponsiveModalDescription>{notifyState.message}</ResponsiveModalDescription>
+            </ResponsiveModalHeader>
+            <div className="pb-4 pt-2">
+              <Button className="w-full" onClick={() => setNotifyState(null)}>Entendido</Button>
+            </div>
+          </ResponsiveModalContent>
+        )}
+      </ResponsiveModal>
+
       <ResponsiveModal open={!!confirmState?.isOpen} onOpenChange={(open) => { if (!open && confirmState) { confirmState.resolve(false); setConfirmState(null); } }}>
          {confirmState && (
            <ResponsiveModalContent>

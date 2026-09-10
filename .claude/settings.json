@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node scripts/db.mjs:*)",
+      "Bash(node scripts/introspect-db.mjs)",
+      "Bash(npm run db:sql:*)",
+      "Bash(npm run db:schema)"
+    ]
+  }
+}

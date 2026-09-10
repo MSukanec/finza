@@ -1,16 +1,35 @@
 'use client';
 
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useUIStore } from '@/stores/ui-store';
 import { useFinanceStore } from '@/stores/finance-store';
-import { ResponsiveModal, ResponsiveModalContent, ResponsiveModalHeader, ResponsiveModalTitle } from '@/components/ui/responsive-modal';
+import {
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalHeader,
+  ResponsiveModalTitle,
+  ResponsiveModalBody,
+  ResponsiveModalFooter,
+} from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useState, useEffect, useMemo } from 'react';
-import type { TransactionType } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { TrendingUp, TrendingDown, ArrowLeftRight } from 'lucide-react';
+import { parseAmount, formatMoney } from '@/lib/money';
+import { TrendingUp, TrendingDown, ArrowLeftRight, AlertTriangle } from 'lucide-react';
+import type { TransactionType } from '@/lib/types';
+
+const TYPES = [
+  { value: 'income' as const, label: 'Ingreso', icon: TrendingUp, active: 'border-income bg-income/10 text-income' },
+  { value: 'expense' as const, label: 'Gasto', icon: TrendingDown, active: 'border-expense bg-expense/10 text-expense' },
+  { value: 'transfer' as const, label: 'Transferencia', icon: ArrowLeftRight, active: 'border-transfer bg-transfer/10 text-transfer' },
+];
+
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 export function TransactionForm() {
   const activeSheet = useUIStore((s) => s.activeSheet);
@@ -25,318 +44,401 @@ export function TransactionForm() {
 
   const isEdit = activeSheet === 'edit-transaction';
   const isOpen = activeSheet === 'new-transaction' || isEdit;
+  const editing = isEdit ? (sheetData?.transaction as any) : null;
 
   const [type, setType] = useState<TransactionType>('expense');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
-  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(today);
   const [accountId, setAccountId] = useState('');
   const [destinationAccountId, setDestinationAccountId] = useState('');
-  
-  const [groupName, setGroupName] = useState('General');
+  const [groupName, setGroupName] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [periodMonth, setPeriodMonth] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Inicialización.
+   *
+   * La clave es qué NO está en las dependencias. Antes acá estaban `categories`
+   * y `sheetData`: cualquier `hydrate()` con el modal abierto —o simplemente un
+   * render nuevo del store— reconstruía esos objetos y el formulario se
+   * reseteaba borrando lo que el usuario venía escribiendo.
+   *
+   * Ahora se dispara sólo al abrir, y se identifica el movimiento por su id.
+   */
+  const initedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (isOpen) {
-      if (isEdit && sheetData?.transaction) {
-        const tx = sheetData.transaction as any;
-        setType(tx.type);
-        setAmount(tx.amount.toString());
-        setDescription(tx.description || '');
-        setDate(tx.date ? tx.date.split('T')[0] : new Date().toISOString().split('T')[0]);
-        setAccountId(tx.account_id);
-        if (tx.destination_account_id) setDestinationAccountId(tx.destination_account_id);
-        
-        if (tx.category_id) {
-           setCategoryId(tx.category_id);
-           const c = categories.find(cat => cat.id === tx.category_id);
-           if (c && c.group_name) setGroupName(c.group_name);
-        }
-      } else {
-        if (sheetData?.type) setType(sheetData.type as TransactionType);
-        else setType('expense');
-        setAmount('');
-        setDescription('');
-        setDate(new Date().toISOString().split('T')[0]);
-        setPeriodMonth('');
-        setCategoryId('');
-        setGroupName('General');
-      }
+    if (!isOpen) {
+      initedFor.current = null;
+      return;
     }
-  }, [isOpen, isEdit, sheetData, categories]);
 
-  useEffect(() => {
-    if (isOpen && accounts.length > 0 && !accountId && !isEdit) {
-      setAccountId(accounts[0].id);
+    const key = editing?.id ?? 'new';
+    if (initedFor.current === key) return;
+    initedFor.current = key;
+
+    setError(null);
+    setSubmitting(false);
+
+    if (editing) {
+      setType(editing.type);
+      setAmount(String(editing.amount ?? ''));
+      setDescription(editing.description || '');
+      setDate(editing.date ? editing.date.split('T')[0] : today());
+      setAccountId(editing.account_id || '');
+      setDestinationAccountId(editing.destination_account_id || '');
+      setPeriodMonth(editing.period_month || '');
+      setCategoryId(editing.category_id || '');
+      setGroupName(
+        categories.find((c) => c.id === editing.category_id)?.group_name || ''
+      );
+    } else {
+      const d = sheetData ?? {};
+      setType((d.type as TransactionType) || 'expense');
+      setAmount(d.amount != null ? String(d.amount) : '');
+      setDescription((d.description as string) || '');
+      setDate((d.date as string) || today());
+      setPeriodMonth((d.periodMonth as string) || '');
+      setCategoryId((d.categoryId as string) || '');
+      setGroupName((d.groupName as string) || '');
+      setDestinationAccountId('');
+      setAccountId('');
     }
-  }, [isOpen, accounts, accountId, isEdit]);
+  }, [isOpen, editing, sheetData, categories]);
 
-  const filteredCategories = useMemo(() => {
-    return categories.filter((c) => (type === 'transfer' ? false : c.type === type));
-  }, [categories, type]);
+  // ---------------------------------------------------------------- derivado
+  //
+  // Nada de sincronizar estado con efectos: se DERIVA en cada render. Antes,
+  // al pasar de Ingreso a Gasto el grupo guardado seguía siendo uno de ingresos
+  // —el Select lo mostraba tal cual— y la lista de categorías quedaba vacía.
+  // Derivando, un valor que dejó de ser válido simplemente deja de usarse.
 
-  const availableGroups = useMemo(() => {
-    const groups = new Set(filteredCategories.map(c => c.group_name || 'General'));
-    return Array.from(groups).sort((a, b) => a.localeCompare(b));
-  }, [filteredCategories]);
+  const isTransfer = type === 'transfer';
 
-  const categoriesInGroup = useMemo(() => {
-    return filteredCategories
-       .filter(c => (c.group_name || 'General') === groupName)
-       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [filteredCategories, groupName]);
+  const typeCategories = useMemo(
+    () => (isTransfer ? [] : categories.filter((c) => c.type === type)),
+    [categories, type, isTransfer]
+  );
 
-  // Si cambiamos de grupo, resetear categoría
-  useEffect(() => {
-    if (isOpen && categoryId) {
-       const isValid = categoriesInGroup.find(c => c.id === categoryId);
-       if (!isValid) {
-         setCategoryId('');
-         setPeriodMonth('');
-       }
-    }
-  }, [groupName, categoriesInGroup, isOpen]);
+  const groups = useMemo(
+    () =>
+      Array.from(new Set(typeCategories.map((c) => c.group_name || 'General'))).sort((a, b) =>
+        a.localeCompare(b)
+      ),
+    [typeCategories]
+  );
 
-  const selectedCategory = useMemo(() => {
-    return categoriesInGroup.find(c => c.id === categoryId);
-  }, [categoriesInGroup, categoryId]);
+  /** El grupo elegido, o el primero disponible si el guardado ya no aplica. */
+  const group = groups.includes(groupName) ? groupName : (groups[0] ?? '');
 
-  const isRecurring = selectedCategory?.is_recurring || false;
+  const groupCategories = useMemo(
+    () =>
+      typeCategories
+        .filter((c) => (c.group_name || 'General') === group)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [typeCategories, group]
+  );
+
+  /** La categoría elegida sólo si sigue perteneciendo al grupo vigente. */
+  const category = groupCategories.find((c) => c.id === categoryId) ?? null;
+  const isRecurring = category?.is_recurring ?? false;
+
+  const sortedAccounts = useMemo(
+    () => [...accounts].sort((a, b) => a.name.localeCompare(b.name)),
+    [accounts]
+  );
+
+  /** La primera billetera es un valor por defecto, no una elección del usuario. */
+  const account =
+    sortedAccounts.find((a) => a.id === accountId) ?? (isEdit ? null : sortedAccounts[0] ?? null);
+  const destination = sortedAccounts.find((a) => a.id === destinationAccountId) ?? null;
+
+  const currency = currencies.find((c) => c.id === account?.currency_id) || currencies[0];
+  const parsedAmount = parseAmount(amount);
+
+  // Transferir entre monedas distintas necesita una cotización que el formulario
+  // todavía no pide, así que se avisa en vez de guardar algo incorrecto.
+  const currencyMismatch =
+    isTransfer && !!destination && !!account && destination.currency_id !== account.currency_id;
+
+  // ---------------------------------------------------------------- guardar
 
   const handleSubmit = async () => {
-    const numAmount = parseFloat(amount);
-    if (!numAmount || !accountId) return;
+    if (submitting) return;
 
-    const account = accounts.find((a) => a.id === accountId);
-    if (!account) return;
+    if (parsedAmount === null || parsedAmount <= 0) {
+      return setError('Ingresá un monto mayor a cero.');
+    }
+    if (!account) return setError('Elegí una billetera.');
+    if (isTransfer) {
+      if (!destination) return setError('Elegí la billetera de destino.');
+      if (destination.id === account.id) {
+        return setError('El origen y el destino no pueden ser la misma billetera.');
+      }
+      if (currencyMismatch) {
+        return setError('Todavía no se pueden transferir montos entre monedas distintas.');
+      }
+    } else if (!category) {
+      return setError('Elegí una categoría.');
+    }
 
+    setError(null);
+    setSubmitting(true);
     try {
       const payload = {
         type,
-        amount: numAmount,
+        amount: parsedAmount,
         currency_id: account.currency_id,
-        category_id: type === 'transfer' ? null : categoryId || null,
-        account_id: accountId,
-        destination_account_id: type === 'transfer' ? destinationAccountId || null : null,
-        description: description || getDefaultDescription(type),
-        date: new Date(date).toISOString(),
-        period_month: type !== 'transfer' && isRecurring && periodMonth ? periodMonth : undefined,
+        category_id: isTransfer ? null : category!.id,
+        account_id: account.id,
+        destination_account_id: isTransfer ? destination!.id : null,
+        description: description.trim() || defaultDescription(type),
+        // Mediodía local, no medianoche: 'YYYY-MM-DD' con new Date() se lee como
+        // medianoche UTC y en GMT-3 el movimiento caía un día antes.
+        date: new Date(`${date}T12:00:00`).toISOString(),
+        period_month: !isTransfer && isRecurring && periodMonth ? periodMonth : undefined,
       };
 
-      if (isEdit && sheetData?.transaction) {
-         await updateTransaction((sheetData.transaction as any).id, payload);
-      } else {
-         await addTransaction(payload);
-      }
+      if (isEdit && editing) await updateTransaction(editing.id, payload);
+      else await addTransaction(payload);
 
-      // Reset form
-      setAmount('');
-      setDescription('');
-      setCategoryId('');
-      setPeriodMonth('');
-      setDestinationAccountId('');
       closeSheet();
     } catch (e: any) {
-      alert("Error guardando transacción: " + (e.message || JSON.stringify(e)));
+      setError(e?.message || 'No se pudo guardar el movimiento.');
+    } finally {
+      setSubmitting(false);
     }
   };
-
-  const typeOptions = [
-    { value: 'income' as const, label: 'Ingreso', icon: TrendingUp, className: 'bg-income/15 text-income border-income/30' },
-    { value: 'expense' as const, label: 'Gasto', icon: TrendingDown, className: 'bg-expense/15 text-expense border-expense/30' },
-    { value: 'transfer' as const, label: 'Transferencia', icon: ArrowLeftRight, className: 'bg-transfer/15 text-transfer border-transfer/30' },
-  ];
 
   return (
     <ResponsiveModal open={isOpen} onOpenChange={(open) => !open && closeSheet()}>
       <ResponsiveModalContent>
         <ResponsiveModalHeader>
-          <ResponsiveModalTitle className="text-xl sm:text-lg text-center sm:text-left">
-            {isEdit ? 'Editar Movimiento' : 'Nuevo Movimiento'}
+          <ResponsiveModalTitle>
+            {isEdit ? 'Editar movimiento' : 'Nuevo movimiento'}
           </ResponsiveModalTitle>
         </ResponsiveModalHeader>
 
-        <div className="space-y-6 pb-6">
-          {/* Type selector */}
-          <div className="grid grid-cols-3 gap-2">
-            {typeOptions.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => setType(opt.value)}
-                className={cn(
-                  'flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all duration-200',
-                  type === opt.value ? opt.className : 'border-transparent bg-accent/30 text-muted-foreground'
-                )}
-              >
-                <opt.icon className="w-5 h-5" />
-                <span className="text-xs font-medium">{opt.label}</span>
-              </button>
-            ))}
+        <ResponsiveModalBody className="space-y-5">
+          {/* Tipo. El activo se distingue por borde, fondo, color y peso. */}
+          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Tipo de movimiento">
+            {TYPES.map((opt) => {
+              const selected = type === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => {
+                    setType(opt.value);
+                    // Al salir de transferencia el destino deja de tener sentido.
+                    if (opt.value !== 'transfer') setDestinationAccountId('');
+                  }}
+                  className={cn(
+                    'flex flex-col items-center gap-2 rounded-xl border-2 p-3 transition-all',
+                    selected
+                      ? opt.active
+                      : 'border-transparent bg-muted text-muted-foreground hover:bg-accent'
+                  )}
+                >
+                  <opt.icon className={cn('size-5', selected && 'scale-110')} />
+                  <span className={cn('text-xs', selected ? 'font-semibold' : 'font-medium')}>
+                    {opt.label}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            {/* Amount */}
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Monto</Label>
+          {/* Monto. Texto y no number: un input numérico rechaza la coma, así que
+              "1.234,56" quedaba vacío. Se parsea con parseAmount. */}
+          <Field label="Monto">
+            <div className="relative">
               <Input
-                type="number"
-                placeholder="0.00"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="0,00"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="text-lg font-bold h-12 bg-accent/30 border-border/50 text-center"
+                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                className="h-12 w-full pr-16 text-lg font-semibold tabular-nums"
                 autoFocus
               />
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
+                {currency?.code}
+              </span>
             </div>
+            {parsedAmount !== null && parsedAmount > 0 && (
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {formatMoney(parsedAmount, currency)}
+              </p>
+            )}
+          </Field>
 
-            {/* Date */}
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Fecha</Label>
+          <Field label="Fecha">
+            <div className="flex gap-2">
               <Input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="h-12 bg-accent/30 border-border/50"
+                className="h-12 w-full"
               />
+              {date !== today() && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 shrink-0"
+                  onClick={() => setDate(today())}
+                >
+                  Hoy
+                </Button>
+              )}
             </div>
-          </div>
+          </Field>
 
-          {/* Description */}
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Descripción</Label>
+          <Field label="Descripción">
             <Input
-              placeholder="¿En qué gastaste?"
+              placeholder={isTransfer ? 'Motivo de la transferencia' : '¿En qué fue?'}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="bg-accent/30 border-border/50"
+              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+              className="h-12 w-full"
             />
-          </div>
+          </Field>
 
-          {/* Account */}
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">
-              {type === 'transfer' ? 'Cuenta Origen' : 'Cuenta'}
-            </Label>
-            <Select value={accountId} onValueChange={(v) => v && setAccountId(v)}>
-              <SelectTrigger className="h-12 bg-accent/30 border-border/50 text-base">
-                <SelectValue>
-                  {accountId ? accounts.find(a => a.id === accountId)?.name : 'Seleccionar cuenta'}
-                </SelectValue>
+          <Field label={isTransfer ? 'Billetera de origen' : 'Billetera'}>
+            <Select value={account?.id ?? ''} onValueChange={(v) => v && setAccountId(v)}>
+              <SelectTrigger className="h-12 text-base">
+                <SelectValue>{account?.name ?? 'Seleccionar billetera'}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {[...accounts].sort((a, b) => a.name.localeCompare(b.name)).map((acc) => {
-                  const cur = currencies.find((c) => c.id === acc.currency_id);
-                  return (
-                    <SelectItem key={acc.id} value={acc.id}>
-                      {acc.name} ({cur?.code})
-                    </SelectItem>
-                  );
-                })}
+                {sortedAccounts.map((acc) => (
+                  <SelectItem key={acc.id} value={acc.id}>
+                    {acc.name} ({currencies.find((c) => c.id === acc.currency_id)?.code})
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
-          </div>
+          </Field>
 
-          {/* Destination account (for transfers) */}
-          {type === 'transfer' && (
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Cuenta Destino</Label>
-              <Select value={destinationAccountId} onValueChange={(v) => v && setDestinationAccountId(v)}>
-                <SelectTrigger className="h-12 bg-accent/30 border-border/50 text-base">
-                  <SelectValue>
-                    {destinationAccountId ? accounts.find(a => a.id === destinationAccountId)?.name : 'Seleccionar destino'}
-                  </SelectValue>
+          {isTransfer && (
+            <Field label="Billetera de destino">
+              <Select
+                value={destination?.id ?? ''}
+                onValueChange={(v) => v && setDestinationAccountId(v)}
+              >
+                <SelectTrigger className="h-12 text-base">
+                  <SelectValue>{destination?.name ?? 'Seleccionar destino'}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {[...accounts]
-                    .filter((a) => a.id !== accountId)
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((acc) => {
-                      const cur = currencies.find((c) => c.id === acc.currency_id);
-                      return (
-                        <SelectItem key={acc.id} value={acc.id}>
-                          {acc.name} ({cur?.code})
-                        </SelectItem>
-                      );
-                    })}
+                  {sortedAccounts
+                    .filter((a) => a.id !== account?.id)
+                    .map((acc) => (
+                      <SelectItem key={acc.id} value={acc.id}>
+                        {acc.name} ({currencies.find((c) => c.id === acc.currency_id)?.code})
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
-            </div>
+
+              {currencyMismatch && (
+                <p className="flex items-start gap-1.5 text-xs text-warning">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  Son monedas distintas. Todavía no se puede convertir en la
+                  transferencia: registralo como un gasto y un ingreso por separado.
+                </p>
+              )}
+            </Field>
           )}
 
-          {/* Category (not for transfers) */}
-          {type !== 'transfer' && (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Macrogrupo</Label>
-                <Select value={groupName} onValueChange={(v) => v && setGroupName(v)}>
-                  <SelectTrigger className="h-12 bg-accent/30 border-border/50 text-base">
-                    <SelectValue>{groupName}</SelectValue>
+          {!isTransfer && (
+            <>
+              <Field label="Macrogrupo">
+                <Select
+                  value={group}
+                  onValueChange={(v) => {
+                    if (!v) return;
+                    setGroupName(v);
+                    setCategoryId(''); // el grupo cambió: la categoría anterior ya no aplica
+                    setPeriodMonth('');
+                  }}
+                >
+                  <SelectTrigger className="h-12 text-base">
+                    <SelectValue>{group || 'Sin grupos'}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {availableGroups.length > 0 ? availableGroups.map((g) => (
+                    {groups.map((g) => (
                       <SelectItem key={g} value={g}>{g}</SelectItem>
-                    )) : <SelectItem value="General">General</SelectItem>}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Categoría</Label>
-                <Select value={categoryId} onValueChange={(v) => v && setCategoryId(v)}>
-                  <SelectTrigger className="h-12 bg-accent/30 border-border/50 text-base">
-                    <SelectValue>
-                      {categoryId ? categoriesInGroup.find(c => c.id === categoryId)?.name : 'Seleccionar...'}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categoriesInGroup.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: cat.color }}
-                          />
-                          {cat.name}
-                        </div>
-                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-            </div>
+              </Field>
+
+              <Field label="Categoría">
+                <Select value={category?.id ?? ''} onValueChange={(v) => v && setCategoryId(v)}>
+                  <SelectTrigger className="h-12 text-base">
+                    <SelectValue>{category?.name ?? 'Seleccionar categoría'}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {groupCategories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {groups.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No tenés categorías de {type === 'income' ? 'ingreso' : 'gasto'}. Creá una
+                    desde Categorías.
+                  </p>
+                )}
+              </Field>
+
+              {isRecurring && (
+                <Field label="Período de facturación">
+                  <Input
+                    type="month"
+                    value={periodMonth}
+                    onChange={(e) => setPeriodMonth(e.target.value)}
+                    className="h-12 w-full"
+                  />
+                </Field>
+              )}
+            </>
           )}
 
-            {/* Period if recurring */}
-            {type !== 'transfer' && isRecurring && (
-              <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                <Label className="text-xs text-muted-foreground">Período de Facturación (Mes/Año)</Label>
-                <Input
-                  type="month"
-                  value={periodMonth}
-                  onChange={(e) => setPeriodMonth(e.target.value)}
-                  className="h-12 bg-primary/10 border-primary/30 font-medium"
-                />
-              </div>
-            )}
+          {error && (
+            <p role="alert" className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
+              {error}
+            </p>
+          )}
+        </ResponsiveModalBody>
 
-          {/* Submit */}
+        <ResponsiveModalFooter>
           <Button
             onClick={handleSubmit}
-            disabled={!amount || !accountId}
-            className="w-full h-12 text-base font-semibold"
+            disabled={submitting}
           >
-            {isEdit ? 'Guardar Cambios' : 'Guardar Movimiento'}
+            {submitting ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Guardar movimiento'}
           </Button>
-        </div>
+        </ResponsiveModalFooter>
       </ResponsiveModalContent>
     </ResponsiveModal>
   );
 }
 
-function getDefaultDescription(type: TransactionType): string {
-  switch (type) {
-    case 'income': return 'Ingreso';
-    case 'expense': return 'Gasto';
-    case 'transfer': return 'Transferencia';
-  }
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+function defaultDescription(type: TransactionType): string {
+  return type === 'income' ? 'Ingreso' : type === 'expense' ? 'Gasto' : 'Transferencia';
 }

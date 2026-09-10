@@ -6,24 +6,25 @@ import { getIcon } from '@/lib/icons';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { EXCHANGE_RATES } from '@/lib/mock-data';
-import { Plus, TrendingUp, ChevronDown, ChevronRight, Wallet } from 'lucide-react';
+import { Plus, TrendingUp, ChevronDown, ChevronRight, Wallet, Scale } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useUIStore } from '@/stores/ui-store';
 import { cn } from '@/lib/utils';
 import { PageLayout } from '@/components/layout/page-layout';
+import { Kpi } from '@/components/ui/panel';
 
 // Native UI Accordion Helper Component (Same pattern used in Categories)
 function SimpleAccordion({ title, summary, children, defaultOpen = false }: { title: React.ReactNode, summary: React.ReactNode, children: React.ReactNode, defaultOpen?: boolean }) {
     const [isOpen, setIsOpen] = useState(defaultOpen);
     
     return (
-        <div className="border border-border/50 rounded-xl overflow-hidden mb-3 bg-card shadow-sm">
-            <button 
+        <div className="rounded-2xl overflow-hidden mb-3 bg-card shadow-soft-sm">
+            <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center justify-between p-4 bg-accent/20 hover:bg-accent/40 transition-colors text-left"
+                className="w-full flex items-center justify-between p-4 hover:bg-accent/40 transition-colors text-left"
             >
                 <div className="flex items-center gap-3">
-                   {isOpen ? <ChevronDown className="w-5 h-5 text-muted-foreground" /> : <ChevronRight className="w-5 h-5 text-muted-foreground" />}
+                   {isOpen ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}
                    {title}
                 </div>
                 <div>
@@ -31,7 +32,7 @@ function SimpleAccordion({ title, summary, children, defaultOpen = false }: { ti
                 </div>
             </button>
             {isOpen && (
-                <div className="p-2 border-t border-border/50 space-y-1">
+                <div className="p-2 border-t border-border/60 space-y-0.5">
                     {children}
                 </div>
             )}
@@ -40,6 +41,29 @@ function SimpleAccordion({ title, summary, children, defaultOpen = false }: { ti
 }
 
 export function AccountsView() {
+  const reconciliations = useFinanceStore((s) => s.reconciliations);
+
+  /** Último arqueo por billetera, para mostrarlo y para marcar pendientes. */
+  const lastByWallet = useMemo(() => {
+    const out = new Map<string, (typeof reconciliations)[number]>();
+    for (const r of reconciliations) {
+      const prev = out.get(r.wallet_id);
+      if (!prev || new Date(r.counted_at) > new Date(prev.counted_at)) out.set(r.wallet_id, r);
+    }
+    return out;
+  }, [reconciliations]);
+
+  const hasPending = (walletId: string) =>
+    reconciliations.some((r) => r.wallet_id === walletId && r.status === 'pending');
+
+  const lastCountLabel = (walletId: string) => {
+    const last = lastByWallet.get(walletId);
+    if (!last) return 'Sin arquear';
+    const days = Math.round((Date.now() - +new Date(last.counted_at)) / 86400000);
+    if (hasPending(walletId)) return 'Diferencia sin resolver';
+    return days === 0 ? 'Arqueado hoy' : `Arqueado hace ${days} d`;
+  };
+
   const accounts = useFinanceStore((s) => s.accounts);
   const currencies = useFinanceStore((s) => s.currencies);
   const primaryCurrencyId = useFinanceStore((s) => s.primaryCurrencyId);
@@ -101,29 +125,23 @@ export function AccountsView() {
 
   return (
     <PageLayout
-      title="Cuentas y Billeteras"
+      title="Billeteras"
+      description="Tocá una billetera para editarla, o Arquear para registrar cuánta plata hay de verdad"
       icon={Wallet}
       actions={
         <Button size="sm" className="gap-2" onClick={() => openSheet('new-account')}>
-          <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">Nueva Cuenta</span>
+          <Plus className="size-4" />
+          <span className="hidden sm:inline">Nueva cuenta</span>
         </Button>
       }
     >
 
-      {/* Patrimonio Total Global */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/15 via-primary/5 to-transparent border border-primary/15 p-5">
-        <div className="absolute top-0 right-0 w-24 h-24 bg-primary/10 rounded-full blur-3xl" />
-        <div className="relative">
-          <div className="flex items-center gap-2 mb-1">
-            <TrendingUp className="w-4 h-4 text-primary" />
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Patrimonio Total Unificado</p>
-          </div>
-          <p className="text-2xl md:text-3xl font-bold animate-count-up">
-            {formatMoney(totalBalance, primaryCurrency)}
-          </p>
-        </div>
-      </div>
+      <Kpi
+        icon={TrendingUp}
+        label="Patrimonio total unificado"
+        value={formatMoney(totalBalance, primaryCurrency)}
+        hint="Todas las billeteras convertidas a tu moneda base"
+      />
 
       <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
          {groupedAccounts.map(group => (
@@ -132,48 +150,65 @@ export function AccountsView() {
                 defaultOpen={true}
                 title={
                     <div className="flex items-center gap-2">
-                       <Wallet className="w-4 h-4 text-muted-foreground" />
-                       <span className="font-bold text-sm tracking-wide uppercase">Cuentas en {group.currency.name}</span>
+                       <Wallet className="size-4 text-muted-foreground" />
+                       <span className="font-semibold text-xs tracking-wide uppercase text-muted-foreground">Cuentas en {group.currency.name}</span>
                     </div>
                 }
                 summary={
-                   <div className={cn("font-bold text-sm", group.total < 0 ? "text-expense" : "")}>
-                       Total acumulado: {formatMoney(group.total, group.currency)}
+                   <div className={cn("font-semibold text-sm tabular-nums", group.total < 0 ? "text-expense" : "")}>
+                       {formatMoney(group.total, group.currency)}
                    </div>
                 }
              >
                  {group.accounts.map(acc => {
                      const Icon = getIcon(acc.icon);
                      return (
-                         <div 
+                         <div
                              key={acc.id}
                              onClick={() => openSheet('edit-account', { account: acc })}
-                             className="group flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg hover:bg-accent/40 cursor-pointer transition-colors border border-transparent hover:border-border/50"
+                             className="group flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl hover:bg-accent/50 cursor-pointer transition-colors"
                          >
-                             <div className="flex items-center gap-4 min-w-0 flex-1 mb-2 sm:mb-0">
-                                 <div
-                                    className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110"
-                                    style={{ backgroundColor: `${acc.color || '#4f4f4f'}20` }}
-                                  >
-                                    <Icon className="w-5 h-5" style={{ color: acc.color || '#4f4f4f' }} />
+                             <div className="flex items-center gap-3.5 min-w-0 flex-1 mb-2 sm:mb-0">
+                                 <div className="flex size-10 items-center justify-center rounded-xl shrink-0 bg-accent text-accent-foreground transition-transform group-hover:scale-105">
+                                    <Icon className="size-5" />
                                   </div>
                                   <div className="min-w-0">
-                                      <p className="font-semibold text-sm truncate text-foreground">{acc.name}</p>
-                                      <p className="text-xs text-muted-foreground/70 truncate">{accountTypeLabels[acc.type]} · {group.currency.code}</p>
+                                      <p className="font-medium text-sm truncate text-foreground">{acc.name}</p>
+                                      <p className="text-xs text-muted-foreground truncate">{accountTypeLabels[acc.type]} · {group.currency.code}</p>
                                   </div>
                              </div>
-                             
-                             <div className="flex items-center gap-6 sm:justify-end text-right">
-                                 <div className="flex flex-col text-sm font-bold items-end min-w-[80px]">
+
+                             <div className="flex items-center gap-3 sm:justify-end text-right">
+                                 <div className="flex min-w-[80px] flex-col items-end text-sm font-semibold tabular-nums">
                                      <span className={cn(acc.balance < 0 ? "text-expense" : "")}>
                                          {formatMoney(acc.balance, group.currency)}
                                      </span>
-                                     {(acc.initial_balance !== undefined) && (
-                                        <span className="text-[10px] text-muted-foreground/70 font-normal">
-                                            Inicial: {formatMoney(acc.initial_balance || 0, group.currency)}
-                                        </span>
-                                     )}
+                                     <span className="text-[10px] font-normal text-muted-foreground">
+                                        {lastCountLabel(acc.id)}
+                                     </span>
                                  </div>
+
+                                 {/* Arqueo es una acción propia y separada de editar la
+                                     billetera: registrar cuánto hay hoy no es lo mismo que
+                                     cambiar con cuánto se arrancó. */}
+                                 <button
+                                     onClick={(e) => {
+                                         e.stopPropagation();
+                                         openSheet('reconcile-wallet', { walletId: acc.id });
+                                     }}
+                                     title="Contar la plata real y compararla con la app"
+                                     className={cn(
+                                        'flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-sm font-medium transition-colors',
+                                        hasPending(acc.id)
+                                            ? 'border-expense/30 bg-expense/10 text-expense hover:bg-expense/20'
+                                            : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground'
+                                     )}
+                                 >
+                                     <Scale className="size-4" />
+                                     <span className="hidden sm:inline">
+                                        {hasPending(acc.id) ? 'Resolver' : 'Arquear'}
+                                     </span>
+                                 </button>
                              </div>
                          </div>
                      );
@@ -182,7 +217,7 @@ export function AccountsView() {
          ))}
 
          {groupedAccounts.length === 0 && (
-             <div className="text-center py-10 bg-accent/10 border border-dashed rounded-xl">
+             <div className="text-center py-12 border border-dashed border-border rounded-2xl">
                  <p className="text-sm text-muted-foreground">Aún no hay billeteras cargadas.</p>
              </div>
          )}

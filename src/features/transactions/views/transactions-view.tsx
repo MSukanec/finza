@@ -33,6 +33,10 @@ export function TransactionsView() {
   
   const openSheet = useUIStore((s) => s.openSheet);
 
+  // Renderizar 1000+ tarjetas de una vez traba la página. Se muestran de a tandas.
+  const PAGE = 60;
+  const [visibleCount, setVisibleCount] = useState(PAGE);
+
   const categories = useFinanceStore((s) => s.categories);
 
   const filtered = useMemo(() => {
@@ -69,37 +73,62 @@ export function TransactionsView() {
     return result;
   }, [transactions, categories, filterType, searchQuery, filterWalletId, filterCategoryId, filterGroupId, dateFrom, dateTo]);
 
+  // Cualquier cambio de filtro vuelve a la primera tanda.
+  useEffect(() => {
+    setVisibleCount(PAGE);
+  }, [filterType, searchQuery, filterWalletId, filterCategoryId, filterGroupId, dateFrom, dateTo]);
+
   return (
     <PageLayout
-       title="Movimientos"
-       icon={ArrowLeftRight}
-       actions={
-            <Button size="sm" className="gap-2" onClick={() => openSheet('new-transaction')}>
-              <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Nuevo Registro</span>
-            </Button>
-       }
+      title="Movimientos"
+      icon={ArrowLeftRight}
+      actions={
+        <>
+          <TransactionFilters
+            filterType={filterType}
+            onFilterChange={setFilterType}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            filterWalletId={filterWalletId}
+            onWalletChange={setFilterWalletId}
+            filterCategoryId={filterCategoryId}
+            onCategoryChange={setFilterCategoryId}
+            filterGroupId={filterGroupId}
+            onGroupChange={setFilterGroupId}
+            dateFrom={dateFrom}
+            onDateFromChange={setDateFrom}
+            dateTo={dateTo}
+            onDateToChange={setDateTo}
+          />
+          <Button size="sm" className="gap-1.5" onClick={() => openSheet('new-transaction')}>
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">Nuevo</span>
+          </Button>
+        </>
+      }
     >
-      <TransactionFilters
-        filterType={filterType}
-        onFilterChange={setFilterType}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        filterWalletId={filterWalletId}
-        onWalletChange={setFilterWalletId}
-        filterCategoryId={filterCategoryId}
-        onCategoryChange={setFilterCategoryId}
-        filterGroupId={filterGroupId}
-        onGroupChange={setFilterGroupId}
-        dateFrom={dateFrom}
-        onDateFromChange={setDateFrom}
-        dateTo={dateTo}
-        onDateToChange={setDateTo}
-      />
-      <TransactionList 
-        transactions={filtered} 
+      <p className="text-sm text-muted-foreground">
+        {filtered.length === transactions.length
+          ? `${filtered.length.toLocaleString('es-AR')} movimientos`
+          : `${filtered.length.toLocaleString('es-AR')} de ${transactions.length.toLocaleString('es-AR')} movimientos`}
+      </p>
+
+      <TransactionList
+        transactions={filtered.slice(0, visibleCount)}
         onEdit={(tx) => openSheet('edit-transaction', { transaction: tx })}
       />
+
+      {visibleCount < filtered.length && (
+        <div className="flex justify-center pt-2">
+          <Button
+            variant="outline"
+            onClick={() => setVisibleCount((n) => n + PAGE)}
+            className="min-w-48"
+          >
+            Cargar más ({(filtered.length - visibleCount).toLocaleString('es-AR')} restantes)
+          </Button>
+        </div>
+      )}
     </PageLayout>
   );
 }

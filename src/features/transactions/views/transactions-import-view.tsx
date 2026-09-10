@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Upload, CheckCircle2, ArrowRightLeft, FileSpreadsheet, RotateCcw, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
+import { PageLayout } from '@/components/layout/page-layout';
 import { cn } from '@/lib/utils';
 
 interface CSVRow {
@@ -289,6 +290,8 @@ export function TransactionsImportView() {
       return;
     }
 
+    const wsPatch = state.currentWorkspaceId ? { workspace_id: state.currentWorkspaceId } : {};
+
     try {
       // 1. Process "Create" Wallet Mappings
       const finalWallets = { ...walletMappings };
@@ -297,6 +300,7 @@ export function TransactionsImportView() {
             addLog(`✨ Creando billetera: ${mapping.originalName} en ${mapping.currency}`);
             const { data: newW } = await supabase.from('wallets').insert({
               user_id: userData.id,
+              ...wsPatch,
               name: mapping.originalName,
               type: 'bank',
               currency_code: mapping.currency
@@ -312,6 +316,7 @@ export function TransactionsImportView() {
             addLog(`✨ Creando categoría: ${mapping.originalGroup} > ${mapping.originalName}`);
             const { data: newC } = await supabase.from('categories').insert({
               user_id: userData.id,
+              ...wsPatch,
               name: mapping.originalName,
               group_name: mapping.originalGroup,
               type: mapping.type
@@ -463,9 +468,10 @@ export function TransactionsImportView() {
       }
 
       addLog(`⏳ Insertando ${transactionsToInsert.length} movimientos...`);
+      const rowsWithWs = transactionsToInsert.map((t) => ({ ...t, ...wsPatch }));
       const chunkSize = 500;
-      for (let i = 0; i < transactionsToInsert.length; i += chunkSize) {
-         const chunk = transactionsToInsert.slice(i, i + chunkSize);
+      for (let i = 0; i < rowsWithWs.length; i += chunkSize) {
+         const chunk = rowsWithWs.slice(i, i + chunkSize);
          const { error } = await supabase.from('transactions').insert(chunk);
          if (error) throw error;
       }
@@ -494,13 +500,14 @@ export function TransactionsImportView() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <PageLayout title="Importar" icon={FileSpreadsheet} description="Cargá movimientos desde un CSV">
+    <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-          <FileSpreadsheet className="w-6 h-6" />
+        <div className="flex size-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+          <FileSpreadsheet className="size-5" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold">Importador Masivo (Wizard)</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Importador Masivo (Wizard)</h1>
           <p className="text-muted-foreground">Mapea tus Excel con control total antes de inyectar a la base.</p>
         </div>
       </div>
@@ -509,18 +516,18 @@ export function TransactionsImportView() {
           <div className="lg:col-span-2 space-y-6">
             
             {step === 'upload' && (
-                <Card className="border-border/50">
+                <Card className="shadow-soft-sm">
                   <CardHeader>
-                    <CardTitle className="text-lg">Paso 1: Sube tu Excel</CardTitle>
+                    <CardTitle className="text-lg font-semibold tracking-tight">Paso 1: Sube tu Excel</CardTitle>
                     <CardDescription>
                       Formato esperado: FECHA, TIPO, CATEGORIA, SUBCATEGORIA, DETALLE, FIAT, BILLETERA, TOTAL...
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex flex-col items-center justify-center border-2 border-dashed border-border/50 rounded-2xl p-8 hover:bg-accent/30 transition-colors relative">
-                       <Upload className="w-10 h-10 text-muted-foreground mb-4" />
+                    <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-card p-8 hover:border-primary/50 transition-colors relative">
+                       <Upload className="size-10 text-muted-foreground mb-4" />
                        <p className="text-sm font-medium">Arrastra tu archivo CSV aquí, o haz clic</p>
-                       <input 
+                       <input
                          type="file" accept=".csv" 
                          className="absolute inset-0 opacity-0 cursor-pointer" 
                          onChange={handleFileUpload}
@@ -531,33 +538,33 @@ export function TransactionsImportView() {
             )}
 
             {step === 'mapping' && (
-               <Card className="border-primary/50 ring-1 ring-primary/20 shadow-lg animate-in fade-in zoom-in-95 duration-300">
-                  <CardHeader className="bg-primary/5 rounded-t-xl border-b border-primary/10">
+               <Card className="shadow-soft-sm animate-in fade-in zoom-in-95 duration-300">
+                  <CardHeader className="border-b border-border/60">
                       <div className="flex items-center justify-between">
                          <div>
-                            <CardTitle className="text-lg text-primary">Paso 2: Verifica Mapeos</CardTitle>
+                            <CardTitle className="text-lg font-semibold tracking-tight">Paso 2: Verifica Mapeos</CardTitle>
                             <CardDescription>Asegúrate de que tus datos de Excel coincidan con la DB.</CardDescription>
                          </div>
                          <Button onClick={processImport} className="gap-2 shrink-0">
-                            Inyectar Todo <ChevronRight className="w-4 h-4" />
+                            Inyectar Todo <ChevronRight className="size-4" />
                          </Button>
                       </div>
                   </CardHeader>
                   <CardContent className="p-0">
-                      <div className="p-4 space-y-3 bg-accent/20 border-b border-border/50">
-                          <h3 className="text-sm font-bold uppercase text-muted-foreground tracking-wider">🏦 Billeteras detectadas ({Object.keys(walletMappings).length})</h3>
+                      <div className="p-4 space-y-3 border-b border-border/60">
+                          <h3 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">🏦 Billeteras detectadas ({Object.keys(walletMappings).length})</h3>
                           <div className="space-y-2">
                              {Object.values(walletMappings).map((w, idx) => (
                                  <div key={idx} className={cn(
-                                     "flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border",
-                                     w.isAutoMatched ? "border-income/30 bg-income/5" : "border-destructive/30 bg-destructive/5"
+                                     "flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl",
+                                     w.isAutoMatched ? "bg-income/12" : "bg-warning/15"
                                  )}>
                                      <div className="flex flex-col w-full sm:w-1/2">
                                          <span className="font-medium text-sm">{w.originalName || '(Vacío)'}</span>
                                          <span className="text-xs text-muted-foreground opacity-70">Moneda asignada: {w.currency}</span>
                                      </div>
-                                     <select 
-                                         className="flex h-9 w-full rounded-md border border-input bg-background/50 px-3 py-1 text-sm shadow-sm font-semibold text-primary"
+                                     <select
+                                         className="flex h-10 w-full rounded-xl border border-input bg-card px-3 py-1 text-sm font-medium"
                                          value={w.mappedId}
                                          onChange={(e) => setWalletMappings(prev => ({...prev, [w.original]: {...w, mappedId: e.target.value, isAutoMatched: e.target.value !== 'create' && e.target.value !== 'ignore'}}))}
                                      >
@@ -573,19 +580,19 @@ export function TransactionsImportView() {
                       </div>
 
                       <div className="p-4 space-y-3">
-                          <h3 className="text-sm font-bold uppercase text-muted-foreground tracking-wider">📂 Categorías detectadas ({Object.keys(catMappings).length})</h3>
+                          <h3 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">📂 Categorías detectadas ({Object.keys(catMappings).length})</h3>
                           <div className="space-y-2">
                              {Object.values(catMappings).map((c, idx) => (
                                  <div key={idx} className={cn(
-                                     "flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border",
-                                     c.isAutoMatched ? "border-income/30 bg-income/5" : "border-destructive/30 bg-destructive/5"
+                                     "flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl",
+                                     c.isAutoMatched ? "bg-income/12" : "bg-warning/15"
                                  )}>
                                      <div className="flex flex-col w-full sm:w-1/2">
                                         <span className="font-medium text-sm">{c.originalGroup} &gt; {c.originalName}</span>
                                         <span className="text-xs text-muted-foreground opacity-70">Tipo: {c.type === 'income' ? 'Ingreso' : 'Gasto'}</span>
                                      </div>
-                                     <select 
-                                         className="flex h-9 w-full rounded-md border border-input bg-background/50 px-3 py-1 text-sm shadow-sm"
+                                     <select
+                                         className="flex h-10 w-full rounded-xl border border-input bg-card px-3 py-1 text-sm"
                                          value={c.mappedId}
                                          onChange={(e) => setCatMappings(prev => ({...prev, [c.original]: {...c, mappedId: e.target.value, isAutoMatched: e.target.value !== 'create' && e.target.value !== 'ignore'}}))}
                                      >
@@ -606,15 +613,15 @@ export function TransactionsImportView() {
             )}
 
             {['importing', 'done', 'error'].includes(step) && (
-              <Card className="border-border/50 border-primary/20 bg-primary/5">
+              <Card className="shadow-soft-sm">
                 <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    {step === 'done' ? <CheckCircle2 className="w-5 h-5 text-income" /> : <ArrowRightLeft className="w-5 h-5 text-primary animate-pulse" />}
+                  <CardTitle className="text-lg font-semibold tracking-tight flex items-center gap-2">
+                    {step === 'done' ? <CheckCircle2 className="size-5 text-income" /> : <ArrowRightLeft className="size-5 text-primary animate-pulse" />}
                     Progreso y Logs
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="bg-background rounded-xl border border-border/50 p-4 font-mono text-xs text-muted-foreground h-64 overflow-y-auto space-y-2">
+                  <div className="bg-accent/40 rounded-xl p-4 font-mono text-xs text-muted-foreground h-64 overflow-y-auto space-y-2">
                     {logs.map((log, i) => (
                       <div key={i} className={
                         log.startsWith('❌') ? 'text-destructive font-semibold' : 
@@ -631,30 +638,29 @@ export function TransactionsImportView() {
           </div>
           
           <div className="space-y-6">
-            <Card className="border-border/50 border-destructive/20 bg-destructive/5 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-destructive/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />
+            <Card className="shadow-soft-sm overflow-hidden">
                 <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2 text-destructive">
-                    <RotateCcw className="w-5 h-5" />
+                  <CardTitle className="text-lg font-semibold tracking-tight flex items-center gap-2">
+                    <RotateCcw className="size-5 text-muted-foreground" />
                     Lotes Importados
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   {batches.length === 0 ? (
-                      <p className="text-sm text-destructive/70 text-center py-4">No hay importaciones aún.</p>
+                      <p className="text-sm text-muted-foreground text-center py-4">No hay importaciones aún.</p>
                   ) : (
                       <div className="space-y-3">
                          {batches.map(batch => (
-                             <div key={batch.id} className="bg-background/80 p-3 rounded-lg border border-destructive/20 flex flex-col gap-2 relative z-10 hover:border-destructive/40 transition-colors">
+                             <div key={batch.id} className="bg-accent/40 p-3 rounded-xl flex flex-col gap-2 hover:bg-accent/60 transition-colors">
                                  <div className="flex justify-between items-center">
-                                    <span className="font-mono text-xs font-semibold text-destructive">{batch.id}</span>
-                                    <Badge variant="outline" className="text-xs bg-destructive/5 border-destructive/20 text-destructive">
+                                    <span className="font-mono text-xs font-semibold text-foreground">{batch.id}</span>
+                                    <Badge variant="outline" className="text-xs bg-expense/12 border-transparent text-expense tabular-nums">
                                         {batch.count} filas
                                     </Badge>
                                  </div>
                                  {confirmingId === batch.id ? (
                                     <div className="flex gap-2">
-                                        <Button variant="destructive" size="sm" className="w-full text-xs font-bold" onClick={() => handleRevert(batch.id)}>Confirmar Peligro ⚠️</Button>
+                                        <Button variant="destructive" size="sm" className="w-full text-xs font-semibold" onClick={() => handleRevert(batch.id)}>Confirmar Peligro ⚠️</Button>
                                         <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => setConfirmingId(null)}>Cancelar</Button>
                                     </div>
                                  ) : (
@@ -671,5 +677,6 @@ export function TransactionsImportView() {
           </div>
       </div>
     </div>
+    </PageLayout>
   );
 }

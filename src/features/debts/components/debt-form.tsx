@@ -2,7 +2,15 @@
 
 import { useUIStore } from '@/stores/ui-store';
 import { useFinanceStore } from '@/stores/finance-store';
-import { ResponsiveModal, ResponsiveModalContent, ResponsiveModalHeader, ResponsiveModalTitle } from '@/components/ui/responsive-modal';
+import { useGlobalDialog } from '@/components/providers/dialog-provider';
+import {
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalHeader,
+  ResponsiveModalTitle,
+  ResponsiveModalBody,
+  ResponsiveModalFooter,
+} from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,6 +35,8 @@ export function DebtForm() {
   const [currencyCode, setCurrencyCode] = useState('ARS');
   const [totalAmount, setTotalAmount] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const dialog = useGlobalDialog();
 
   useEffect(() => {
     if (isOpen) {
@@ -77,9 +87,13 @@ export function DebtForm() {
                  
             if (!groupData) throw new Error("No se encontro el grupo de Deudas del sistema.");
 
+            const workspaceId = useFinanceStore.getState().currentWorkspaceId;
+            const wsPatch = workspaceId ? { workspace_id: workspaceId } : {};
+
             // 1. Create Category
             const { data: newCat } = await supabase.from('categories').insert({
                 user_id: userData.id,
+                ...wsPatch,
                 name,
                 group_id: groupData.id,
                 type: 'expense' // Debts are generally expenses to pay off
@@ -90,6 +104,7 @@ export function DebtForm() {
             // 2. Create Debt
             await supabase.from('debts').insert({
                 user_id: userData.id,
+                ...wsPatch,
                 category_id: newCat.id,
                 total_amount: Number(totalAmount),
                 currency_code: currencyCode,
@@ -101,18 +116,25 @@ export function DebtForm() {
         closeSheet();
     } catch (err: any) {
         console.error("Error saving debt:", err);
-        alert(err.message);
+        setError(err?.message || 'No se pudo guardar la deuda.');
     } finally {
         setLoading(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!confirm('¿Estás seguro de eliminar esta deuda? Se eliminará la categoría pero no los movimientos de pago.')) return;
+    const ok = await dialog.confirm('Eliminar deuda', 'Se elimina la deuda y su categoría, pero no los movimientos de pago ya registrados. No se puede deshacer.');
+    if (!ok) return;
     setLoading(true);
     try {
         const d = sheetData?.debt as any;
-        await supabase.from('categories').delete().eq('id', d.category_id); // ON DELETE CASCADE destroys the Debt row automatically
+        // Antes se borraba la categoría y el CASCADE se llevaba la deuda. Ahora
+        // es lógico en las dos, así que hay que marcar ambas explícitamente.
+        const stamp = new Date().toISOString();
+        const { error: e1 } = await supabase.from('debts').update({ deleted_at: stamp }).eq('id', d.id);
+        if (e1) throw e1;
+        const { error: e2 } = await supabase.from('categories').update({ deleted_at: stamp }).eq('id', d.category_id);
+        if (e2) throw e2;
         await useFinanceStore.getState().hydrate();
         closeSheet();
     } catch (e) {
@@ -129,22 +151,22 @@ export function DebtForm() {
           <ResponsiveModalTitle>{isEdit ? 'Editar Deuda' : 'Nueva Deuda'}</ResponsiveModalTitle>
         </ResponsiveModalHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6 mt-2">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        <ResponsiveModalBody className="space-y-5">
           <div className="space-y-2">
             <Label>Nombre (Reflejado como Subcategoría)</Label>
-            <Input 
-              value={name} 
-              onChange={(e) => setName(e.target.value)} 
-              placeholder="Ej: Préstamo Auto, Tarjeta Galicia, etc" 
-              className="h-12 bg-accent/30 border-border/50"
-              required 
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ej: Préstamo Auto, Tarjeta Galicia, etc"
+              required
             />
           </div>
 
           <div className="space-y-2">
             <Label>Moneda de la Deuda</Label>
             <Select value={currencyCode} onValueChange={(val) => { if (val) setCurrencyCode(val) }} disabled={isEdit}>
-              <SelectTrigger className="h-12 bg-accent/30 border-border/50 text-base">
+              <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -163,7 +185,7 @@ export function DebtForm() {
                 type="number"
                 step="0.01"
                 min="0"
-                className="pl-7 h-12 bg-accent/30 border-border/50"
+                className="pl-7 tabular-nums"
                 value={totalAmount}
                 onChange={(e) => setTotalAmount(e.target.value)}
                 required
@@ -174,30 +196,39 @@ export function DebtForm() {
 
           <div className="space-y-2">
             <Label>Descripción Adicional</Label>
-            <Input 
-              value={description} 
-              onChange={(e) => setDescription(e.target.value)} 
-              placeholder="Plazo, tasa de interés, entidad, etc" 
-              className="h-12 bg-accent/30 border-border/50"
+            <Input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Plazo, tasa de interés, entidad, etc"
             />
           </div>
 
-          <div className="pt-4 flex items-center justify-between">
+          {error && (
+            <p role="alert" className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
+              {error}
+            </p>
+          )}
+
+        </ResponsiveModalBody>
+
+        <ResponsiveModalFooter>
+          <div className="flex items-center justify-between">
             {isEdit ? (
-                <Button type="button" variant="ghost" className="text-destructive hover:bg-destructive/10" onClick={handleDelete} disabled={loading}>
-                   <Trash2 className="w-4 h-4" />
+                <Button type="button" variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10" onClick={handleDelete} disabled={loading}>
+                   <Trash2 className="size-4" />
                 </Button>
             ) : <div/>}
 
             <div className="flex gap-2">
-                <Button type="button" variant="outline" className="h-12 w-full text-base" onClick={closeSheet} disabled={loading}>
+                <Button type="button" variant="outline" className="w-full" onClick={closeSheet} disabled={loading}>
                 Cancelar
                 </Button>
-                <Button type="submit" className="h-12 w-full text-base" disabled={loading}>
+                <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? 'Guardando...' : (isEdit ? 'Actualizar' : 'Crear')}
                 </Button>
             </div>
           </div>
+        </ResponsiveModalFooter>
         </form>
       </ResponsiveModalContent>
     </ResponsiveModal>
