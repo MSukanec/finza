@@ -30,7 +30,10 @@ export interface Account {
   type: 'cash' | 'bank' | 'digital';
   currency_id: string;
   initial_balance?: number;
+  /** La plata que hay HOY. No descuenta lo que todavía no se cobró. */
   balance: number;
+  /** Lo que ya está comprometido y va a salir: cheques, pagos a plazo. */
+  committed?: number;
   color: string;
   icon: string;
   created_at: string;
@@ -189,7 +192,20 @@ export interface Transaction {
   destination_account_id: string | null; // For transfers
   description: string;
   status: 'draft' | 'warning' | 'reviewed';
+  /**
+   * Cuándo ocurrió el hecho: la compra, la venta. Manda en RESULTADOS.
+   *
+   * No es cuándo se pagó. Si comprás en julio con un cheque a septiembre, el
+   * costo es de julio porque en julio vendiste esa mercadería.
+   */
   date: string;
+  /**
+   * Cuándo se mueve la plata, si es distinto del hecho. Manda en la CAJA.
+   *
+   * NULL significa contado: se paga el mismo día. Un cheque a 60 días lleva acá
+   * la fecha de cobro, y hasta entonces esa plata sigue en la billetera.
+   */
+  settles_at?: string | null;
   period_month?: string;
   invoiced_at?: string;
   import_batch?: string;

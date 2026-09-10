@@ -72,11 +72,22 @@ export function KpiGrid() {
       }
     }
 
+    // Lo que ya está comprometido y sale en el próximo mes: cheques y pagos a
+    // plazo. Es plata que sigue en la billetera pero ya no es tuya.
+    const en30 = transactions.reduce((s, t) => {
+      if (!t.settles_at) return s;
+      const cuando = +parseLocalDate(t.settles_at);
+      if (cuando <= +now || cuando > +now + 30 * 86400000) return s;
+      const v = toPrimary(t.amount, t.currency_id);
+      return s + (t.type === 'expense' || t.type === 'withdrawal' ? v : -v);
+    }, 0);
+
     const delta = (curr: number, prev: number) =>
       prev > 0 ? ((curr - prev) / prev) * 100 : null;
 
     return {
       balance,
+      comprometido: en30,
       income,
       expense,
       net: income - expense,
@@ -94,7 +105,11 @@ export function KpiGrid() {
         icon={Wallet}
         label="Balance total"
         value={mask(formatMoney(stats.balance, currency))}
-        hint="Suma de todas tus billeteras"
+        hint={
+          stats.comprometido > 0
+            ? `Menos ${formatMoney(stats.comprometido, currency)} ya comprometidos`
+            : 'Suma de todas tus billeteras'
+        }
         action={
           <button
             type="button"

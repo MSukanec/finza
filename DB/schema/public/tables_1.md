@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T18:38:37.362Z
+> Generated: 2026-09-10T19:02:05.896Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -164,6 +164,7 @@
 | partner_id | uuid | ✓ |  | FK → partners.id |
 | fingerprint | text | ✓ |  |  |
 | import_batch_id | uuid | ✓ |  | FK → import_batches.id |
+| settles_at | timestamptz | ✓ |  |  |
 
 ### `users`
 

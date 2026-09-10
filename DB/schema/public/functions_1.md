@@ -1,9 +1,9 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T18:38:37.362Z
+> Generated: 2026-09-10T19:02:05.896Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Functions (chunk 1: activity_authors — reconciliation_summary)
+## [PUBLIC] Functions (chunk 1: activity_authors — protect_is_admin)
 
 ### `activity_authors(ws uuid)` 🔐
 
@@ -731,6 +731,48 @@ $function$
 ```
 </details>
 
+### `pending_settlements(ws uuid)` 🔐
+
+- **Returns**: TABLE(id uuid, settles_at timestamp with time zone, date timestamp with time zone, type text, amount numeric, description text, wallet_id uuid, wallet_name text, category_id uuid, dias integer)
+- **Kind**: function | STABLE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.pending_settlements(ws uuid)
+ RETURNS TABLE(id uuid, settles_at timestamp with time zone, date timestamp with time zone, type text, amount numeric, description text, wallet_id uuid, wallet_name text, category_id uuid, dias integer)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+    IF NOT public.is_workspace_member(ws) THEN
+        RAISE EXCEPTION 'No sos miembro de este espacio';
+    END IF;
+
+    RETURN QUERY
+    SELECT t.id,
+           t.settles_at,
+           t.date,
+           t.type::text,
+           t.amount,
+           t.description,
+           t.wallet_id,
+           w.name,
+           t.category_id,
+           (t.settles_at::date - CURRENT_DATE)::int
+      FROM public.transactions t
+      LEFT JOIN public.wallets w ON w.id = t.wallet_id
+     WHERE t.workspace_id = ws
+       AND t.deleted_at IS NULL
+       AND t.settles_at IS NOT NULL
+       AND t.settles_at > now()
+     ORDER BY t.settles_at;
+END;
+$function$
+```
+</details>
+
 ### `protect_is_admin()`
 
 - **Returns**: trigger
@@ -749,51 +791,6 @@ BEGIN
         RAISE EXCEPTION 'is_admin solo puede cambiarse desde el servidor';
     END IF;
     RETURN NEW;
-END;
-$function$
-```
-</details>
-
-### `reconciliation_summary(rec jsonb, op text)` 🔐
-
-- **Returns**: text
-- **Kind**: function | STABLE | SECURITY DEFINER
-
-<details><summary>Source</summary>
-
-```sql
-CREATE OR REPLACE FUNCTION public.reconciliation_summary(rec jsonb, op text)
- RETURNS text
- LANGUAGE plpgsql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-DECLARE
-    v_wallet text;
-    v_diff   numeric;
-BEGIN
-    SELECT name INTO v_wallet FROM public.wallets WHERE id = (rec->>'wallet_id')::uuid;
-    v_diff := (rec->>'counted_amount')::numeric - (rec->>'expected_amount')::numeric;
-
-    IF op = 'INSERT' THEN
-        RETURN 'Arqueó ' || COALESCE(v_wallet, 'una billetera') || ': ' ||
-            CASE
-                WHEN abs(v_diff) < 0.01 THEN 'cuadra'
-                WHEN v_diff < 0 THEN 'faltan ' || to_char(abs(v_diff), 'FM999,999,999,990.00')
-                ELSE 'sobran ' || to_char(v_diff, 'FM999,999,999,990.00')
-            END;
-    END IF;
-
-    IF rec->>'status' = 'resolved' THEN
-        RETURN 'Cerró la diferencia del arqueo de ' || COALESCE(v_wallet, 'una billetera') ||
-            CASE rec->>'resolution'
-                WHEN 'adjusted'  THEN ' asentando un ajuste'
-                WHEN 'explained' THEN ' dándola por explicada'
-                ELSE ''
-            END;
-    END IF;
-
-    RETURN 'Editó el arqueo de ' || COALESCE(v_wallet, 'una billetera');
 END;
 $function$
 ```

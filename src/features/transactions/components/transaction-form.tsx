@@ -65,6 +65,8 @@ export function TransactionForm() {
   const [categoryId, setCategoryId] = useState('');
   const [periodMonth, setPeriodMonth] = useState('');
   const [partnerId, setPartnerId] = useState('');
+  // Vacío = contado. Sólo se completa cuando la plata se mueve otro día.
+  const [settlesAt, setSettlesAt] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,6 +104,7 @@ export function TransactionForm() {
       setPeriodMonth(editing.period_month || '');
       setCategoryId(editing.category_id || '');
       setPartnerId(editing.partner_id || '');
+      setSettlesAt(editing.settles_at ? editing.settles_at.split('T')[0] : '');
       setGroupName(
         categories.find((c) => c.id === editing.category_id)?.group_name || ''
       );
@@ -109,6 +112,7 @@ export function TransactionForm() {
       const d = sheetData ?? {};
       setType((d.type as TransactionType) || 'expense');
       setPartnerId((d.partner_id as string) || '');
+      setSettlesAt('');
       setAmount(d.amount != null ? String(d.amount) : '');
       setDescription((d.description as string) || '');
       setDate((d.date as string) || today());
@@ -215,6 +219,9 @@ export function TransactionForm() {
       return setError('Ingresá un monto mayor a cero.');
     }
     if (!account) return setError('Elegí una billetera.');
+    if (settlesAt && settlesAt < date) {
+      return setError('El pago no puede ser anterior al movimiento.');
+    }
     if (isEquity && !partnerId) {
       return setError(type === 'contribution' ? 'Elegí quién aportó.' : 'Elegí quién retiró.');
     }
@@ -241,6 +248,8 @@ export function TransactionForm() {
         // para resultados, y esto es patrimonio.
         category_id: isTransfer || isEquity ? null : category!.id,
         partner_id: isEquity ? partnerId : null,
+        // Mediodía local, igual que `date`, para que no se corra un día.
+        settles_at: settlesAt ? new Date(`${settlesAt}T12:00:00`).toISOString() : null,
         account_id: account.id,
         destination_account_id: isTransfer ? destination!.id : null,
         description: description.trim() || defaultDescription(type),
@@ -291,12 +300,41 @@ export function TransactionForm() {
             />
           </Field>
 
-          <Field label="Fecha" htmlFor="tx-fecha">
+          <Field label="Fecha" htmlFor="tx-fecha" hint="cuándo pasó">
             <Input
               id="tx-fecha"
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
+            />
+          </Field>
+
+          {/* La segunda fecha, la del cheque o el pago a plazo. Vacía significa
+              contado, que es la enorme mayoría de los casos: por eso el campo
+              está pero no molesta. */}
+          <Field
+            label="Se paga"
+            htmlFor="tx-pago"
+            hint={
+              settlesAt ? (
+                <button
+                  type="button"
+                  onClick={() => setSettlesAt('')}
+                  className="font-medium text-primary hover:underline"
+                >
+                  contado
+                </button>
+              ) : (
+                'contado'
+              )
+            }
+          >
+            <Input
+              id="tx-pago"
+              type="date"
+              value={settlesAt}
+              min={date}
+              onChange={(e) => setSettlesAt(e.target.value)}
             />
           </Field>
 

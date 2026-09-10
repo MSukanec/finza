@@ -1,9 +1,54 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T18:38:37.362Z
+> Generated: 2026-09-10T19:02:05.896Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Functions (chunk 2: record_reconciliation — wallet_expected_balance)
+## [PUBLIC] Functions (chunk 2: reconciliation_summary — wallet_expected_balance)
+
+### `reconciliation_summary(rec jsonb, op text)` 🔐
+
+- **Returns**: text
+- **Kind**: function | STABLE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.reconciliation_summary(rec jsonb, op text)
+ RETURNS text
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+    v_wallet text;
+    v_diff   numeric;
+BEGIN
+    SELECT name INTO v_wallet FROM public.wallets WHERE id = (rec->>'wallet_id')::uuid;
+    v_diff := (rec->>'counted_amount')::numeric - (rec->>'expected_amount')::numeric;
+
+    IF op = 'INSERT' THEN
+        RETURN 'Arqueó ' || COALESCE(v_wallet, 'una billetera') || ': ' ||
+            CASE
+                WHEN abs(v_diff) < 0.01 THEN 'cuadra'
+                WHEN v_diff < 0 THEN 'faltan ' || to_char(abs(v_diff), 'FM999,999,999,990.00')
+                ELSE 'sobran ' || to_char(v_diff, 'FM999,999,999,990.00')
+            END;
+    END IF;
+
+    IF rec->>'status' = 'resolved' THEN
+        RETURN 'Cerró la diferencia del arqueo de ' || COALESCE(v_wallet, 'una billetera') ||
+            CASE rec->>'resolution'
+                WHEN 'adjusted'  THEN ' asentando un ajuste'
+                WHEN 'explained' THEN ' dándola por explicada'
+                ELSE ''
+            END;
+    END IF;
+
+    RETURN 'Editó el arqueo de ' || COALESCE(v_wallet, 'una billetera');
+END;
+$function$
+```
+</details>
 
 ### `record_reconciliation(w uuid, counted numeric, at_time timestamp with time zone DEFAULT now(), note_text text DEFAULT NULL::text)` 🔐
 
@@ -178,11 +223,13 @@ BEGIN
 
     SELECT COALESCE((SELECT initial_balance FROM public.wallets WHERE id = w), 0)
          + COALESCE((
-             SELECT SUM(CASE WHEN t.type = 'income' THEN t.amount ELSE -t.amount END)
+             SELECT SUM(
+                 CASE WHEN t.type IN ('income', 'contribution') THEN t.amount ELSE -t.amount END
+             )
                FROM public.transactions t
               WHERE t.wallet_id = w
                 AND t.deleted_at IS NULL
-                AND t.date <= at_time
+                AND COALESCE(t.settles_at, t.date) <= at_time
            ), 0)
       INTO v_bal;
 

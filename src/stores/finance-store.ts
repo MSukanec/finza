@@ -75,16 +75,35 @@ async function ensureAdjustmentCategory(
  */
 function withBalances(accounts: Account[], transactions: Transaction[]): Account[] {
   const delta = new Map<string, number>();
+  const pendiente = new Map<string, number>();
+  const ahora = Date.now();
+
   for (const tx of transactions) {
     if (!tx.account_id) continue;
+
+    // La caja se mueve cuando se mueve la plata, no cuando ocurre el hecho: un
+    // cheque emitido en julio a cobrar en septiembre no toca la billetera hasta
+    // septiembre. Antes se sumaba todo sin mirar la fecha, así que el saldo
+    // descontaba cheques que todavía estaban en la calle: en Samurai eso hacía
+    // que Santander figurara en −$6.912.451 cuando en realidad tenía
+    // $7.205.371, con $14.117.822 comprometidos.
+    const cuando = new Date(tx.settles_at ?? tx.date).getTime();
+
+    if (cuando > ahora) {
+      pendiente.set(tx.account_id, (pendiente.get(tx.account_id) ?? 0) + Number(tx.amount));
+      continue;
+    }
+
     // Ingresos y aportes suman; gastos, retiros, transferencias y cambios
     // restan. Un aporte mueve caja aunque no sea resultado.
     const d = signoEnCaja(tx.type) * Number(tx.amount);
     delta.set(tx.account_id, (delta.get(tx.account_id) ?? 0) + d);
   }
+
   return accounts.map((a) => ({
     ...a,
     balance: Number(a.initial_balance ?? 0) + (delta.get(a.id) ?? 0),
+    committed: pendiente.get(a.id) ?? 0,
   }));
 }
 
@@ -459,6 +478,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         currency_id: t.currency_code.toLowerCase(),
         category_id: t.category_id,
         partner_id: t.partner_id ?? null,
+        settles_at: t.settles_at ?? null,
         account_id: t.wallet_id,
         destination_account_id: t.related_transaction_id ? t.related_transaction_id : null,
         description: t.description,
@@ -820,6 +840,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       description: tx.description,
       status: 'draft',
       date,
+      settles_at: tx.settles_at || null,
       period_month: tx.period_month || undefined,
       invoiced_at: tx.invoiced_at || undefined,
       is_checkpoint: false,
@@ -845,6 +866,8 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       category_id: tx.category_id || null,
       // Sólo los aportes y retiros llevan socio. La base lo exige con un CHECK.
       partner_id: tx.partner_id ?? null,
+      // NULL = contado. Sólo se guarda cuando el pago es a plazo.
+      settles_at: tx.settles_at || null,
       currency_code: tx.currency_id.toUpperCase(),
       date,
     };
@@ -893,6 +916,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     if (data.currency_id) patch.currency_code = data.currency_id.toUpperCase();
     if (data.category_id !== undefined) patch.category_id = data.category_id;
     if (data.partner_id !== undefined) patch.partner_id = data.partner_id;
+    if (data.settles_at !== undefined) patch.settles_at = data.settles_at || null;
     if (data.account_id) patch.wallet_id = data.account_id;
     if (data.description !== undefined) patch.description = data.description;
     if (data.date) patch.date = data.date;

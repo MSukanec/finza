@@ -1,9 +1,9 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T18:38:37.362Z
+> Generated: 2026-09-10T19:02:05.896Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Indexes (30, excluding PKs)
+## [PUBLIC] Indexes (31, excluding PKs)
 
 | Table | Index | Definition |
 |-------|-------|------------|
@@ -26,6 +26,7 @@
 | transactions | transactions_huella_idx | `CREATE INDEX transactions_huella_idx ON public.transactions USING btree (work...` |
 | transactions | transactions_lote_idx | `CREATE INDEX transactions_lote_idx ON public.transactions USING btree (import...` |
 | transactions | transactions_partner_idx | `CREATE INDEX transactions_partner_idx ON public.transactions USING btree (par...` |
+| transactions | transactions_settles_idx | `CREATE INDEX transactions_settles_idx ON public.transactions USING btree (wor...` |
 | users | users_auth_id_key | `CREATE UNIQUE INDEX users_auth_id_key ON public.users USING btree (auth_id)` |
 | users | users_email_key | `CREATE UNIQUE INDEX users_email_key ON public.users USING btree (email)` |
 | wallet_reconciliations | reconciliations_pending_idx | `CREATE INDEX reconciliations_pending_idx ON public.wallet_reconciliations USI...` |

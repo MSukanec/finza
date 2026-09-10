@@ -19,6 +19,7 @@ import {
   Eye,
   Users,
   Shield,
+  CalendarClock,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -52,6 +53,7 @@ const NAV_ITEMS = [
   { href: '/reports', label: 'Reportes', icon: BarChart3 },
   { href: '/categories', label: 'Categorías', icon: Tags },
   { href: '/recurrentes', label: 'Recurrentes', icon: Repeat },
+  { href: '/pagos', label: 'Pagos', icon: CalendarClock },
   { href: '/socios', label: 'Socios', icon: Users },
   { href: '/actividad', label: 'Actividad', icon: History },
   { href: '/budgets', label: 'Presupuestos', icon: Target, adminOnly: true },
