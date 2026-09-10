@@ -567,10 +567,15 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         });
       });
 
+    // Sólo lo que hizo una persona. Las filas sin autor son migraciones y
+    // disparadores de la base: quedan guardadas, pero no tienen nada que
+    // decirle a un socio que entra a ver quién movió qué. Se filtra en la
+    // consulta y no en la vista, para que el límite cuente movimientos reales.
     const { data, error } = await supabase
       .from('activity_log')
       .select('id,user_id,action,entity,entity_id,summary,changes,created_at')
       .eq('workspace_id', workspaceId)
+      .not('user_id', 'is', null)
       .order('created_at', { ascending: false })
       .limit(limit);
     if (error) throw error;

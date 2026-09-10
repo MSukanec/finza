@@ -104,7 +104,7 @@ export function ActivityView() {
   return (
     <PageLayout
       title="Actividad"
-      description="Todo lo que se hizo en este espacio"
+      description="Lo que hizo cada miembro de este espacio"
       icon={History}
       actions={
         <>
@@ -148,7 +148,7 @@ export function ActivityView() {
           <Panel icon={History} title="Sin actividad">
             <p className="py-6 text-center text-sm text-muted-foreground">
               {entries.length === 0
-                ? 'Todavía no hay nada registrado en este espacio. Cualquier cosa que hagas a partir de ahora aparece acá.'
+                ? 'Todavía nadie hizo nada en este espacio. Acá aparece lo que hacen los miembros: cargar, editar y eliminar.'
                 : 'Ningún registro coincide con el filtro.'}
             </p>
           </Panel>
@@ -176,15 +176,11 @@ function Entry({ entry, person }: { entry: ActivityEntry; person?: Person }) {
   const meta = ACTION_META[entry.action];
   const Icon = meta.icon;
 
-  /**
-   * "Sistema" decía dos cosas distintas y eso escondía el problema: una acción
-   * que de verdad no hizo nadie (una migración, un disparador de la base) y
-   * una persona que la app no supo resolver. Ahora sólo lo primero se llama
-   * Sistema; lo segundo se dice como lo que es.
-   */
-  const autor = entry.user_id
-    ? (person?.full_name || person?.email || 'Alguien que ya no podemos identificar')
-    : 'Sistema';
+  // Acá sólo llegan acciones de personas: las que no tienen autor —migraciones
+  // y disparadores de la base— quedan filtradas en la consulta. Si aun así no
+  // se puede resolver el nombre, se dice, en vez de disfrazarlo de "Sistema".
+  const autor =
+    person?.full_name || person?.email || 'Alguien que ya no podemos identificar';
 
   const changes = Object.entries(entry.changes ?? {}).filter(([k]) => !HIDDEN_FIELDS.has(k));
 
