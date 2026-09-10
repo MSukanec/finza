@@ -678,7 +678,16 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     const { error } = await supabase.storage
       .from('logos')
       .upload(ruta, optimizada, { upsert: true, contentType: 'image/webp' });
-    if (error) throw error;
+    if (error) {
+      // El mensaje que devuelve storage —"new row violates row-level security
+      // policy"— no le dice nada a quien lo lee en pantalla, y encima apunta a
+      // la escritura cuando la causa puede ser otra.
+      throw new Error(
+        /row-level security/i.test(error.message)
+          ? 'No tenés permiso para cambiar el logo de este espacio. Sólo el dueño puede.'
+          : error.message
+      );
+    }
 
     const { data } = supabase.storage.from('logos').getPublicUrl(ruta);
     // El `?v=` fuerza al navegador a recargarla: la ruta no cambia al
