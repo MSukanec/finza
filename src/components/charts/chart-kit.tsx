@@ -79,6 +79,25 @@ export const GRID = {
   vertical: false as const,
 };
 
+/**
+ * Props del ResponsiveContainer de todos los gráficos.
+ *
+ * `initialDimension` es lo importante: el default de Recharts es
+ * { width: -1, height: -1 }, así que en el primer render —antes de que el
+ * ResizeObserver mida— el gráfico recibe un ancho NEGATIVO. El Brush arma su
+ * escala con `range([x, x + width - travellerWidth])` y con ancho negativo la
+ * posición de las manijas sale NaN, que es el error que aparecía en consola.
+ *
+ * Los valores son sólo el punto de partida del primer frame: apenas mide, los
+ * reemplaza por los reales.
+ */
+export const CHART_CONTAINER = {
+  width: '100%' as const,
+  height: '100%' as const,
+  minWidth: 0,
+  initialDimension: { width: 600, height: 300 },
+};
+
 export const CURSOR_BAR = { fill: 'var(--accent)', opacity: 0.35 };
 export const CURSOR_LINE = { stroke: 'var(--border)', strokeWidth: 1 };
 

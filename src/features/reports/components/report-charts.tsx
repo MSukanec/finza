@@ -28,6 +28,7 @@ import {
   TONE,
   compactNumber,
   topNWithOther,
+  CHART_CONTAINER,
 } from '@/components/charts/chart-kit';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatMoney } from '@/lib/money';
@@ -42,8 +43,6 @@ import {
   Tags,
   LineChart as LineChartIcon,
 } from 'lucide-react';
-
-const container = { width: '100%' as const, height: '100%' as const, minWidth: 0 };
 
 const METRIC_LABEL: Record<Metric, string> = {
   income: 'Ingresos',
@@ -136,7 +135,7 @@ export function EvolutionChart({
         {buckets.length === 0 ? (
           <ChartEmpty />
         ) : (
-          <ResponsiveContainer {...container}>
+          <ResponsiveContainer {...CHART_CONTAINER}>
             <ComposedChart data={buckets} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
               <CartesianGrid {...GRID} />
               <XAxis dataKey="label" {...AXIS} interval="preserveStartEnd" minTickGap={28} />
@@ -222,7 +221,7 @@ export function IncomeVsExpenseChart({ buckets, currency }: { buckets: Bucket[];
         {buckets.length === 0 ? (
           <ChartEmpty />
         ) : (
-          <ResponsiveContainer {...container}>
+          <ResponsiveContainer {...CHART_CONTAINER}>
             <BarChart data={buckets} margin={{ top: 4, right: 8, bottom: 0, left: 8 }} barGap={2}>
               <CartesianGrid {...GRID} />
               <XAxis dataKey="label" {...AXIS} interval="preserveStartEnd" minTickGap={28} />
@@ -250,7 +249,7 @@ export function NetChart({ buckets, currency }: { buckets: Bucket[]; currency: C
         {buckets.length === 0 ? (
           <ChartEmpty />
         ) : (
-          <ResponsiveContainer {...container}>
+          <ResponsiveContainer {...CHART_CONTAINER}>
             <BarChart data={buckets} margin={{ top: 4, right: 8, bottom: 0, left: 8 }}>
               <CartesianGrid {...GRID} />
               <XAxis dataKey="label" {...AXIS} interval="preserveStartEnd" minTickGap={28} />
@@ -287,7 +286,7 @@ export function CumulativeChart({ buckets, currency }: { buckets: Bucket[]; curr
         {buckets.length === 0 ? (
           <ChartEmpty />
         ) : (
-          <ResponsiveContainer {...container}>
+          <ResponsiveContainer {...CHART_CONTAINER}>
             <AreaChart data={buckets} margin={{ top: 4, right: 8, bottom: 0, left: 8 }}>
               <defs>
                 <linearGradient id="rep-cumulative" x1="0" y1="0" x2="0" y2="1">
@@ -422,7 +421,7 @@ export function CompositionChart({
         {buckets.length === 0 ? (
           <ChartEmpty />
         ) : (
-          <ResponsiveContainer {...container}>
+          <ResponsiveContainer {...CHART_CONTAINER}>
             <BarChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 8 }}>
               <CartesianGrid {...GRID} />
               <XAxis dataKey="label" {...AXIS} interval="preserveStartEnd" minTickGap={28} />
