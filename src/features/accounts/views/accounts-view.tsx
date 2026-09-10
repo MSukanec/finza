@@ -116,10 +116,15 @@ export function AccountsView() {
          group.accounts.push(acc);
      });
 
-     // Cada subcuenta queda debajo de su madre, en vez de suelta en la lista.
+     // Cada subcuenta queda debajo de su madre, alfabético dentro de cada
+     // nivel. El orden se arma acá y NO se vuelve a tocar después: un sort
+     // alfabético plano posterior mezclaba las cajas con las billeteras de
+     // arriba, y como las subcuentas van sangradas quedaban colgando de la que
+     // les tocara al lado.
+     const porNombre = (a: any, b: any) => a.name.localeCompare(b.name);
      for (const group of groupsMap.values()) {
-         const raiz = group.accounts.filter((a) => !a.parent_id);
-         const hijas = group.accounts.filter((a) => a.parent_id);
+         const raiz = group.accounts.filter((a) => !a.parent_id).sort(porNombre);
+         const hijas = group.accounts.filter((a) => a.parent_id).sort(porNombre);
          group.accounts = raiz.flatMap((madre) => [
              madre,
              ...hijas.filter((h) => h.parent_id === madre.id),
@@ -135,11 +140,6 @@ export function AccountsView() {
          if (a.currency.id === 'usd' && b.currency.id !== 'usd') return -1;
          if (a.currency.id !== 'usd' && b.currency.id === 'usd') return 1;
          return a.currency.name.localeCompare(b.currency.name);
-     });
-
-     // Order internal accounts alphabetically by name
-     groupsArray.forEach(g => {
-         g.accounts.sort((a, b) => a.name.localeCompare(b.name));
      });
 
      return groupsArray;

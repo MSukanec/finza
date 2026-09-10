@@ -73,7 +73,7 @@ async function ensureAdjustmentCategory(
  * optimista, el saldo de la billetera ya queda bien sin pedirle nada al
  * servidor. Misma regla que usa hydrate().
  */
-function withBalances(accounts: Account[], transactions: Transaction[]): Account[] {
+export function withBalances(accounts: Account[], transactions: Transaction[]): Account[] {
   const delta = new Map<string, number>();
   const pendiente = new Map<string, number>();
   const ahora = Date.now();
@@ -459,14 +459,20 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       created_at: w.created_at
     }));
 
-    for (const tx of txs) {
-      const acc = accounts.find((a: any) => a.id === tx.wallet_id);
-      if (acc) {
-        if (tx.type === 'income') acc.balance += Number(tx.amount);
-        if (tx.type === 'expense') acc.balance -= Number(tx.amount);
-        if (tx.type === 'transfer' || tx.type === 'exchange') acc.balance -= Number(tx.amount);
-      }
-    }
+    // hydrate calculaba los saldos con su propio bucle, que no conocía las
+    // subcuentas ni la fecha de pago: el agrupador quedaba en cero y los
+    // cheques sin cobrar ya estaban descontados. Ahora es la misma función que
+    // usan las escrituras optimistas, así que las dos vías dan lo mismo.
+    const conSaldos = withBalances(
+      accounts as Account[],
+      txs.map((t: any) => ({
+        account_id: t.wallet_id,
+        amount: Number(t.amount),
+        type: t.type,
+        date: t.date,
+        settles_at: t.settles_at ?? null,
+      })) as Transaction[]
+    );
 
     const budgets: Budget[] = (budgetsRes.data || []).map((b: any) => ({
       id: b.id,
@@ -485,7 +491,6 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       workspaces,
       currentWorkspaceId,
       people,
-      accounts,
       budgets,
       reconciliations: ((reconciliationsRes as any).data || []).map((r: any) => ({
         ...r,
@@ -493,6 +498,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         expected_amount: Number(r.expected_amount),
       })) as Reconciliation[],
       purges: ((purgesRes as any).data || []) as Purge[],
+      accounts: conSaldos,
       partners: ((partnersRes as any).data || []).map((p: any) => ({
         ...p,
         ownership_pct: Number(p.ownership_pct ?? 0),

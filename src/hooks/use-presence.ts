@@ -28,12 +28,13 @@ export function usePresence(workspaceId: string | null, yo: Person | null): Cone
   useEffect(() => {
     if (!workspaceId || !yo) return;
 
-    const canal = supabase.channel(`presencia:${workspaceId}`, {
-      config: { presence: { key: yo.id }, private: true },
-    });
+    const nombre = `presencia:${workspaceId}`;
+    const topic = `realtime:${nombre}`;
+    let vivo = true;
+    let canal: ReturnType<typeof supabase.channel> | null = null;
 
-    const volcar = () => {
-      const estado = canal.presenceState<Conectado>();
+    const volcar = (c: NonNullable<typeof canal>) => () => {
+      const estado = c.presenceState<Conectado>();
       const gente: Conectado[] = [];
 
       for (const [clave, entradas] of Object.entries(estado)) {
@@ -48,24 +49,41 @@ export function usePresence(workspaceId: string | null, yo: Person | null): Cone
       setOtros(gente);
     };
 
-    canal
-      .on('presence', { event: 'sync' }, volcar)
-      .on('presence', { event: 'join' }, volcar)
-      .on('presence', { event: 'leave' }, volcar)
-      .subscribe((estado) => {
-        if (estado === 'SUBSCRIBED') {
-          canal.track({
-            id: yo.id,
-            full_name: yo.full_name,
-            email: yo.email,
-            avatar_url: yo.avatar_url,
-            desde: new Date().toISOString(),
-          });
-        }
+    // `supabase.channel()` devuelve el canal YA EXISTENTE si el topic coincide,
+    // y a un canal suscrito el cliente no le deja agregar handlers. En
+    // desarrollo React monta dos veces: el segundo montaje encontraba el canal
+    // del primero todavía vivo —removeChannel es asincrónico— y rompía con
+    // "cannot add presence callbacks after subscribe()".
+    const anterior = supabase.getChannels().find((c) => c.topic === topic);
+    const listo = anterior ? supabase.removeChannel(anterior) : Promise.resolve();
+
+    void listo.then(() => {
+      if (!vivo) return;
+
+      const c = supabase.channel(nombre, {
+        config: { presence: { key: yo.id }, private: true },
       });
+      canal = c;
+
+      c.on('presence', { event: 'sync' }, volcar(c))
+        .on('presence', { event: 'join' }, volcar(c))
+        .on('presence', { event: 'leave' }, volcar(c))
+        .subscribe((estado) => {
+          if (estado === 'SUBSCRIBED') {
+            void c.track({
+              id: yo.id,
+              full_name: yo.full_name,
+              email: yo.email,
+              avatar_url: yo.avatar_url,
+              desde: new Date().toISOString(),
+            });
+          }
+        });
+    });
 
     return () => {
-      supabase.removeChannel(canal);
+      vivo = false;
+      if (canal) void supabase.removeChannel(canal);
     };
     // Se depende de los campos y no del objeto `yo`: viene de un mapa que se
     // rearma en cada hydrate, así que su identidad cambia sin que cambie la
