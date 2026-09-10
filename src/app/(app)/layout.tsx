@@ -25,6 +25,7 @@ import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/ui-store';
 import { useFinanceStore } from '@/stores/finance-store';
+import { veTodo } from '@/lib/types';
 import { TransactionForm } from '@/features/transactions/components/transaction-form';
 import { AccountForm } from '@/features/accounts/components/account-form';
 import { CategoryForm } from '@/features/categories/components/category-form';
@@ -33,6 +34,7 @@ import { BudgetForm } from '@/features/budgets/components/budget-form';
 import { ReconciliationForm } from '@/features/accounts/components/reconciliation-form';
 import { PartnerForm } from '@/features/partners/components/partner-form';
 import { AdminPanel } from '@/components/admin-panel';
+import { PresenceBar } from '@/components/presence-bar';
 import { UserProfile } from '@/components/user-profile';
 import { WorkspaceSwitcher } from '@/components/workspace-switcher';
 import { DialogProvider } from '@/components/providers/dialog-provider';
@@ -80,6 +82,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isHydrated = useFinanceStore((s) => s.isHydrated);
   const user = useFinanceStore((s) => s.user);
   const isAdmin = useFinanceStore((s) => s.isAdmin);
+  const workspaces = useFinanceStore((s) => s.workspaces);
+  const currentWorkspaceId = useFinanceStore((s) => s.currentWorkspaceId);
+  const rolActual = workspaces.find((w) => w.id === currentWorkspaceId)?.role ?? null;
 
   useEffect(() => {
     if (isHydrated && !user) router.push('/login');
@@ -89,6 +94,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setMoreOpen(false);
   }, [pathname]);
+
+  /**
+   * El colaborador sólo ve Movimientos.
+   *
+   * Esto es comodidad, NO seguridad: lo que impide que vea datos ajenos son las
+   * políticas de la base (DB/034). Si esta línea desapareciera, el menú se
+   * llenaría de secciones que le devolverían pantallas vacías, no información.
+   */
+  const soloMovimientos = !veTodo(rolActual);
+  // Escribir /socios a mano no puede ser una via de entrada. La base igual no
+  // le devolveria nada, pero una pantalla vacia y rota es una mala respuesta.
+  useEffect(() => {
+    if (!isHydrated || !soloMovimientos) return;
+    if (!pathname.startsWith('/transactions')) router.replace('/transactions');
+  }, [isHydrated, soloMovimientos, pathname, router]);
 
   if (!isHydrated || !user) {
     return (
@@ -103,7 +123,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const navItems = NAV_ITEMS.filter((i) => !i.adminOnly || isAdmin);
+  const navItems = NAV_ITEMS
+    .filter((i) => !i.adminOnly || isAdmin)
+    .filter((i) => !soloMovimientos || i.href === '/transactions');
   const mobileNav = navItems.filter((i) => PRIMARY_MOBILE.includes(i.href));
   const moreNav = navItems.filter((i) => !PRIMARY_MOBILE.includes(i.href));
 
@@ -152,6 +174,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             })}
           </nav>
 
+          {/* Arriba del usuario: es información sobre el equipo, no sobre una
+              pantalla, así que acompaña al avatar y no al header de la página. */}
+          <PresenceBar className="border-t border-border/60 px-3 py-2.5" />
+
           <div className="space-y-1 border-t border-border/60 p-3">
             {/* Sólo para el dueño de la app. Esconderlo es presentación: lo que
                 impide leer los datos es que la función corta por is_admin en la
@@ -188,7 +214,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </span>
               <span className="text-base font-semibold tracking-tight">Finza</span>
             </div>
-            <UserProfile className="w-auto" />
+            <div className="flex min-w-0 items-center gap-2">
+              <PresenceBar className="min-w-0" />
+              <UserProfile className="w-auto" />
+            </div>
           </header>
 
           {/* El scroll lo maneja PageLayout, para que el header de cada página

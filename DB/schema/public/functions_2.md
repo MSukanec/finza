@@ -1,9 +1,113 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T19:29:15.251Z
+> Generated: 2026-09-10T19:36:22.694Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Functions (chunk 2: normalizar_texto — workspace_role)
+## [PUBLIC] Functions (chunk 2: log_activity — workspace_role)
+
+### `log_activity()` 🔐
+
+- **Returns**: trigger
+- **Kind**: function | VOLATILE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.log_activity()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+    v_rec     jsonb;
+    v_old     jsonb;
+    v_ws      uuid;
+    v_actor   uuid;
+    v_action  text;
+    v_verbo   text;
+    v_summary text;
+    v_changes jsonb;
+    v_nombre  text;
+    k         text;
+BEGIN
+    v_rec := to_jsonb(COALESCE(NEW, OLD));
+    v_old := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD) END;
+
+    v_ws := COALESCE(
+        (v_rec->>'workspace_id')::uuid,
+        CASE WHEN TG_TABLE_NAME = 'workspaces' THEN (v_rec->>'id')::uuid END
+    );
+
+    v_actor := public.current_user_id();
+
+    -- Sumarse a un espacio lo hace el propio miembro, y el alta corre sin
+    -- sesion (auth.uid() todavia es NULL): sin esto la entrada quedaba sin
+    -- autor y, desde que el historial muestra solo acciones de personas, no
+    -- aparecia en ninguna parte.
+    IF v_actor IS NULL AND TG_TABLE_NAME = 'workspace_members' THEN
+        v_actor := (v_rec->>'user_id')::uuid;
+    END IF;
+
+    v_action := lower(TG_OP);
+    IF TG_OP = 'UPDATE' THEN
+        IF v_old->>'deleted_at' IS NULL AND v_rec->>'deleted_at' IS NOT NULL THEN
+            v_action := 'delete';
+        ELSIF v_old->>'deleted_at' IS NOT NULL AND v_rec->>'deleted_at' IS NULL THEN
+            v_action := 'insert';
+        END IF;
+    END IF;
+
+    IF TG_TABLE_NAME = 'wallet_reconciliations' THEN
+        v_summary := public.reconciliation_summary(v_rec, TG_OP);
+    ELSE
+        v_nombre := COALESCE(
+            NULLIF(v_rec->>'description', ''),
+            NULLIF(v_rec->>'name', ''),
+            NULLIF(v_rec->>'email', '')
+        );
+
+        v_verbo := CASE
+            WHEN v_action = 'delete' THEN 'Eliminó'
+            WHEN TG_OP = 'INSERT' THEN 'Creó'
+            WHEN v_action = 'insert' THEN 'Restauró'
+            ELSE 'Editó'
+        END;
+
+        v_summary := v_verbo || ' ' || public.entity_label(TG_TABLE_NAME)
+            || COALESCE(' «' || left(v_nombre, 80) || '»', '');
+    END IF;
+
+    IF TG_OP = 'UPDATE' THEN
+        v_changes := '{}'::jsonb;
+        FOR k IN SELECT jsonb_object_keys(v_rec) LOOP
+            IF k NOT IN ('updated_at', 'created_at')
+               AND v_rec->k IS DISTINCT FROM v_old->k THEN
+                v_changes := v_changes || jsonb_build_object(
+                    k, jsonb_build_object('antes', v_old->k, 'despues', v_rec->k)
+                );
+            END IF;
+        END LOOP;
+
+        IF v_changes = '{}'::jsonb THEN
+            RETURN COALESCE(NEW, OLD);
+        END IF;
+
+        IF v_action IN ('delete', 'insert') THEN
+            v_changes := v_changes - 'deleted_at';
+            IF v_changes = '{}'::jsonb THEN v_changes := NULL; END IF;
+        END IF;
+    END IF;
+
+    INSERT INTO public.activity_log
+        (workspace_id, user_id, action, entity, entity_id, summary, changes)
+    VALUES (v_ws, v_actor, v_action, TG_TABLE_NAME, (v_rec->>'id')::uuid, v_summary, v_changes);
+
+    RETURN COALESCE(NEW, OLD);
+END;
+$function$
+```
+</details>
 
 ### `normalizar_texto(t text)`
 
