@@ -11,31 +11,52 @@ import { getIcon } from '@/lib/icons';
 import { useMemo } from 'react';
 import { Target } from 'lucide-react';
 import { PageLayout } from '@/components/layout/page-layout';
+import { EXCHANGE_RATES } from '@/lib/mock-data';
+import { useUIStore } from '@/stores/ui-store';
+import { useGlobalDialog } from '@/components/providers/dialog-provider';
+import { Pencil, Trash2 } from 'lucide-react';
 
 export function BudgetsView() {
   const budgets = useFinanceStore((s) => s.budgets);
   const categories = useFinanceStore((s) => s.categories);
   const currencies = useFinanceStore((s) => s.currencies);
   const transactions = useFinanceStore((s) => s.transactions);
+  const removeBudget = useFinanceStore((s) => s.removeBudget);
+  const openSheet = useUIStore((s) => s.openSheet);
+  const dialog = useGlobalDialog();
 
-  // Calculate real spent amounts from this month's transactions
+  const handleDelete = async (id: string, name: string) => {
+    const ok = await dialog.confirm('Eliminar presupuesto', `¿Eliminar "${name}"? No se puede deshacer.`);
+    if (ok) await removeBudget(id);
+  };
+
   const budgetWithRealSpent = useMemo(() => {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const monthExpenses = transactions.filter(
-      (t) => t.type === 'expense' && parseLocalDate(t.date) >= startOfMonth
-    );
+    // Semana ISO: arranca lunes. Antes todo se calculaba contra el mes, así que
+    // un presupuesto semanal mostraba el gasto de las últimas 4 semanas.
+    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    startOfWeek.setDate(startOfWeek.getDate() - ((startOfWeek.getDay() + 6) % 7));
 
-    return budgets.map((budget) => ({
-      ...budget,
-      categories: budget.categories.map((bc) => {
-        const spent = monthExpenses
-          .filter((t) => t.category_id === bc.category_id)
-          .reduce((sum, t) => sum + t.amount, 0);
-        return { ...bc, spent_amount: spent };
-      }),
-    }));
+    const expenses = transactions.filter((t) => t.type === 'expense');
+
+    return budgets.map((budget) => {
+      const from = budget.period === 'weekly' ? startOfWeek : startOfMonth;
+      const rate = EXCHANGE_RATES[budget.currency_id] || 1;
+
+      return {
+        ...budget,
+        periodLabel: budget.period === 'weekly' ? 'Esta semana' : 'Este mes',
+        categories: budget.categories.map((bc) => {
+          const spent = expenses
+            .filter((t) => t.category_id === bc.category_id && parseLocalDate(t.date) >= from)
+            // El gasto puede estar en otra moneda que el presupuesto.
+            .reduce((sum, t) => sum + (t.amount * (EXCHANGE_RATES[t.currency_id] || 1)) / rate, 0);
+          return { ...bc, spent_amount: spent };
+        }),
+      };
+    });
   }, [budgets, transactions]);
 
   return (
@@ -43,22 +64,22 @@ export function BudgetsView() {
       title="Presupuestos"
       icon={Target}
       actions={
-        <Button size="sm" className="gap-2">
-          <Plus className="w-4 h-4" />
+        <Button size="sm" className="gap-1.5" onClick={() => openSheet('new-budget')}>
+          <Plus className="size-4" />
           <span className="hidden sm:inline">Nuevo</span>
         </Button>
       }
     >
 
       {budgetWithRealSpent.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-accent/50 flex items-center justify-center mb-4">
-            <AlertTriangle className="w-8 h-8 text-muted-foreground" />
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-12 text-center">
+          <div className="flex size-16 items-center justify-center rounded-2xl bg-accent text-accent-foreground mb-4">
+            <AlertTriangle className="size-8" />
           </div>
           <p className="text-muted-foreground text-sm">No hay presupuestos configurados</p>
-          <Button size="sm" className="mt-4 gap-2">
-            <Plus className="w-4 h-4" />
-            Crear Presupuesto
+          <Button className="mt-4 gap-2" onClick={() => openSheet('new-budget')}>
+            <Plus className="size-4" />
+            Crear presupuesto
           </Button>
         </div>
       ) : (
@@ -69,12 +90,27 @@ export function BudgetsView() {
           const overallPercent = totalLimit > 0 ? (totalSpent / totalLimit) * 100 : 0;
 
           return (
-            <Card key={budget.id} className="border-border/50">
+            <Card key={budget.id}>
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">{budget.name}</CardTitle>
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="min-w-0 truncate text-base">{budget.name}</CardTitle>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      onClick={() => openSheet('edit-budget', { budget })}
+                      aria-label="Editar presupuesto"
+                      className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    >
+                      <Pencil className="size-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(budget.id, budget.name)}
+                      aria-label="Eliminar presupuesto"
+                      className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
                   <span className={cn(
-                    'text-xs font-semibold px-2 py-0.5 rounded-full',
+                    'text-xs font-semibold tabular-nums px-2 py-0.5 rounded-full',
                     overallPercent >= 100
                       ? 'bg-expense/15 text-expense'
                       : overallPercent >= 80
@@ -83,9 +119,10 @@ export function BudgetsView() {
                   )}>
                     {Math.round(overallPercent)}%
                   </span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
-                  <span>Gastado: {formatMoney(totalSpent, currency)}</span>
+                <div className="mt-1 flex items-center justify-between text-xs tabular-nums text-muted-foreground">
+                  <span>{budget.periodLabel}: {formatMoney(totalSpent, currency)}</span>
                   <span>Límite: {formatMoney(totalLimit, currency)}</span>
                 </div>
                 <Progress
@@ -103,28 +140,25 @@ export function BudgetsView() {
                     <div key={bc.category_id} className="space-y-1.5">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <div
-                            className="w-6 h-6 rounded-md flex items-center justify-center"
-                            style={{ backgroundColor: `${cat?.color || '#6b7280'}20` }}
-                          >
-                            <Icon className="w-3.5 h-3.5" style={{ color: cat?.color }} />
+                          <div className="flex size-8 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+                            <Icon className="size-4" />
                           </div>
                           <span className="text-sm">{cat?.name || 'Categoría'}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-xs text-muted-foreground tabular-nums">
                             {formatMoney(bc.spent_amount, currency)} / {formatMoney(bc.limit_amount, currency)}
                           </span>
                           {percent >= 100 && (
-                            <AlertTriangle className="w-3.5 h-3.5 text-expense" />
+                            <AlertTriangle className="size-3.5 text-expense" />
                           )}
                         </div>
                       </div>
-                      <div className="w-full h-1.5 rounded-full bg-accent/50 overflow-hidden">
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                         <div
                           className={cn(
                             'h-full rounded-full transition-all duration-500',
-                            percent >= 100 ? 'bg-expense' : percent >= 80 ? 'bg-warning' : 'bg-income'
+                            percent >= 100 ? 'bg-expense' : 'bg-primary'
                           )}
                           style={{ width: `${Math.min(percent, 100)}%` }}
                         />

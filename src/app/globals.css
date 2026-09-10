@@ -52,87 +52,120 @@
   --color-warning: var(--warning);
   --color-glass: var(--glass);
   --color-glass-border: var(--glass-border);
+  --shadow-2xs: var(--shadow-soft-xs);
+  --shadow-xs: var(--shadow-soft-xs);
+  --shadow-sm: var(--shadow-soft-sm);
+  --shadow-md: var(--shadow-soft);
+  --shadow-lg: var(--shadow-soft-md);
+  --shadow-xl: var(--shadow-soft-lg);
 }
 
 :root {
-  --background: oklch(0.985 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.488 0.243 264.376);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.488 0.243 264.376);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --radius: 0.75rem;
-  --income: oklch(0.696 0.17 162.48);
-  --expense: oklch(0.645 0.246 16.439);
-  --transfer: oklch(0.488 0.243 264.376);
-  --warning: oklch(0.769 0.188 70.08);
-  --glass: oklch(1 0 0 / 60%);
-  --glass-border: oklch(0 0 0 / 8%);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.488 0.243 264.376);
+  /* Fuerza los controles nativos (date pickers, scrollbars) al modo claro. */
+  color-scheme: light;
+
+  /* Light — warm paper neutrals + sage accent */
+  --background: oklch(0.977 0.005 95);
+  --foreground: oklch(0.26 0.012 110);
+  --card: oklch(0.998 0.002 95);
+  --card-foreground: oklch(0.26 0.012 110);
+  --popover: oklch(0.998 0.002 95);
+  --popover-foreground: oklch(0.26 0.012 110);
+  --primary: oklch(0.58 0.062 155);
+  --primary-foreground: oklch(0.99 0.01 130);
+  --secondary: oklch(0.955 0.006 110);
+  --secondary-foreground: oklch(0.32 0.012 110);
+  --muted: oklch(0.958 0.006 110);
+  --muted-foreground: oklch(0.53 0.012 110);
+  --accent: oklch(0.93 0.02 150);
+  --accent-foreground: oklch(0.34 0.04 155);
+  --destructive: oklch(0.585 0.15 25);
+  --border: oklch(0.915 0.006 110);
+  --input: oklch(0.915 0.006 110);
+  --ring: oklch(0.58 0.062 155);
+  /* Paleta categórica validada con el script de la guía de visualización.
+     La anterior fallaba: chart-4 y chart-5 daban ΔE 2.1 en protanopía y 10.1 en
+     visión normal — ni con color pleno se distinguían. Esta pasa los cinco
+     chequeos (banda de luminosidad, croma, separación CVD, visión normal y
+     contraste). La luminosidad se alterna a propósito: es lo que más separa
+     bajo daltonismo. NO cambiar un valor suelto sin volver a validar. */
+  --chart-1: oklch(0.52 0.13 155);
+  --chart-2: oklch(0.66 0.15 75);
+  --chart-3: oklch(0.55 0.18 25);
+  --chart-4: oklch(0.62 0.15 255);
+  --chart-5: oklch(0.45 0.16 320);
+  --radius: 1rem;
+  --income: oklch(0.6 0.1 155);
+  --expense: oklch(0.6 0.14 28);
+  --transfer: oklch(0.6 0.08 240);
+  --warning: oklch(0.72 0.12 75);
+  --glass: oklch(0.998 0.002 95 / 72%);
+  --glass-border: oklch(0.26 0.012 110 / 7%);
+  --sidebar: oklch(0.968 0.006 110);
+  --sidebar-foreground: oklch(0.26 0.012 110);
+  --sidebar-primary: oklch(0.58 0.062 155);
+  --sidebar-primary-foreground: oklch(0.99 0.01 130);
+  --sidebar-accent: oklch(0.93 0.02 150);
+  --sidebar-accent-foreground: oklch(0.34 0.04 155);
+  --sidebar-border: oklch(0.915 0.006 110);
+  --sidebar-ring: oklch(0.58 0.062 155);
+  --shadow-soft-xs: 0 1px 2px oklch(0.26 0.02 120 / 0.05);
+  --shadow-soft-sm: 0 1px 2px oklch(0.26 0.02 120 / 0.04), 0 2px 6px oklch(0.26 0.02 120 / 0.05);
+  --shadow-soft: 0 2px 4px oklch(0.26 0.02 120 / 0.04), 0 6px 16px oklch(0.26 0.02 120 / 0.07);
+  --shadow-soft-md: 0 4px 8px oklch(0.26 0.02 120 / 0.05), 0 12px 28px oklch(0.26 0.02 120 / 0.09);
+  --shadow-soft-lg: 0 8px 16px oklch(0.26 0.02 120 / 0.06), 0 24px 48px oklch(0.26 0.02 120 / 0.12);
 }
 
 .dark {
-  --background: oklch(0.18 0.01 245);
-  --foreground: oklch(0.96 0.005 245);
-  --card: oklch(0.23 0.015 245);
-  --card-foreground: oklch(0.96 0.005 245);
-  --popover: oklch(0.23 0.015 245);
-  --popover-foreground: oklch(0.96 0.005 245);
-  --primary: oklch(0.75 0.12 245);
-  --primary-foreground: oklch(0.18 0.01 245);
-  --secondary: oklch(0.28 0.015 245);
-  --secondary-foreground: oklch(0.96 0.005 245);
-  --muted: oklch(0.28 0.015 245);
-  --muted-foreground: oklch(0.70 0.01 245);
-  --accent: oklch(0.28 0.015 245);
-  --accent-foreground: oklch(0.96 0.005 245);
-  --destructive: oklch(0.68 0.16 20);
-  --border: oklch(0.30 0.015 245);
-  --input: oklch(0.30 0.015 245);
-  --ring: oklch(0.75 0.12 245);
-  --chart-1: oklch(0.75 0.12 245);
-  --chart-2: oklch(0.78 0.14 145);
-  --chart-3: oklch(0.80 0.15 80);
-  --chart-4: oklch(0.68 0.16 20);
-  --chart-5: oklch(0.80 0.12 300);
-  --income: oklch(0.78 0.14 145);
-  --expense: oklch(0.68 0.16 20);
-  --transfer: oklch(0.75 0.12 245);
-  --warning: oklch(0.80 0.15 80);
-  --glass: oklch(0.23 0.015 245 / 75%);
-  --glass-border: oklch(0.30 0.015 245 / 50%);
-  --sidebar: oklch(0.20 0.012 245);
-  --sidebar-foreground: oklch(0.96 0.005 245);
-  --sidebar-primary: oklch(0.75 0.12 245);
-  --sidebar-primary-foreground: oklch(0.18 0.01 245);
-  --sidebar-accent: oklch(0.28 0.015 245);
-  --sidebar-accent-foreground: oklch(0.96 0.005 245);
-  --sidebar-border: oklch(0.30 0.015 245);
-  --sidebar-ring: oklch(0.75 0.12 245);
+  /* Dark — warm-charcoal with a faint green undertone + sage accent */
+  --background: oklch(0.205 0.008 150);
+  --foreground: oklch(0.94 0.006 120);
+  --card: oklch(0.245 0.009 150);
+  --card-foreground: oklch(0.94 0.006 120);
+  --popover: oklch(0.255 0.009 150);
+  --popover-foreground: oklch(0.94 0.006 120);
+  --primary: oklch(0.74 0.072 155);
+  --primary-foreground: oklch(0.21 0.02 150);
+  --secondary: oklch(0.28 0.01 150);
+  --secondary-foreground: oklch(0.94 0.006 120);
+  --muted: oklch(0.28 0.01 150);
+  --muted-foreground: oklch(0.7 0.012 130);
+  --accent: oklch(0.32 0.025 152);
+  --accent-foreground: oklch(0.9 0.03 150);
+  --destructive: oklch(0.66 0.14 25);
+  --border: oklch(0.3 0.01 150);
+  --input: oklch(0.31 0.01 150);
+  --ring: oklch(0.74 0.072 155);
+  /* Modo oscuro: pasos propios desde los mismos matices, no un espejo del claro.
+     Hoy no se renderiza (el tema está forzado a claro), así que quedó en la mejor
+     candidata: pasa contraste y visión normal, y queda en el piso 6-8 de CVD,
+     que sólo es válido con codificación secundaria — de ahí que todos los
+     gráficos lleven leyenda y etiquetas directas. Revalidar antes de reactivar
+     el modo oscuro. */
+  --chart-1: oklch(0.62 0.14 155);
+  --chart-2: oklch(0.71 0.14 85);
+  --chart-3: oklch(0.66 0.16 25);
+  --chart-4: oklch(0.55 0.15 258);
+  --chart-5: oklch(0.70 0.14 320);
+  --income: oklch(0.76 0.11 155);
+  --expense: oklch(0.7 0.13 28);
+  --transfer: oklch(0.72 0.09 240);
+  --warning: oklch(0.8 0.12 80);
+  --glass: oklch(0.245 0.009 150 / 72%);
+  --glass-border: oklch(0.94 0.006 120 / 8%);
+  --sidebar: oklch(0.225 0.008 150);
+  --sidebar-foreground: oklch(0.94 0.006 120);
+  --sidebar-primary: oklch(0.74 0.072 155);
+  --sidebar-primary-foreground: oklch(0.21 0.02 150);
+  --sidebar-accent: oklch(0.32 0.025 152);
+  --sidebar-accent-foreground: oklch(0.9 0.03 150);
+  --sidebar-border: oklch(0.3 0.01 150);
+  --sidebar-ring: oklch(0.74 0.072 155);
+  --shadow-soft-xs: 0 1px 2px oklch(0 0 0 / 0.3);
+  --shadow-soft-sm: 0 1px 2px oklch(0 0 0 / 0.28), 0 2px 6px oklch(0 0 0 / 0.32);
+  --shadow-soft: 0 2px 4px oklch(0 0 0 / 0.3), 0 6px 16px oklch(0 0 0 / 0.36);
+  --shadow-soft-md: 0 4px 8px oklch(0 0 0 / 0.32), 0 12px 28px oklch(0 0 0 / 0.42);
+  --shadow-soft-lg: 0 8px 16px oklch(0 0 0 / 0.34), 0 24px 48px oklch(0 0 0 / 0.5);
 }
 
 @layer base {
@@ -149,12 +182,18 @@
 
 /* ===== FINZA CUSTOM UTILITIES ===== */
 
-/* Glass morphism */
+/* Soft elevation — the core surface treatment */
+.shadow-soft-xs { box-shadow: var(--shadow-soft-xs); }
+.shadow-soft-sm { box-shadow: var(--shadow-soft-sm); }
+.shadow-soft { box-shadow: var(--shadow-soft); }
+.shadow-soft-md { box-shadow: var(--shadow-soft-md); }
+.shadow-soft-lg { box-shadow: var(--shadow-soft-lg); }
+
+/* Subtle translucent surface for sticky headers / overlays */
 .glass-card {
   background: var(--glass);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
 }
 
 /* Number animations */

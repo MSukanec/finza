@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   applicationName: "Finza",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "default",
     title: "Finza",
   },
   formatDetection: {
@@ -26,7 +26,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0e0e14",
+  // Debe acompañar a --background del tema claro; antes era un charcoal oscuro
+  // y pintaba de negro la barra del navegador en mobile.
+  themeColor: "#F8F7F2",
+  colorScheme: "light",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,

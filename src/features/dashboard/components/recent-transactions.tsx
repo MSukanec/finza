@@ -1,95 +1,117 @@
 'use client';
 
-import { useFinanceStore } from '@/stores/finance-store';
-import { formatMoney, getAmountColorClass } from '@/lib/money';
-import { getIcon } from '@/lib/icons';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowRight, ArrowDownLeft, ArrowUpRight, ArrowLeftRight } from 'lucide-react';
 import Link from 'next/link';
+import { useFinanceStore } from '@/stores/finance-store';
+import { formatMoney } from '@/lib/money';
 import { cn, parseLocalDate } from '@/lib/utils';
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Receipt } from 'lucide-react';
+import { Panel } from '@/components/ui/panel';
+
+const TYPE_ICON = {
+  income: ArrowDownLeft,
+  expense: ArrowUpRight,
+  transfer: ArrowLeftRight,
+} as const;
+
+const TYPE_CHIP = {
+  income: 'bg-income/10 text-income',
+  expense: 'bg-muted text-muted-foreground',
+  transfer: 'bg-transfer/10 text-transfer',
+} as const;
+
+const AMOUNT_TONE = {
+  income: 'text-income',
+  expense: 'text-foreground',
+  transfer: 'text-transfer',
+} as const;
 
 export function RecentTransactions() {
   const transactions = useFinanceStore((s) => s.transactions);
+  const accounts = useFinanceStore((s) => s.accounts);
   const categories = useFinanceStore((s) => s.categories);
   const currencies = useFinanceStore((s) => s.currencies);
 
-  const recent = transactions.slice(0, 5);
-
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'income': return ArrowDownLeft;
-      case 'expense': return ArrowUpRight;
-      case 'transfer': return ArrowLeftRight;
-      default: return ArrowUpRight;
-    }
-  };
-
-  const formatDate = (dateStr: string) => {
-    const date = parseLocalDate(dateStr);
-    const now = new Date();
-    const diff = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (diff === 0) return 'Hoy';
-    if (diff === 1) return 'Ayer';
-    if (diff < 7) return `hace ${diff} días`;
-    return date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' });
-  };
+  const recent = [...transactions]
+    .sort((a, b) => parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime())
+    .slice(0, 6);
 
   return (
-    <Card className="border-border/50">
-      <CardHeader className="pb-2 flex-row items-center justify-between">
-        <CardTitle className="text-base">Últimos Movimientos</CardTitle>
+    <Panel
+      icon={Receipt}
+      title="Últimos movimientos"
+      description="Lo más reciente que cargaste"
+      actions={
         <Link
           href="/transactions"
-          className="text-xs text-primary hover:underline flex items-center gap-1"
+          className="text-sm font-medium text-primary transition-colors hover:text-primary/80"
         >
-          Ver todos <ArrowRight className="w-3 h-3" />
+          Ver todos
         </Link>
-      </CardHeader>
-      <CardContent className="space-y-1">
-        {recent.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">Sin movimientos</p>
-        ) : (
-          recent.map((tx) => {
+      }
+    >
+      {recent.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-10 text-center">
+          <span className="mb-3 flex size-12 items-center justify-center rounded-2xl bg-muted">
+            <Receipt className="size-5 text-muted-foreground" />
+          </span>
+          <p className="text-sm font-medium">Sin movimientos todavía</p>
+          <p className="mt-1 text-sm text-muted-foreground">Cargá el primero con el botón +.</p>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          {recent.map((tx) => {
+            const type = (tx.type in TYPE_ICON ? tx.type : 'expense') as keyof typeof TYPE_ICON;
+            const Icon = TYPE_ICON[type];
             const category = categories.find((c) => c.id === tx.category_id);
+            const account = accounts.find((a) => a.id === tx.account_id);
             const currency = currencies.find((c) => c.id === tx.currency_id) || currencies[0];
-            const TypeIcon = getTypeIcon(tx.type);
-            const CategoryIcon = category?.icon ? getIcon(category.icon) : TypeIcon;
+            const title = tx.description?.trim() || category?.name || 'Transferencia';
+            const sign = type === 'income' ? '+' : type === 'expense' ? '−' : '';
 
             return (
-              <div
+              <Link
                 key={tx.id}
-                className="flex items-center gap-3 py-2.5 rounded-lg hover:bg-accent/50 px-2 -mx-2 transition-colors cursor-pointer"
+                href="/transactions"
+                className="-mx-1 flex items-center gap-3 rounded-xl px-1 py-2 transition-colors hover:bg-accent/50"
               >
-                <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ backgroundColor: `${category?.color || '#6b7280'}20` }}
+                <span
+                  className={cn(
+                    'flex size-10 shrink-0 items-center justify-center rounded-full',
+                    TYPE_CHIP[type]
+                  )}
                 >
-                  <CategoryIcon
-                    className="w-5 h-5"
-                    style={{ color: category?.color || '#6b7280' }}
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[15px] sm:text-base font-medium truncate text-foreground">
-                    {category ? `${category.group_name || 'General'} > ${category.name}` : 'Transferencia'}
-                  </p>
-                  <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 truncate">
-                    {tx.description}
+                  <Icon className="size-4" />
+                </span>
+
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] font-medium leading-tight">{title}</p>
+                  <p className="mt-1 truncate text-xs text-muted-foreground">
+                    {account?.name || 'Sin billetera'}
                   </p>
                 </div>
-                <div className="text-right flex-shrink-0 ml-3">
-                  <p className={cn('text-[15px] sm:text-base font-semibold', getAmountColorClass(0, tx.type))}>
-                    {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}
-                    {formatMoney(tx.amount, currency)}
+
+                <div className="shrink-0 text-right">
+                  <p
+                    className={cn(
+                      'text-[15px] font-semibold leading-tight tabular-nums',
+                      AMOUNT_TONE[type]
+                    )}
+                  >
+                    {sign} {formatMoney(tx.amount, currency)}
                   </p>
-                  <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{formatDate(tx.date)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+                    {parseLocalDate(tx.date).toLocaleDateString('es-AR', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                    })}
+                  </p>
                 </div>
-              </div>
+              </Link>
             );
-          })
-        )}
-      </CardContent>
-    </Card>
+          })}
+        </div>
+      )}
+    </Panel>
   );
 }

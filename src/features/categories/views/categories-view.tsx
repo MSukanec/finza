@@ -99,7 +99,7 @@ export function CategoriesView() {
              onToggle={() => setOpenGroup(prev => prev === gId ? null : gId)}
              title={
                  <div className="flex items-center gap-2">
-                     <span className="font-bold text-sm tracking-wide">{group.groupName}</span>
+                     <span className="font-semibold text-sm tracking-tight">{group.groupName}</span>
                      <div 
                          role="button"
                          tabIndex={0}
@@ -107,7 +107,11 @@ export function CategoriesView() {
                              e.stopPropagation();
                              const newName = await dialog.prompt('Renombrar Macrogrupo', 'Nuevo nombre para el macrogrupo:', group.groupName);
                              if (newName && newName.trim() !== '' && newName.trim() !== group.groupName) {
-                                 renameCategoryGroup(group.groupName, newName.trim());
+                                 try {
+                                     await renameCategoryGroup(group.groupName, newName.trim());
+                                 } catch (err: any) {
+                                     dialog.notify('No se pudo renombrar', err?.message || 'Ocurrió un error.');
+                                 }
                              }
                          }}
                          onKeyDown={async (e) => {
@@ -115,11 +119,15 @@ export function CategoriesView() {
                                  e.stopPropagation();
                                  const newName = await dialog.prompt('Renombrar Macrogrupo', 'Nuevo nombre para el macrogrupo:', group.groupName);
                                  if (newName && newName.trim() !== '' && newName.trim() !== group.groupName) {
-                                     renameCategoryGroup(group.groupName, newName.trim());
+                                     try {
+                                     await renameCategoryGroup(group.groupName, newName.trim());
+                                 } catch (err: any) {
+                                     dialog.notify('No se pudo renombrar', err?.message || 'Ocurrió un error.');
+                                 }
                                  }
                              }
                          }}
-                         className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary transition-all cursor-pointer"
+                         className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                          title="Editar nombre del grupo"
                      >
                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
@@ -128,14 +136,14 @@ export function CategoriesView() {
              }
              summary={
                 <div className="flex items-center gap-4 text-xs text-muted-foreground mr-2">
-                    <span className="bg-background px-2 py-1 rounded-md border font-mono">Usos: {group.totalUses}</span>
+                    <span className="bg-accent text-accent-foreground px-2 py-1 rounded-lg tabular-nums">Usos: {group.totalUses}</span>
                     {(group.totalARS > 0 || group.totalUSD === 0) && (
-                        <span className={cn("font-medium", type === 'income' ? "text-income" : "text-expense")}>
+                        <span className={cn("font-semibold tabular-nums", type === 'income' ? "text-income" : "text-expense")}>
                             {formatMoney(group.totalARS, { id: 'ars', code: 'ARS', symbol: '$', name: 'Pesos' } as any)}
                         </span>
                     )}
                     {group.totalUSD > 0 && (
-                        <span className={cn("font-medium", type === 'income' ? "text-income" : "text-expense")}>
+                        <span className={cn("font-semibold tabular-nums", type === 'income' ? "text-income" : "text-expense")}>
                             {formatMoney(group.totalUSD, { id: 'usd', code: 'USD', symbol: 'US$', name: 'Dólares' } as any)}
                         </span>
                     )}
@@ -147,27 +155,24 @@ export function CategoriesView() {
                       const Icon = cat.icon ? getIcon(cat.icon) : getIcon('folder');
                       const s = cat.stats;
                       return (
-                          <div 
+                          <div
                               key={cat.id}
                               onClick={() => router.push(`/transactions?category=${cat.id}`)}
-                              className="group flex items-center justify-between p-3 rounded-lg hover:bg-accent/40 cursor-pointer transition-colors border border-transparent hover:border-border/50"
+                              className="group flex items-center justify-between p-3 rounded-xl hover:bg-accent/60 cursor-pointer transition-colors"
                           >
                               <div className="flex items-center gap-4 min-w-0 flex-1">
-                                  <div
-                                     className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110"
-                                     style={{ backgroundColor: `${cat.color || (type === 'income' ? '#10b981' : '#8b5cf6')}20` }}
-                                   >
+                                  <div className="flex size-10 items-center justify-center rounded-xl bg-accent text-accent-foreground flex-shrink-0">
                                      {cat.is_recurring ? (
-                                         <Repeat className="w-5 h-5 opacity-90" style={{ color: cat.color || (type === 'income' ? '#10b981' : '#8b5cf6') }} />
+                                         <Repeat className="size-5" />
                                      ) : (
-                                         <Icon className="w-5 h-5" style={{ color: cat.color || (type === 'income' ? '#10b981' : '#8b5cf6') }} />
+                                         <Icon className="size-5" />
                                      )}
                                    </div>
                                    <div className="min-w-0">
                                        <div className="flex items-center gap-2">
                                            <p className="font-semibold text-sm truncate text-foreground">{cat.name}</p>
                                            {cat.is_recurring && (
-                                                <Badge variant="outline" className="text-[10px] h-5 bg-primary/5 text-primary border-primary/20 shrink-0 uppercase tracking-widest px-1.5">
+                                                <Badge variant="secondary" className="text-[10px] h-5 bg-primary/10 text-primary border-none shrink-0 uppercase tracking-widest px-1.5">
                                                     Recurrente
                                                 </Badge>
                                            )}
@@ -177,10 +182,10 @@ export function CategoriesView() {
                               </div>
                               
                               <div className="flex items-center gap-6 text-right">
-                                  <div className="hidden sm:flex flex-col text-xs text-muted-foreground font-mono">
+                                  <div className="hidden sm:flex flex-col text-xs text-muted-foreground tabular-nums">
                                       <span>Usos: {s.uses}</span>
                                   </div>
-                                  <div className="flex flex-col text-sm font-medium items-end min-w-[80px]">
+                                  <div className="flex flex-col text-sm font-semibold tabular-nums items-end min-w-[80px]">
                                       {(s.ARS > 0 || s.USD === 0) && (
                                           <span>{formatMoney(s.ARS, { id: 'ars', code: 'ARS', symbol: '$', name: 'Pesos' } as any)}</span>
                                       )}
@@ -189,13 +194,13 @@ export function CategoriesView() {
                                       )}
                                   </div>
                                   {!cat.is_default && (
-                                      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-all">
+                                      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
                                           <button
                                               onClick={(e) => {
                                                   e.stopPropagation();
                                                   openSheet('edit-category', { category: cat });
                                               }}
-                                              className="p-2 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary transition-all"
+                                              className="p-2 rounded-lg hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors"
                                               title="Editar categoría"
                                           >
                                               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
@@ -205,21 +210,21 @@ export function CategoriesView() {
                                                   e.stopPropagation();
                                                   dialog.deleteCategory(cat);
                                               }}
-                                              className="p-2 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
+                                              className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                                               title="Eliminar categoría"
                                           >
-                                              <Trash2 className="w-4 h-4" />
+                                              <Trash2 className="size-4" />
                                           </button>
                                       </div>
                                   )}
                                   {cat.is_default && (
-                                      <div className="w-16 flex justify-end opacity-0 group-hover:opacity-100 transition-all">
+                                      <div className="w-16 flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                                           <button
                                               onClick={(e) => {
                                                   e.stopPropagation();
                                                   openSheet('edit-category', { category: cat });
                                               }}
-                                              className="p-2 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary transition-all"
+                                              className="p-2 rounded-lg hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors"
                                               title="Ver/Editar"
                                           >
                                               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
@@ -237,7 +242,7 @@ export function CategoriesView() {
 
   return (
     <PageLayout
-      title="Gestión de Categorías"
+      title="Categorías"
       icon={Tags}
       actions={
         <>
@@ -247,11 +252,11 @@ export function CategoriesView() {
                  useFinanceStore.getState().addCategory({ name: 'General', type: 'expense', group_name: newName.trim() });
              }
           }}>
-            <Plus className="w-4 h-4" />
+            <Plus className="size-4" />
             <span className="hidden sm:inline">Nuevo Grupo</span>
           </Button>
           <Button size="sm" className="gap-2" onClick={() => openSheet('new-category')}>
-            <Plus className="w-4 h-4" />
+            <Plus className="size-4" />
             <span className="hidden sm:inline">Nueva Categoría</span>
           </Button>
         </>

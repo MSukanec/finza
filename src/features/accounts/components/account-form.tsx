@@ -2,19 +2,27 @@
 
 import { useUIStore } from '@/stores/ui-store';
 import { useFinanceStore } from '@/stores/finance-store';
-import { ResponsiveModal, ResponsiveModalContent, ResponsiveModalHeader, ResponsiveModalTitle } from '@/components/ui/responsive-modal';
+import {
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalHeader,
+  ResponsiveModalTitle,
+  ResponsiveModalBody,
+  ResponsiveModalFooter,
+} from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase/client';
-import { Trash2, AlertTriangle, ArrowRight } from 'lucide-react';
+import { parseAmount } from '@/lib/money';
+import { Scale } from 'lucide-react';
 
 export function AccountForm() {
   const activeSheet = useUIStore((s) => s.activeSheet);
   const sheetData = useUIStore((s) => s.sheetData);
   const closeSheet = useUIStore((s) => s.closeSheet);
+  const openSheet = useUIStore((s) => s.openSheet);
 
   const currencies = useFinanceStore((s) => s.currencies);
   const addAccount = useFinanceStore((s) => s.addAccount);
@@ -28,17 +36,10 @@ export function AccountForm() {
   const [currencyId, setCurrencyId] = useState('ars');
   const [initialBalance, setInitialBalance] = useState('');
 
-  const [deleteMode, setDeleteMode] = useState<'idle' | 'loading' | 'empty' | 'has_txs'>('idle');
-  const [txCount, setTxCount] = useState(0);
-  const [replacementWalletId, setReplacementWalletId] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const accounts = useFinanceStore((s) => s.accounts);
-  const compatibleAccounts = [...accounts]
-      .filter(a => 
-          a.id !== (sheetData?.account as any)?.id && 
-          a.currency_id === currencyId
-      )
-      .sort((a,b) => a.name.localeCompare(b.name));
 
   useEffect(() => {
     if (isOpen) {
@@ -47,58 +48,33 @@ export function AccountForm() {
           setName(acc.name);
           setType(acc.type);
           setCurrencyId(acc.currency_id);
-          setInitialBalance(acc.initial_balance?.toString() || '0');
+          // Un saldo en cero se muestra vacío, con el placeholder. Antes escribía
+          // un "0" literal en el campo, que había que borrar para escribir encima.
+          setInitialBalance(acc.initial_balance ? String(acc.initial_balance) : '');
        } else {
           setName('');
           setType('bank');
           setCurrencyId('ars');
-          setInitialBalance('0');
+          setInitialBalance('');
         }
-        setDeleteMode('idle');
-        setReplacementWalletId('');
+        setError(null);
+        setSubmitting(false);
     }
   }, [isOpen, isEdit, sheetData]);
 
-  const initiateDelete = async () => {
-     setDeleteMode('loading');
-     const acc = sheetData?.account as any;
-     const { count } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('wallet_id', acc.id);
-     
-     if ((count || 0) > 0) {
-         setTxCount(count || 0);
-         setDeleteMode('has_txs');
-         if (compatibleAccounts.length > 0) {
-             setReplacementWalletId(compatibleAccounts[0].id);
-         }
-     } else {
-         setDeleteMode('empty');
-     }
-  };
 
-  const executeDelete = async () => {
-      const acc = sheetData?.account as any;
-      if (!acc) return;
-      
-      try {
-          if (deleteMode === 'has_txs') {
-              if (!replacementWalletId) return alert('Debes elegir una cuenta de reemplazo.');
-              await supabase.from('transactions').update({ wallet_id: replacementWalletId }).eq('wallet_id', acc.id);
-          }
-          await supabase.from('wallets').delete().eq('id', acc.id);
-          
-          await useFinanceStore.getState().hydrate();
-          closeSheet();
-      } catch(e: any) {
-          alert('Error eliminando la cuenta: ' + e.message);
-      }
-  };
 
   const handleSubmit = async () => {
-    if (!name.trim()) return;
+    if (submitting) return;
+    if (!name.trim()) return setError('Poné un nombre para la billetera.');
+    if (!currencyId) return setError('Elegí una moneda.');
 
+    setError(null);
+    setSubmitting(true);
     try {
       const acc = sheetData?.account as any;
-      const parsedBalance = parseFloat(initialBalance) || 0;
+      // parseFloat no entiende el formato local: "1.234,56" daba 1.
+      const parsedBalance = parseAmount(initialBalance) ?? 0;
       if (isEdit && acc) {
          await updateAccount(acc.id, {
             name: name.trim(),
@@ -116,7 +92,9 @@ export function AccountForm() {
       }
       closeSheet();
     } catch (e: any) {
-      alert("Hubo un error guardando en Supabase: " + (e.message || JSON.stringify(e)));
+      setError(e?.message || 'No se pudo guardar la billetera.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -124,20 +102,19 @@ export function AccountForm() {
     <ResponsiveModal open={isOpen} onOpenChange={(open) => !open && closeSheet()}>
       <ResponsiveModalContent>
         <ResponsiveModalHeader>
-          <ResponsiveModalTitle className="text-xl sm:text-lg text-center sm:text-left">
-            {isEdit ? 'Editar Cuenta' : 'Nueva Cuenta'}
+          <ResponsiveModalTitle>
+            {isEdit ? 'Editar billetera' : 'Nueva billetera'}
           </ResponsiveModalTitle>
         </ResponsiveModalHeader>
 
-        {deleteMode === 'idle' && (
-        <div className="space-y-6 pb-6 mt-2">
+        <ResponsiveModalBody className="space-y-5">
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Nombre de la cuenta</Label>
             <Input
-              placeholder="Ej: Banco Galicia, Billetera Mágica..."
+              className="h-12 w-full"
+              placeholder="Ej: Banco Galicia, Billetera Mágica…"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="bg-accent/30 border-border/50"
               autoFocus
             />
           </div>
@@ -145,7 +122,7 @@ export function AccountForm() {
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Tipo de Cuenta</Label>
             <Select value={type} onValueChange={(v) => v && setType(v)}>
-              <SelectTrigger className="h-12 bg-accent/30 border-border/50 text-base">
+              <SelectTrigger className="h-12 text-base">
                 <SelectValue>
                   {type === 'bank' ? 'Banco Tradicional' : type === 'cash' ? 'Efectivo' : type === 'digital' ? 'Billetera Digital / Crypto' : 'Seleccionar tipo'}
                 </SelectValue>
@@ -161,8 +138,11 @@ export function AccountForm() {
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Moneda Principal</Label>
             <Select value={currencyId} onValueChange={(v) => v && setCurrencyId(v)}>
-              <SelectTrigger className="h-12 bg-accent/30 border-border/50 text-base">
-                <SelectValue placeholder="Seleccionar moneda" />
+              <SelectTrigger className="h-12 text-base">
+                {/* Sin hijos, SelectValue renderiza el valor crudo: mostraba "ars". */}
+                <SelectValue>
+                  {currencies.find((c) => c.id === currencyId)?.name ?? 'Seleccionar moneda'}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {currencies.map((c) => (
@@ -175,107 +155,61 @@ export function AccountForm() {
           </div>
 
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Saldo Inicial / Activo Base</Label>
+            <Label className="text-xs text-muted-foreground">
+              {isEdit ? 'Saldo con el que arrancaste' : '¿Cuánto tenés ahora?'}
+            </Label>
             <Input
-              type="number"
-              placeholder="0.00"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="0,00"
               value={initialBalance}
               onChange={(e) => setInitialBalance(e.target.value)}
-              className="bg-accent/30 border-border/50"
+              className="h-12 w-full tabular-nums"
             />
+
+            {/* Los dos actos son distintos y la interfaz tiene que decirlo:
+                el saldo inicial es el punto de partida, el arqueo es cuánto hay
+                hoy. Ajustar el inicial para "cuadrar" reescribe la historia. */}
+            {isEdit ? (
+              <div className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
+                Este es el punto de partida de la billetera, no lo que hay hoy. Cambialo sólo si te
+                equivocaste al cargarlo: modificarlo recalcula todo el historial.
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = (sheetData?.account as any)?.id;
+                    closeSheet();
+                    if (id) setTimeout(() => openSheet('reconcile-wallet', { walletId: id }), 0);
+                  }}
+                  className="mt-2 flex items-center gap-1.5 font-medium text-primary hover:underline"
+                >
+                  <Scale className="size-3.5" />
+                  Para registrar cuánto hay hoy, hacé un arqueo
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Poné la plata que hay en esta billetera hoy. Es el punto de partida: de acá en
+                adelante el saldo lo calculan los movimientos.
+              </p>
+            )}
           </div>
 
-          <div className="flex gap-2 mt-4">
-              {isEdit && (
-                  <Button
-                    variant="outline"
-                    onClick={initiateDelete}
-                    className="h-12 w-12 shrink-0 text-destructive border-border/50 hover:bg-destructive/10 hover:border-destructive/30"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </Button>
-              )}
-              <Button
-                onClick={handleSubmit}
-                disabled={!name.trim()}
-                className="w-full h-12 text-base font-semibold"
-              >
-                {isEdit ? 'Guardar Cambios' : 'Crear Cuenta'}
-              </Button>
-          </div>
-        </div>
-        )}
+          {error && (
+            <p role="alert" className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
+              {error}
+            </p>
+          )}
 
-        {deleteMode === 'loading' && (
-           <div className="py-12 flex flex-col items-center justify-center space-y-3">
-              <div className="w-8 h-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-              <p className="text-sm text-muted-foreground animate-pulse">Analizando dependencias contables...</p>
-           </div>
-        )}
+        </ResponsiveModalBody>
 
-        {deleteMode === 'empty' && (
-           <div className="py-4 space-y-6 animate-in fade-in zoom-in-95">
-              <div className="bg-destructive/10 text-destructive p-4 rounded-xl flex items-start gap-3 border border-destructive/20">
-                 <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-                 <div className="space-y-1">
-                    <p className="font-semibold text-sm">Eliminación Segura</p>
-                    <p className="text-xs opacity-90">No encontramos ningún movimiento asociado a esta cuenta. Puedes eliminarla con total seguridad.</p>
-                 </div>
-              </div>
-              <div className="flex gap-3">
-                 <Button variant="outline" className="w-full" onClick={() => setDeleteMode('idle')}>Cancelar</Button>
-                 <Button variant="destructive" className="w-full" onClick={executeDelete}>Eliminar Cuenta</Button>
-              </div>
-           </div>
-        )}
+        <ResponsiveModalFooter>
+          <Button onClick={handleSubmit} disabled={submitting}>
+            {submitting ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Crear billetera'}
+          </Button>
+        </ResponsiveModalFooter>
 
-        {deleteMode === 'has_txs' && (
-           <div className="py-4 space-y-6 animate-in fade-in zoom-in-95">
-              <div className="bg-warning/10 text-warning-foreground p-4 rounded-xl flex items-start gap-3 border border-warning/20">
-                 <AlertTriangle className="w-5 h-5 shrink-0 text-warning mt-0.5" />
-                 <div className="space-y-1">
-                    <p className="font-semibold text-sm">Atención: {txCount} movimientos</p>
-                    <p className="text-xs opacity-90">Para proteger tu contabilidad (y evitar pérdida de datos), debes reasignar el historial de esta cuenta hacia otra billetera en <strong>{currencies.find(c => c.id === currencyId)?.code || 'tu moneda elegida'}</strong>.</p>
-                 </div>
-              </div>
-
-              <div className="space-y-3 p-4 bg-accent/20 rounded-xl border border-border/50">
-                 <div className="flex items-center gap-3 text-muted-foreground justify-center">
-                    <span className="font-semibold text-sm px-3 py-1 bg-background rounded-md shadow-sm border">{name}</span>
-                    <ArrowRight className="w-4 h-4" />
-                    <span className="font-semibold text-sm px-3 py-1 bg-primary/10 text-primary rounded-md border border-primary/20">¿Nueva Cuenta?</span>
-                 </div>
-                 
-                 <div className="pt-2">
-                    <Label className="text-xs text-muted-foreground mb-1 block">Cuenta de destino</Label>
-                    <Select value={replacementWalletId} onValueChange={(val) => val && setReplacementWalletId(val)}>
-                      <SelectTrigger className="bg-background border-border/50">
-                        <SelectValue placeholder="Elegí a dónde mover los datos" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {compatibleAccounts.length === 0 && (
-                            <SelectItem value="none" disabled>
-                                No tienes otras cuentas en la misma moneda.
-                            </SelectItem>
-                        )}
-                        {compatibleAccounts.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                 </div>
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                 <Button variant="outline" className="w-full" onClick={() => setDeleteMode('idle')}>Atrás</Button>
-                 <Button variant="destructive" className="w-full" disabled={!replacementWalletId || replacementWalletId === 'none'} onClick={executeDelete}>
-                    Migrar y Eliminar
-                 </Button>
-              </div>
-           </div>
-        )}
       </ResponsiveModalContent>
     </ResponsiveModal>
   );
