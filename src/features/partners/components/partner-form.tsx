@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAutoFoco } from '@/components/ui/autofocus';
 import { Textarea } from '@/components/ui/textarea';
 import { Field } from '@/components/ui/field';
 import { Picker } from '@/components/ui/picker';
@@ -37,6 +38,9 @@ export function PartnerForm() {
   const editing = isEdit ? (sheetData?.partner as any) : null;
 
   const [name, setName] = useState('');
+  // En el teléfono no se enfoca solo: el teclado taparía el formulario
+  // antes de que se llegue a ver.
+  const autoFoco = useAutoFoco();
   const [pct, setPct] = useState('');
   const [userId, setUserId] = useState('');
   const [notes, setNotes] = useState('');
@@ -125,7 +129,7 @@ export function PartnerForm() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Ej: Matías"
-                  autoFocus
+                  autoFocus={autoFoco}
                 />
               </Field>
 

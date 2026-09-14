@@ -96,7 +96,12 @@ function Picker({
           <Combobox.Popup
             data-slot="picker-popup"
             className={cn(
-              'flex max-h-[min(20rem,var(--available-height))] w-[max(var(--anchor-width),12rem)] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-border/60 bg-popover text-popover-foreground shadow-soft-md',
+              // EXACTAMENTE el ancho del campo. Antes era `max(anchor, 12rem)`,
+              // así que un campo angosto abría una lista más ancha que él y un
+              // campo ancho abría una más finita: en las dos direcciones la
+              // lista no coincidía con lo que la abrió y se leía como un error.
+              // Las opciones largas se truncan, que es lo que hace el campo.
+              'flex max-h-[min(20rem,var(--available-height))] w-(--anchor-width) flex-col overflow-hidden rounded-xl border border-border/60 bg-popover text-popover-foreground shadow-soft-md',
               'origin-(--transform-origin) duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95'
             )}
           >
@@ -105,7 +110,7 @@ function Picker({
                 <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Combobox.Input
                   placeholder="Buscar…"
-                  className="h-10 w-full bg-transparent pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground"
+                  className="h-11 w-full bg-transparent pl-9 pr-3 text-base outline-none placeholder:text-muted-foreground md:h-10 md:text-sm"
                 />
               </div>
             )}
@@ -123,7 +128,9 @@ function Picker({
                   key={option.value}
                   value={option}
                   className={cn(
-                    'relative flex w-full cursor-default items-center gap-2 rounded-lg py-2 pr-8 pl-2.5 text-sm outline-none select-none',
+                    // 44px de alto: por debajo de eso, en un teléfono se
+                    // toca la opción de al lado.
+                    'relative flex min-h-11 w-full cursor-default items-center gap-2 rounded-lg py-2 pr-8 pl-2.5 text-sm outline-none select-none',
                     'data-highlighted:bg-accent data-highlighted:text-accent-foreground'
                   )}
                 >

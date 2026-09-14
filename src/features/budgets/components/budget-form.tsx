@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAutoFoco } from '@/components/ui/autofocus';
 import { Field } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -38,6 +39,9 @@ export function BudgetForm() {
   const isOpen = activeSheet === 'new-budget' || isEdit;
 
   const [name, setName] = useState('');
+  // En el teléfono no se enfoca solo: el teclado taparía el formulario
+  // antes de que se llegue a ver.
+  const autoFoco = useAutoFoco();
   const [period, setPeriod] = useState<'monthly' | 'weekly'>('monthly');
   const [currencyId, setCurrencyId] = useState(primaryCurrencyId);
   const [lines, setLines] = useState<Line[]>([{ category_id: '', limit_amount: '' }]);
@@ -148,7 +152,7 @@ export function BudgetForm() {
               placeholder="Ej: Costos de cocina"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              autoFocus
+              autoFocus={autoFoco}
             />
           </Field>
 

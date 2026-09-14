@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAutoFoco } from '@/components/ui/autofocus';
 import { Field } from '@/components/ui/field';
 import { Picker } from '@/components/ui/picker';
 
@@ -38,6 +39,9 @@ export function AccountForm() {
   const isOpen = activeSheet === 'new-account' || isEdit;
 
   const [name, setName] = useState('');
+  // En el teléfono no se enfoca solo: el teclado taparía el formulario
+  // antes de que se llegue a ver.
+  const autoFoco = useAutoFoco();
   const [type, setType] = useState('bank');
   const [currencyId, setCurrencyId] = useState('ars');
   const [initialBalance, setInitialBalance] = useState('');
@@ -120,7 +124,7 @@ export function AccountForm() {
               placeholder="Ej: Banco Galicia, Billetera Mágica…"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              autoFocus
+              autoFocus={autoFoco}
             />
           </Field>
 

@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAutoFoco } from '@/components/ui/autofocus';
 import { Textarea } from '@/components/ui/textarea';
 import { Field } from '@/components/ui/field';
 import { cn, parseLocalDate } from '@/lib/utils';
@@ -48,6 +49,9 @@ export function ReconciliationForm() {
   const currency = currencies.find((c) => c.id === wallet?.currency_id) || currencies[0];
 
   const [counted, setCounted] = useState('');
+  // En el teléfono no se enfoca solo: el teclado taparía el formulario
+  // antes de que se llegue a ver.
+  const autoFoco = useAutoFoco();
   const [note, setNote] = useState('');
   const [result, setResult] = useState<Reconciliation | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -175,7 +179,7 @@ export function ReconciliationForm() {
                   onChange={(e) => setCounted(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleCount()}
                   className="text-base font-semibold tabular-nums"
-                  autoFocus
+                  autoFocus={autoFoco}
                 />
               </Field>
 

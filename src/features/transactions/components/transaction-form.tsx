@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAutoFoco } from '@/components/ui/autofocus';
 import { Textarea } from '@/components/ui/textarea';
 import { Field } from '@/components/ui/field';
 import { Picker } from '@/components/ui/picker';
@@ -56,6 +57,9 @@ export function TransactionForm() {
   const editing = isEdit ? (sheetData?.transaction as any) : null;
 
   const [type, setType] = useState<TransactionType>('expense');
+  // En el teléfono no se enfoca solo: el teclado taparía el formulario
+  // antes de que se llegue a ver.
+  const autoFoco = useAutoFoco();
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(today);
@@ -461,7 +465,7 @@ export function TransactionForm() {
               onChange={(e) => setAmount(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
               className="font-semibold tabular-nums"
-              autoFocus
+              autoFocus={autoFoco}
             />
           </Field>
 

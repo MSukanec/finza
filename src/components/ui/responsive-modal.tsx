@@ -85,8 +85,15 @@ export function ResponsiveModalContent({
     )
   }
 
+  // `h-auto` con tope: un formulario corto ocupa lo que necesita y uno largo
+  // llega al 85% y scrollea adentro. Antes tenía `mt-24` —96px fijos empujando
+  // desde arriba— más `max-h-[92dvh]`: entre las dos, el cajón se pasaba de
+  // la pantalla y el botón de guardar quedaba abajo de todo, fuera de la vista.
+  //
+  // `dvh` y no `vh`: en el teléfono la barra del navegador aparece y desaparece,
+  // y `vh` se queda con la medida de cuando cargó la página.
   return (
-    <DrawerContent className={cn("mt-24 flex max-h-[92dvh] flex-col overflow-hidden", className)}>
+    <DrawerContent className={cn("flex h-auto max-h-[85dvh] flex-col overflow-hidden", className)}>
       {children}
     </DrawerContent>
   )

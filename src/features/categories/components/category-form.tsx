@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAutoFoco } from '@/components/ui/autofocus';
 import { Field } from '@/components/ui/field';
 import { Picker } from '@/components/ui/picker';
 import { useState, useEffect } from 'react';
@@ -31,6 +32,9 @@ export function CategoryForm() {
   const isOpen = activeSheet === 'new-category' || isEdit;
 
   const [name, setName] = useState('');
+  // En el teléfono no se enfoca solo: el teclado taparía el formulario
+  // antes de que se llegue a ver.
+  const autoFoco = useAutoFoco();
   const [type, setType] = useState<'expense' | 'income'>('expense');
   const [groupName, setGroupName] = useState('General');
   const [isRecurring, setIsRecurring] = useState(false);
@@ -100,7 +104,7 @@ export function CategoryForm() {
               placeholder="Ej: Suscripciones, Cursos…"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              autoFocus
+              autoFocus={autoFoco}
             />
           </Field>
 

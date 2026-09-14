@@ -110,6 +110,54 @@ const registrar = (nombre, ok, detalle = '') => casos.push({ nombre, ok, detalle
   );
 }
 
+// ------------------------------------------- Reglas de mobile
+//
+// Tres defectos reales de teléfono, cada uno con su rastro en el archivo.
+{
+  const { default: fs } = await import('node:fs');
+  const campo = fs.readFileSync('src/components/ui/field.tsx', 'utf8');
+  const picker = fs.readFileSync('src/components/ui/picker.tsx', 'utf8');
+  const cajon = fs.readFileSync('src/components/ui/drawer.tsx', 'utf8');
+
+  // 1. Safari en iPhone hace zoom sobre cualquier input de menos de 16px al
+  //    enfocarlo, y el zoom deja el formulario a medio salir de la pantalla.
+  //    Todo tamaño chico tiene que ir detrás de `md:`.
+  const chicosSueltos = [...campo.matchAll(/(?<!md:)text-\[1[0-5]px\]/g)];
+  registrar(
+    'Ningún control del campo baja de 16px en el teléfono',
+    chicosSueltos.length === 0,
+    chicosSueltos.map((m) => m[0]).join(', ')
+  );
+
+  // 2. La lista tiene que medir lo mismo que el campo que la abrió. Con
+  //    `max(anchor, 12rem)` un campo angosto abría una lista más ancha y uno
+  //    ancho una más finita: en las dos direcciones se leía como un error.
+  registrar(
+    'La lista del desplegable mide lo mismo que el campo',
+    picker.includes('w-(--anchor-width)') && !picker.includes('max(var(--anchor-width)')
+  );
+
+  // 3. 44px es el mínimo cómodo al dedo; con 36 se toca la opción de al lado.
+  registrar(
+    'Las opciones del desplegable llegan a 44px de alto',
+    /Combobox\.Item[\s\S]{0,400}min-h-11/.test(picker)
+  );
+
+  // 4. El cajón tenía `mt-24` (96px fijos) más `max-h-[92dvh]`: entre las dos
+  //    se pasaba de la pantalla y el botón de guardar quedaba fuera de vista.
+  registrar(
+    'El cajón de mobile no empuja con mt-24',
+    !cajon.includes('direction=bottom]:mt-24')
+  );
+
+  // 5. `vh` se queda con la medida de cuando cargó la página; en el teléfono
+  //    la barra del navegador aparece y desaparece. Tiene que ser `dvh`.
+  registrar(
+    'El alto del cajón se mide en dvh, no en vh',
+    /direction=bottom\]:max-h-\[\d+dvh\]/.test(cajon)
+  );
+}
+
 let fallas = 0;
 for (const c of casos) {
   if (c.ok) console.log(`OK   ${c.nombre}`);
