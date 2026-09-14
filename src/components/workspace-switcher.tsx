@@ -25,7 +25,7 @@ import { Check, ChevronsUpDown, Plus, Copy, FilePlus2, Trash2, Users, LogOut } f
 import { WorkspaceMembersDialog } from '@/components/workspace-members-dialog';
 import { useGlobalDialog } from '@/components/providers/dialog-provider';
 
-export function WorkspaceSwitcher() {
+export function WorkspaceSwitcher({ onCambiar }: { onCambiar?: () => void } = {}) {
   const workspaces = useFinanceStore((s) => s.workspaces);
   const currentWorkspaceId = useFinanceStore((s) => s.currentWorkspaceId);
   const switchWorkspace = useFinanceStore((s) => s.switchWorkspace);
@@ -108,7 +108,14 @@ export function WorkspaceSwitcher() {
             return (
               <DropdownMenuItem
                 key={w.id}
-                onClick={() => !isCurrent && switchWorkspace(w.id)}
+                onClick={() => {
+                  if (isCurrent) return;
+                  void switchWorkspace(w.id);
+                  // En mobile este selector vive dentro de la hoja "Más": si no
+                  // se cierra, cambiar de espacio deja al usuario mirando el
+                  // menú en vez de la app que acaba de cambiar.
+                  onCambiar?.();
+                }}
                 className="group/ws gap-2 cursor-pointer"
               >
                 <span className="flex size-4 items-center justify-center shrink-0">

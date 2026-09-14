@@ -91,7 +91,7 @@ function Picker({
           align="start"
           sideOffset={6}
           collisionPadding={12}
-          className="isolate z-50"
+          className="isolate z-[70]"
         >
           <Combobox.Popup
             data-slot="picker-popup"

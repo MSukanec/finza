@@ -136,7 +136,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   const navItems = NAV_ITEMS
-    .filter((i) => !i.adminOnly || isAdmin)
+    .filter((i) => !i.adminOnly || esAdmin)
     .filter((i) => !soloMovimientos || i.href === '/transactions');
   const mobileNav = navItems.filter((i) => PRIMARY_MOBILE.includes(i.href));
   const moreNav = navItems.filter((i) => !PRIMARY_MOBILE.includes(i.href));
@@ -293,7 +293,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
 
               <div className="mb-4 border-b border-border/60 pb-4">
-                <WorkspaceSwitcher />
+                <WorkspaceSwitcher onCambiar={() => setMoreOpen(false)} />
               </div>
 
               <div className="grid grid-cols-3 gap-2.5">
