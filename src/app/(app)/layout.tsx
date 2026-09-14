@@ -69,8 +69,15 @@ const NAV_ITEMS = [
 /** Lo que dice el ojo de las secciones que todavía no ve nadie más. */
 const SOLO_ADMIN = 'Solo vos: esta sección está oculta para el resto del equipo';
 
-/** Los 4 accesos del bottom nav; el resto vive en el menú "Más". */
-const PRIMARY_MOBILE = ['/dashboard', '/transactions', '/accounts', '/reports'];
+/**
+ * Los accesos fijos del bottom nav; el resto vive en el menú "Más".
+ *
+ * Son tres y no cuatro: con el botón de "+" y "Más", cuatro dejaban seis
+ * cosas en una barra de 390px y cada una quedaba en una columna angosta.
+ * Billeteras se mira de a ratos, no todo el tiempo, así que es la que se fue
+ * al menú.
+ */
+const PRIMARY_MOBILE = ['/dashboard', '/transactions', '/reports'];
 
 function isActive(pathname: string, href: string) {
   return href === '/dashboard' ? pathname === href : pathname.startsWith(href);
