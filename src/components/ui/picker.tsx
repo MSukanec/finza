@@ -4,6 +4,7 @@ import * as React from 'react';
 import { Combobox } from '@base-ui/react/combobox';
 import { ChevronDownIcon, CheckIcon, SearchIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAnclaDelCampo } from '@/components/ui/field';
 
 export interface PickerOption {
   value: string;
@@ -49,6 +50,10 @@ function Picker({
   emptyMessage?: string;
 }) {
   const conBuscador = searchable ?? options.length > UMBRAL_BUSCADOR;
+  // Adentro de un campo, la lista se mide contra la FILA entera y no contra
+  // el disparador, que es sólo el tramo a la derecha de la etiqueta. Suelto,
+  // se ancla a sí mismo como cualquier desplegable.
+  const ancla = useAnclaDelCampo();
   const seleccionada = options.find((o) => o.value === value) ?? null;
 
   return (
@@ -87,6 +92,7 @@ function Picker({
 
       <Combobox.Portal>
         <Combobox.Positioner
+          anchor={ancla ?? undefined}
           side="bottom"
           align="start"
           sideOffset={6}

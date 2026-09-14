@@ -20,6 +20,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useAutoFoco } from '@/components/ui/autofocus';
 import { cn } from '@/lib/utils';
 import { Check, ChevronsUpDown, Plus, Copy, FilePlus2, Trash2, Users, LogOut } from 'lucide-react';
 import { WorkspaceMembersDialog } from '@/components/workspace-members-dialog';
@@ -37,6 +38,7 @@ export function WorkspaceSwitcher({ onCambiar }: { onCambiar?: () => void } = {}
   const [createOpen, setCreateOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
   const [name, setName] = useState('');
+  const autoFoco = useAutoFoco();
   const [mode, setMode] = useState<'empty' | 'clone'>('empty');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -189,7 +191,7 @@ export function WorkspaceSwitcher({ onCambiar }: { onCambiar?: () => void } = {}
                 placeholder="Ej: Pruebas"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                autoFocus
+                autoFocus={autoFoco}
                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
               />
             </div>

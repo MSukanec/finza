@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useRef } from 'react';
 import { ResponsiveModal, ResponsiveModalContent, ResponsiveModalHeader, ResponsiveModalTitle, ResponsiveModalDescription } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAutoFoco } from '@/components/ui/autofocus';
 import { useFinanceStore } from '@/stores/finance-store';
 
 type DialogContextType = {
@@ -23,6 +24,7 @@ export function useGlobalDialog() {
 }
 
 export function DialogProvider({ children }: { children: React.ReactNode }) {
+  const autoFoco = useAutoFoco();
   // Confirm State
   const [confirmState, setConfirmState] = useState<{ isOpen: boolean; title: string; message: string; resolve: (val: boolean) => void } | null>(null);
   
@@ -117,7 +119,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
              </ResponsiveModalHeader>
              <div className="mt-4 flex flex-col gap-4">
                <Input 
-                 autoFocus 
+                 autoFocus={autoFoco} 
                  value={promptState.value} 
                  onChange={(e) => setPromptState(prev => prev ? { ...prev, value: e.target.value } : null)} 
                  onKeyDown={(e) => {

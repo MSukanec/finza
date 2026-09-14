@@ -129,12 +129,57 @@ const registrar = (nombre, ok, detalle = '') => casos.push({ nombre, ok, detalle
     chicosSueltos.map((m) => m[0]).join(', ')
   );
 
-  // 2. La lista tiene que medir lo mismo que el campo que la abrió. Con
-  //    `max(anchor, 12rem)` un campo angosto abría una lista más ancha y uno
-  //    ancho una más finita: en las dos direcciones se leía como un error.
+  // 2. La lista tiene que medir lo mismo que el campo que la abrió. Son DOS
+  //    cosas y las dos hicieron falta: el ancho (`max(anchor, 12rem)` hacía
+  //    que un campo angosto abriera una lista más ancha y uno ancho una más
+  //    finita) y el ancla (un desplegable se mide contra su disparador, y
+  //    adentro de un campo el disparador es sólo el tramo a la derecha de la
+  //    etiqueta, así que la lista salía corrida y más corta que el campo).
   registrar(
     'La lista del desplegable mide lo mismo que el campo',
     picker.includes('w-(--anchor-width)') && !picker.includes('max(var(--anchor-width)')
+  );
+  registrar(
+    'El desplegable se ancla a la fila del campo, no a su disparador',
+    picker.includes('useAnclaDelCampo') && /anchor=\{ancla/.test(picker)
+  );
+  registrar(
+    'El campo ofrece su fila como ancla',
+    campo.includes('AnclaDelCampo.Provider') && campo.includes('export { Field, useAnclaDelCampo }')
+  );
+
+  // 2.b La descripción vacía tiene que apoyarse a la derecha como todo lo
+  //     demás; el placeholder pegado a la etiqueta quedaba flotando al medio.
+  registrar(
+    'El placeholder de la descripción va contra el borde derecho',
+    campo.includes('[&_[data-slot=textarea]:placeholder-shown]:text-right')
+  );
+
+  // 2.c El foco automático se decide por el PUNTERO, no por el ancho: lo que
+  //     molesta en el teléfono es el teclado de software, y un iPad en
+  //     horizontal mide más de 768px.
+  const foco = fs.readFileSync('src/components/ui/autofocus.ts', 'utf8');
+  registrar(
+    'El foco automático pregunta por el puntero, no por el ancho',
+    foco.includes('(hover: hover) and (pointer: fine)') && !foco.includes('min-width')
+  );
+
+  // 2.d Ningún `autoFocus` suelto: todos pasan por el hook.
+  const sueltos = [];
+  const recorrer = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const ruta = `${dir}/${e.name}`;
+      if (e.isDirectory()) recorrer(ruta);
+      else if (e.name.endsWith('.tsx') && /autoFocus(?!=\{)/.test(fs.readFileSync(ruta, 'utf8'))) {
+        sueltos.push(ruta);
+      }
+    }
+  };
+  recorrer('src');
+  registrar(
+    'Ningún autoFocus escrito a mano: todos pasan por useAutoFoco',
+    sueltos.length === 0,
+    sueltos.join(', ')
   );
 
   // 3. 44px es el mínimo cómodo al dedo; con 36 se toca la opción de al lado.
