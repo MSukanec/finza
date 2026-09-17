@@ -27,6 +27,21 @@ export interface PickerOption {
  */
 const UMBRAL_BUSCADOR = 7;
 
+/** Sin acentos ni mayúsculas: "pescaderia" encuentra "Pescadería". */
+function normalizar(texto: string): string {
+  return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
+/**
+ * Las opciones que coinciden con lo tipeado. Busca también en el texto
+ * secundario, así "ARS" encuentra las billeteras en pesos.
+ */
+export function filtrarOpciones(opciones: PickerOption[], texto: string): PickerOption[] {
+  const q = normalizar(texto);
+  if (!q) return opciones;
+  return opciones.filter((o) => normalizar(`${o.label} ${o.hint ?? ''}`).includes(q));
+}
+
 function Picker({
   value,
   onValueChange,
@@ -56,15 +71,45 @@ function Picker({
   const ancla = useAnclaDelCampo();
   const seleccionada = options.find((o) => o.value === value) ?? null;
 
+  /**
+   * El texto buscado, controlado acá y no por Base UI.
+   *
+   * Base UI filtra la lista por un texto interno, y cuando el desplegable no
+   * tiene el buscador ADENTRO, al elegir una opción copia su nombre a ese texto
+   * (`shouldFillInput` en AriaCombobox). La próxima vez que se abría, la lista
+   * venía filtrada por la opción anterior: elegías "Aporte" y después quedaba
+   * una sola. Pasaba en todo desplegable de menos de ocho opciones, o sea, en
+   * casi todos.
+   *
+   * Así, el texto sólo cambia cuando la persona TIPEA, se vacía al abrir, y el
+   * filtrado lo hace este componente. Sin buscador, no se filtra nunca.
+   */
+  const [busqueda, setBusqueda] = React.useState('');
+  const visibles = React.useMemo(
+    () => (conBuscador ? filtrarOpciones(options, busqueda) : options),
+    [options, busqueda, conBuscador]
+  );
+
   return (
     <Combobox.Root
       items={options}
+      filteredItems={visibles}
+      filter={null}
+      inputValue={busqueda}
+      onInputValueChange={(texto, detalle) => {
+        if (detalle.reason === 'input-change' || detalle.reason === 'input-clear') setBusqueda(texto);
+      }}
+      onOpenChange={(abierto) => {
+        if (abierto) setBusqueda('');
+      }}
       value={seleccionada}
       onValueChange={(v: PickerOption | null) => {
         if (v) onValueChange(v.value);
       }}
-      // Las opciones son objetos {value, label}: Base UI toma `label` para
-      // mostrar y `value` para el formulario sin que haya que explicárselo.
+      // Por `value` y no por identidad: las listas se recalculan con useMemo y
+      // la opción elegida puede ser otro objeto con el mismo valor. Comparando
+      // por identidad, la tilde de "elegida" desaparecía sin razón.
+      isItemEqualToValue={(a: PickerOption | null, b: PickerOption | null) => a?.value === b?.value}
       disabled={disabled}
     >
       <Combobox.Trigger
