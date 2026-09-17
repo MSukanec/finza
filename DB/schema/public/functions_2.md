@@ -1,9 +1,49 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T21:49:16.009Z
+> Generated: 2026-09-17T13:11:50.529Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Functions (chunk 2: list_workspace_people — workspace_role)
+## [PUBLIC] Functions (chunk 2: list_workspace_members — workspace_role)
+
+### `list_workspace_members(ws uuid)` 🔐
+
+- **Returns**: TABLE(id uuid, user_id uuid, email text, full_name text, role text, pending boolean, last_sign_in timestamp with time zone)
+- **Kind**: function | STABLE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.list_workspace_members(ws uuid)
+ RETURNS TABLE(id uuid, user_id uuid, email text, full_name text, role text, pending boolean, last_sign_in timestamp with time zone)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+    IF NOT public.can_see_all(ws) THEN
+        RAISE EXCEPTION 'No tenés acceso a esta información en este espacio';
+    END IF;
+
+    RETURN QUERY
+        SELECT m.id, m.user_id, u.email, u.full_name, m.role, false, au.last_sign_in_at
+          FROM public.workspace_members m
+          JOIN public.users u ON u.id = m.user_id
+          LEFT JOIN auth.users au ON au.id = u.auth_id
+         WHERE m.workspace_id = ws
+
+        UNION ALL
+
+        -- Una invitación sin aceptar no tiene cuenta todavía: no hay conexión
+        -- que mostrar y la pantalla lo dice como "sin aceptar".
+        SELECT i.id, NULL::uuid, i.email, NULL::text, i.role, true, NULL::timestamptz
+          FROM public.workspace_invitations i
+         WHERE i.workspace_id = ws AND i.accepted_at IS NULL
+
+        ORDER BY 6, 5 DESC, 3;
+END;
+$function$
+```
+</details>
 
 ### `list_workspace_people(ws uuid)` 🔐
 
@@ -134,6 +174,28 @@ BEGIN
 
     RETURN COALESCE(NEW, OLD);
 END;
+$function$
+```
+</details>
+
+### `movimiento_del_archivo(ruta text)`
+
+- **Returns**: uuid
+- **Kind**: function | IMMUTABLE | SECURITY INVOKER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.movimiento_del_archivo(ruta text)
+ RETURNS uuid
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+    SELECT CASE
+        WHEN split_part(ruta, '/', 2) ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        THEN split_part(ruta, '/', 2)::uuid
+    END
 $function$
 ```
 </details>

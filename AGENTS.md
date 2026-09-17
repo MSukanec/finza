@@ -109,6 +109,32 @@ usa `billeteras_para_cargar(ws)`, que devuelve nombre y moneda y ningún saldo.
 colaborador de mentira, ataca cada tabla y cada función desde su sesión, y hace
 rollback. Cuarenta comprobaciones, ninguna hipotética.
 
+## Adjuntos
+
+Los comprobantes de un movimiento (DB/044): la tabla `transaction_attachments`
+dice qué es y de quién; el archivo vive en el bucket **privado** `adjuntos`, en
+`<espacio>/<movimiento>/<id>-<nombre>`. Se abren con URL firmada de un minuto.
+
+**No tienen una regla de permisos propia, y no hay que dársela.** Cada política
+—de la tabla y del bucket— pregunta si el movimiento existe, y esa subconsulta
+pasa por la RLS de `transactions` de quien consulta. Quien ve el movimiento ve
+sus adjuntos; si cambia quién ve movimientos, los adjuntos siguen solos. Escribir
+acá un `can_see_all` es abrir la puerta a que las dos reglas se separen.
+
+1. `workspace_id` y `user_id` los pone un trigger. No se le cree al cliente.
+2. De una fila sólo se puede cambiar `deleted_at` (GRANT por columna): quitar un
+   adjunto es lógico y el archivo queda. El bucket no tiene política de UPDATE
+   ni de DELETE a propósito.
+3. Los límites de tamaño y tipo están en el bucket **y** en `src/lib/adjuntos.ts`,
+   que los repite sólo para avisar antes. `check:ui` compara los dos.
+4. Un movimiento recién creado todavía no está en la base cuando se eligen sus
+   archivos: `attachFiles` espera su escritura (`escriturasPendientes`). Sin eso,
+   adjuntar al cargar un gasto falla siempre.
+
+**Después de tocar permisos de movimientos o adjuntos, correr
+`npm run check:adjuntos`**: ataca la tabla y el bucket como colaborador, como
+alguien de otro espacio y como administrador, y hace rollback.
+
 ## Vaciar la caja
 
 Vaciar un espacio para empezar de cero es una operación de la app, no de un

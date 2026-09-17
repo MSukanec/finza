@@ -16,9 +16,11 @@ import {
   Receipt,
   HandCoins,
   Landmark,
+  Paperclip,
 } from 'lucide-react';
 import { useGlobalDialog } from '@/components/providers/dialog-provider';
 import { UserAvatar, personName } from '@/components/ui/user-avatar';
+import { useMemo } from 'react';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -64,7 +66,16 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
   const toggleCheckpoint = useFinanceStore((s) => s.toggleCheckpoint);
   const toggleTransactionStatus = useFinanceStore((s) => s.toggleTransactionStatus);
   const people = useFinanceStore((s) => s.people);
+  const adjuntos = useFinanceStore((s) => s.attachments);
   const dialog = useGlobalDialog();
+
+  // Un conteo por movimiento, armado una vez: buscarlo fila por fila recorrería
+  // todos los adjuntos por cada uno de los mil movimientos de la lista.
+  const adjuntosPorMovimiento = useMemo(() => {
+    const cuenta = new Map<string, number>();
+    for (const a of adjuntos) cuenta.set(a.transaction_id, (cuenta.get(a.transaction_id) ?? 0) + 1);
+    return cuenta;
+  }, [adjuntos]);
 
   if (transactions.length === 0) {
     return (
@@ -163,6 +174,15 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
                       <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                         {isReviewed && <CheckCircle2 className="size-3 shrink-0 text-income" />}
                         <span className="truncate">{account?.name || 'Sin billetera'}</span>
+                        {(adjuntosPorMovimiento.get(tx.id) ?? 0) > 0 && (
+                          <span
+                            className="inline-flex shrink-0 items-center gap-0.5"
+                            title="Tiene comprobantes adjuntos"
+                          >
+                            <Paperclip className="size-3" />
+                            {(adjuntosPorMovimiento.get(tx.id) ?? 0) > 1 && adjuntosPorMovimiento.get(tx.id)}
+                          </span>
+                        )}
                         {tx.reference && (
                           <>
                             <span aria-hidden>·</span>

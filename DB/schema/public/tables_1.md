@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T21:49:16.009Z
+> Generated: 2026-09-17T13:11:50.529Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -149,6 +149,21 @@
 | balances | jsonb | ✗ | '[]'::jsonb |  |
 | created_at | timestamptz | ✗ | now() |  |
 | restored_at | timestamptz | ✓ |  |  |
+
+### `transaction_attachments`
+
+| Column | Type | Nullable | Default | Constraints |
+|--------|------|----------|---------|-------------|
+| id | uuid | ✗ | gen_random_uuid() | PK |
+| workspace_id | uuid | ✗ |  | FK → workspaces.id |
+| transaction_id | uuid | ✗ |  | FK → transactions.id |
+| storage_path | text | ✗ |  | UNIQUE |
+| file_name | text | ✗ |  |  |
+| mime_type | text | ✓ |  |  |
+| size_bytes | int8 | ✗ |  |  |
+| user_id | uuid | ✗ |  | FK → users.id |
+| created_at | timestamptz | ✗ | now() |  |
+| deleted_at | timestamptz | ✓ |  |  |
 
 ### `transactions`
 

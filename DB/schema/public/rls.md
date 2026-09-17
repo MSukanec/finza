@@ -1,9 +1,9 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T21:49:16.009Z
+> Generated: 2026-09-17T13:11:50.529Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] RLS Policies (50)
+## [PUBLIC] RLS Policies (53)
 
 ### `activity_log` (1 policies)
 
@@ -311,6 +311,47 @@ can_see_all(workspace_id)
 - **USING**:
 ```sql
 can_see_all(workspace_id)
+```
+
+### `transaction_attachments` (3 policies)
+
+#### adjuntos_insert
+
+- **Command**: INSERT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **WITH CHECK**:
+```sql
+((EXISTS ( SELECT 1
+   FROM transactions t
+  WHERE (t.id = transaction_attachments.transaction_id))) AND (user_id = current_user_id()) AND (storage_path ~~ ((((workspace_id)::text || '/'::text) || (transaction_id)::text) || '/%'::text)))
+```
+
+#### adjuntos_select
+
+- **Command**: SELECT | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+(EXISTS ( SELECT 1
+   FROM transactions t
+  WHERE (t.id = transaction_attachments.transaction_id)))
+```
+
+#### adjuntos_update
+
+- **Command**: UPDATE | **Permissive**: PERMISSIVE
+- **Roles**: {authenticated}
+- **USING**:
+```sql
+(EXISTS ( SELECT 1
+   FROM transactions t
+  WHERE (t.id = transaction_attachments.transaction_id)))
+```
+- **WITH CHECK**:
+```sql
+(EXISTS ( SELECT 1
+   FROM transactions t
+  WHERE (t.id = transaction_attachments.transaction_id)))
 ```
 
 ### `transactions` (4 policies)

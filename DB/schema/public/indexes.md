@@ -1,9 +1,9 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T21:49:16.009Z
+> Generated: 2026-09-17T13:11:50.529Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Indexes (35, excluding PKs)
+## [PUBLIC] Indexes (38, excluding PKs)
 
 | Table | Index | Definition |
 |-------|-------|------------|
@@ -23,6 +23,9 @@
 | partners | partners_espacio_nombre_uniq | `CREATE UNIQUE INDEX partners_espacio_nombre_uniq ON public.partners USING btr...` |
 | partners | partners_espacio_usuario_uniq | `CREATE UNIQUE INDEX partners_espacio_usuario_uniq ON public.partners USING bt...` |
 | purges | purges_espacio_idx | `CREATE INDEX purges_espacio_idx ON public.purges USING btree (workspace_id, c...` |
+| transaction_attachments | transaction_attachments_storage_path_key | `CREATE UNIQUE INDEX transaction_attachments_storage_path_key ON public.transa...` |
+| transaction_attachments | transaction_attachments_tx_idx | `CREATE INDEX transaction_attachments_tx_idx ON public.transaction_attachments...` |
+| transaction_attachments | transaction_attachments_ws_idx | `CREATE INDEX transaction_attachments_ws_idx ON public.transaction_attachments...` |
 | transactions | idx_transactions_workspace | `CREATE INDEX idx_transactions_workspace ON public.transactions USING btree (w...` |
 | transactions | transactions_huella_idx | `CREATE INDEX transactions_huella_idx ON public.transactions USING btree (work...` |
 | transactions | transactions_lote_idx | `CREATE INDEX transactions_lote_idx ON public.transactions USING btree (import...` |

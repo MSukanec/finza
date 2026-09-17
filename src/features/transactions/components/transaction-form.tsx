@@ -19,6 +19,7 @@ import { Field } from '@/components/ui/field';
 import { Picker } from '@/components/ui/picker';
 import { parseAmount, formatMoney } from '@/lib/money';
 import { AlertTriangle } from 'lucide-react';
+import { AttachmentsField } from './attachments-field';
 import type { TransactionType } from '@/lib/types';
 
 /**
@@ -51,6 +52,7 @@ export function TransactionForm() {
   const currencies = useFinanceStore((s) => s.currencies);
   const addTransaction = useFinanceStore((s) => s.addTransaction);
   const updateTransaction = useFinanceStore((s) => s.updateTransaction);
+  const attachFiles = useFinanceStore((s) => s.attachFiles);
 
   const isEdit = activeSheet === 'edit-transaction';
   const isOpen = activeSheet === 'new-transaction' || isEdit;
@@ -72,6 +74,8 @@ export function TransactionForm() {
   // Vacío = contado. Sólo se completa cuando la plata se mueve otro día.
   const [settlesAt, setSettlesAt] = useState('');
   const [reference, setReference] = useState('');
+  /** Comprobantes elegidos para un movimiento que todavía no se guardó. */
+  const [pendientes, setPendientes] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -98,6 +102,7 @@ export function TransactionForm() {
 
     setError(null);
     setSubmitting(false);
+    setPendientes([]);
 
     if (editing) {
       setType(editing.type);
@@ -286,8 +291,15 @@ export function TransactionForm() {
         period_month: !isTransfer && !isEquity && isRecurring && periodMonth ? periodMonth : undefined,
       };
 
-      if (isEdit && editing) await updateTransaction(editing.id, payload);
-      else await addTransaction(payload);
+      if (isEdit && editing) {
+        await updateTransaction(editing.id, payload);
+      } else {
+        const id = await addTransaction(payload);
+        // Sin await: el modal cierra ya y los archivos terminan de subir con la
+        // lista a la vista, marcados como "subiendo". `attachFiles` espera sola
+        // a que el movimiento exista en la base.
+        if (pendientes.length) void attachFiles(id, pendientes);
+      }
 
       closeSheet();
     } catch (e: any) {
@@ -496,6 +508,13 @@ export function TransactionForm() {
                 onChange={(e) => setReference(e.target.value)}
               />
             </Field>
+          )}
+
+          {/* En todos los tipos: una transferencia también tiene su captura. */}
+          {isEdit && editing ? (
+            <AttachmentsField transactionId={editing.id} />
+          ) : (
+            <AttachmentsField pendientes={pendientes} onPendientesChange={setPendientes} />
           )}
 
           {isEquity && (

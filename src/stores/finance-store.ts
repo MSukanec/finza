@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase/client';
-import type { Account, Category, Transaction, Budget, Currency, Debt, Workspace, WorkspaceRole, WorkspaceMember, Person, ActivityEntry, Purge, Reconciliation, Partner, PartnerPosition, RegisteredUser } from '@/lib/types';
+import type { Account, Category, Transaction, Budget, Currency, Debt, Workspace, WorkspaceRole, WorkspaceMember, Person, ActivityEntry, Purge, Reconciliation, Partner, PartnerPosition, RegisteredUser, TransactionAttachment } from '@/lib/types';
 import { CURRENCIES, EXCHANGE_RATES } from '@/lib/mock-data';
-import { toast } from '@/stores/toast-store';
+import { toast, useToastStore } from '@/stores/toast-store';
 import { signoEnCaja } from '@/lib/money';
 import { optimizarLogo } from '@/lib/optimizar-imagen';
+import { validarAdjunto, rutaDeAdjunto, tipoDeAdjunto } from '@/lib/adjuntos';
 
 // Todo borrado es lógico: se marca `deleted_at` y la fila queda. Ver DB/021.
 const nowIso = () => new Date().toISOString();
@@ -140,7 +141,8 @@ type ListKey =
   | 'categoryGroups'
   | 'debts'
   | 'budgets'
-  | 'partners';
+  | 'partners'
+  | 'attachments';
 
 /**
  * Escritura optimista: el cambio se aplica en memoria YA y la escritura se
@@ -158,7 +160,7 @@ function optimistic(
   undo: (list: any[]) => any[],
   write: () => Promise<unknown>,
   errorMessage: string
-): void {
+): Promise<boolean> {
   const commit = (fn: (list: any[]) => any[]) =>
     useFinanceStore.setState((s: any) => {
       const next: any = { [key]: fn(s[key]) };
@@ -175,12 +177,29 @@ function optimistic(
 
   commit(apply);
 
-  void write().catch((e) => {
-    console.error(errorMessage, e);
-    commit(undo);
-    toast.error(errorMessage);
-  });
+  // Devuelve si se guardó, para quien necesite encadenar algo DESPUÉS de que
+  // la fila exista de verdad. Casi nadie lo usa: la pantalla ya se actualizó.
+  return write().then(
+    () => true,
+    (e) => {
+      console.error(errorMessage, e);
+      commit(undo);
+      toast.error(errorMessage);
+      return false;
+    }
+  );
 }
+
+/**
+ * Movimientos recién creados cuya escritura todavía no volvió del servidor.
+ *
+ * Existe por los adjuntos. Un movimiento nuevo aparece en pantalla al instante,
+ * pero en la base todavía no está, y las políticas del bucket preguntan
+ * justamente si el movimiento existe. Sin esperar, elegir un ticket al cargar
+ * un gasto fallaría siempre — no a veces: siempre, porque el archivo sale
+ * antes que la fila.
+ */
+const escriturasPendientes = new Map<string, Promise<boolean>>();
 
 /**
  * El recorte que aplica una vista previa de rol, copiado de las políticas de la
@@ -197,6 +216,7 @@ function optimistic(
  * previa mentiría de nuevo.
  *
  *   transactions, activity_log  →  can_see_all OR user_id = yo
+ *   transaction_attachments     →  los de los movimientos visibles (en hydrate)
  *   wallets, partners, debts,
  *   budgets, reconciliations    →  can_see_all
  *   categories, category_groups →  sólo membresía (el colaborador las necesita
@@ -229,6 +249,8 @@ interface FinanceState {
   categoryGroups: import('@/lib/types').CategoryGroup[];
   debts: Debt[];
   transactions: Transaction[];
+  /** Comprobantes de los movimientos visibles. Ver DB/044. */
+  attachments: TransactionAttachment[];
   budgets: Budget[];
   exchangeRates: Record<string, number>;
 
@@ -297,12 +319,27 @@ interface FinanceState {
   removeMember: (workspaceId: string, member: WorkspaceMember) => Promise<void>;
   leaveWorkspace: (workspaceId: string) => Promise<void>;
 
-  addTransaction: (tx: any) => Promise<void>;
+  /** Devuelve el id del movimiento, que ya es el definitivo. */
+  addTransaction: (tx: any) => Promise<string>;
   updateTransaction: (id: string, data: Partial<Transaction>) => Promise<void>;
   removeTransaction: (id: string) => Promise<void>;
   revertImportBatch: (batchId: string) => Promise<void>;
   toggleCheckpoint: (id: string, current: boolean) => Promise<void>;
   toggleTransactionStatus: (id: string, status: 'draft' | 'warning' | 'reviewed') => Promise<void>;
+
+  /**
+   * Cuelga archivos de un movimiento. Aparecen al instante marcados como
+   * "subiendo" y se confirman de a uno: si falla uno, los demás siguen.
+   * Sirve también para un movimiento que se acaba de crear.
+   */
+  attachFiles: (transactionId: string, archivos: File[]) => Promise<void>;
+  /** Lo saca del movimiento. Borrado lógico: el archivo queda en el bucket. */
+  removeAttachment: (id: string) => Promise<void>;
+  /**
+   * URL firmada para abrir o descargar un adjunto. Vence en un minuto: es para
+   * usarla ya, no para guardarla.
+   */
+  attachmentUrl: (adjunto: TransactionAttachment, opciones?: { descargar?: boolean }) => Promise<string>;
   
   addPartner: (p: { name: string; ownership_pct: number; notes?: string }) => Promise<void>;
   updatePartner: (id: string, data: Partial<Pick<Partner, 'name' | 'ownership_pct' | 'notes' | 'user_id'>>) => Promise<void>;
@@ -338,6 +375,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   categoryGroups: [],
   debts: [],
   transactions: [],
+  attachments: [],
   budgets: [],
   exchangeRates: EXCHANGE_RATES,
   workspaces: [],
@@ -499,6 +537,26 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
           .order('created_at', { ascending: false })
       : { data: [] as any[] };
 
+    // Adjuntos: sólo lo que describe al archivo, no el archivo. Paginado igual
+    // que los movimientos, porque en unos años pasan de mil.
+    const adjuntos: TransactionAttachment[] = [];
+    if (currentWorkspaceId) {
+      const PAGINA = 1000;
+      for (let pagina = 0; ; pagina++) {
+        const { data } = await supabase
+          .from('transaction_attachments')
+          .select('id, transaction_id, storage_path, file_name, mime_type, size_bytes, user_id, created_at')
+          .eq('workspace_id', currentWorkspaceId)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: true })
+          .range(pagina * PAGINA, (pagina + 1) * PAGINA - 1);
+        if (!data?.length) break;
+        // `bigint` llega como texto desde PostgREST.
+        adjuntos.push(...data.map((a) => ({ ...a, size_bytes: Number(a.size_bytes) })));
+        if (data.length < PAGINA) break;
+      }
+    }
+
     const partnersRes = currentWorkspaceId
       ? await supabase
           .from('partners')
@@ -557,10 +615,18 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       })),
     }));
 
+    // Los adjuntos siguen a sus movimientos: si el movimiento no se muestra, su
+    // comprobante tampoco. Sin vista previa no cambia nada —la base ya devolvió
+    // sólo lo visible—; durante una, es lo que evita que el colaborador
+    // previsualizado vea el ticket de un movimiento que no ve.
+    const txsVisibles = recorte?.soloLoMio ? txs.filter((t: any) => t.user_id === appUserId) : txs;
+    const idsVisibles = new Set<string>(txsVisibles.map((t: { id: string }) => t.id));
+
     set({
       workspaces,
       currentWorkspaceId,
       currentRole: rolReal,
+      attachments: adjuntos.filter((a) => idsVisibles.has(a.transaction_id)),
       people,
       budgets: recorte?.sinPatrimonio ? [] : budgets,
       reconciliations: (recorte?.sinPatrimonio ? [] : (reconciliationsRes as any).data || []).map((r: any) => ({
@@ -595,7 +661,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         description: d.description,
         created_at: d.created_at
       })),
-      transactions: (recorte?.soloLoMio ? txs.filter((t: any) => t.user_id === appUserId) : txs).map((t: any) => ({
+      transactions: txsVisibles.map((t: any) => ({
         user_id: t.user_id ?? null,
         id: t.id,
         type: t.type,
@@ -1018,6 +1084,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       categoryGroups: [],
       debts: [],
       transactions: [],
+      attachments: [],
       budgets: [],
       workspaces: [],
       currentWorkspaceId: null,
@@ -1088,7 +1155,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       date,
     };
 
-    optimistic(
+    const escritura = optimistic(
       'transactions',
       (list) => byDateDesc([local, ...(localPair ? [localPair] : []), ...list]),
       (list) => list.filter((t: Transaction) => t.id !== id && t.id !== pairId),
@@ -1120,6 +1187,9 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       },
       'No se pudo guardar el movimiento.'
     );
+    escriturasPendientes.set(id, escritura);
+    void escritura.finally(() => escriturasPendientes.delete(id));
+    return id;
   },
 
   updateTransaction: async (id, data) => {
@@ -1252,6 +1322,145 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   // El socio es del negocio, no de la app: se carga con nombre y participación
   // mucho antes de que la persona se registre. Cuando se registra se vincula
   // con `user_id` y recién ahí el socio y el usuario son la misma entidad.
+  // === ADJUNTOS ===
+  attachFiles: async (transactionId, archivos) => {
+    const { currentWorkspaceId, appUserId } = get();
+    if (!currentWorkspaceId) throw new Error('No hay un espacio activo.');
+
+    // Lo que no se puede subir se avisa ANTES de mostrarlo: una fila que
+    // aparece y a los dos segundos desaparece es peor que un aviso claro.
+    const locales: { archivo: File; adjunto: TransactionAttachment }[] = [];
+    for (const archivo of archivos) {
+      const problema = validarAdjunto(archivo);
+      if (problema) {
+        toast.error(problema);
+        continue;
+      }
+      const id = crypto.randomUUID();
+      locales.push({
+        archivo,
+        adjunto: {
+          id,
+          transaction_id: transactionId,
+          storage_path: rutaDeAdjunto(currentWorkspaceId, transactionId, id, archivo.name),
+          file_name: archivo.name.slice(0, 255) || 'archivo',
+          mime_type: tipoDeAdjunto(archivo),
+          size_bytes: archivo.size,
+          user_id: appUserId,
+          created_at: nowIso(),
+          subiendo: true,
+        },
+      });
+    }
+    if (!locales.length) return;
+
+    const quitar = (ids: string[]) =>
+      set((st) => ({ attachments: st.attachments.filter((a) => !ids.includes(a.id)) }));
+
+    set((st) => ({ attachments: [...st.attachments, ...locales.map((l) => l.adjunto)] }));
+
+    // Un movimiento recién creado todavía no está en la base. Si su escritura
+    // falla, sus adjuntos no tienen de qué colgarse: se van con él, y el aviso
+    // ya lo dio el movimiento.
+    const pendiente = escriturasPendientes.get(transactionId);
+    if (pendiente && !(await pendiente)) {
+      quitar(locales.map((l) => l.adjunto.id));
+      return;
+    }
+
+    // De a uno y en paralelo: si falla una foto, las otras dos se guardan igual.
+    await Promise.all(
+      locales.map(async ({ archivo, adjunto }) => {
+        try {
+          const { error: eArchivo } = await supabase.storage
+            .from('adjuntos')
+            .upload(adjunto.storage_path, archivo, {
+              contentType: adjunto.mime_type ?? undefined,
+              upsert: false,
+            });
+          if (eArchivo) throw eArchivo;
+
+          const { error: eFila } = await supabase.from('transaction_attachments').insert({
+            id: adjunto.id,
+            transaction_id: adjunto.transaction_id,
+            storage_path: adjunto.storage_path,
+            file_name: adjunto.file_name,
+            mime_type: adjunto.mime_type,
+            size_bytes: adjunto.size_bytes,
+          });
+          if (eFila) throw eFila;
+
+          set((st) => ({
+            attachments: st.attachments.map((a) => (a.id === adjunto.id ? { ...a, subiendo: false } : a)),
+          }));
+        } catch (e) {
+          console.error('No se pudo subir el adjunto', e);
+          quitar([adjunto.id]);
+          toast.error(`No se pudo subir "${adjunto.file_name}".`);
+        }
+      })
+    );
+  },
+
+  removeAttachment: async (id) => {
+    const antes = get().attachments.find((a) => a.id === id);
+    if (!antes) return;
+
+    await optimistic(
+      'attachments',
+      (list) => list.filter((a: TransactionAttachment) => a.id !== id),
+      (list) => [...list, antes],
+      async () => {
+        const { error } = await supabase
+          .from('transaction_attachments')
+          .update({ deleted_at: nowIso() })
+          .eq('id', id);
+        if (error) throw error;
+      },
+      'No se pudo quitar el adjunto.'
+    ).then((quitado) => {
+      if (!quitado) return;
+      // Deshacer en vez de "¿Seguro?": en el teléfono, un segundo cajón
+      // encima del formulario se pelea con el primero, y un aviso con deshacer
+      // es más rápido cuando fue a propósito y igual de seguro cuando no.
+      useToastStore.getState().push({
+        tone: 'info',
+        message: `Se quitó "${antes.file_name}".`,
+        action: {
+          label: 'Deshacer',
+          run: () =>
+            void optimistic(
+              'attachments',
+              (list) => [...list.filter((a: TransactionAttachment) => a.id !== id), antes],
+              (list) => list.filter((a: TransactionAttachment) => a.id !== id),
+              async () => {
+                const { error } = await supabase
+                  .from('transaction_attachments')
+                  .update({ deleted_at: null })
+                  .eq('id', id);
+                if (error) throw error;
+              },
+              'No se pudo recuperar el adjunto.'
+            ),
+        },
+      });
+    });
+  },
+
+  attachmentUrl: async (adjunto, opciones) => {
+    const { data, error } = await supabase.storage
+      .from('adjuntos')
+      .createSignedUrl(
+        adjunto.storage_path,
+        60,
+        // Con `download`, storage responde con Content-Disposition: attachment
+        // y el nombre ORIGINAL — no el de la ruta, que lleva el id adelante.
+        opciones?.descargar ? { download: adjunto.file_name } : undefined
+      );
+    if (error || !data?.signedUrl) throw error ?? new Error('No se pudo abrir el adjunto.');
+    return data.signedUrl;
+  },
+
   addPartner: async (p) => {
     const { currentWorkspaceId } = get();
     if (!currentWorkspaceId) throw new Error('No hay un espacio activo.');

@@ -283,6 +283,31 @@ export interface Transaction {
   created_at: string;
 }
 
+/**
+ * Un comprobante colgado de un movimiento: el ticket, la factura, la captura de
+ * la transferencia. Un movimiento puede tener varios.
+ *
+ * El archivo vive en el bucket PRIVADO `adjuntos`; esto es qué es y de quién.
+ * Para abrirlo se pide una URL firmada que vence en un minuto (ver DB/044).
+ */
+export interface TransactionAttachment {
+  id: string;
+  transaction_id: string;
+  /** `<espacio>/<movimiento>/<id>-<nombre>`. La base exige esa forma. */
+  storage_path: string;
+  file_name: string;
+  mime_type: string | null;
+  size_bytes: number;
+  user_id: string | null;
+  created_at: string;
+  /**
+   * Sólo en el cliente, mientras el archivo viaja. Un adjunto recién elegido se
+   * muestra al instante —como cualquier escritura de la app— y queda marcado
+   * hasta que la base lo confirma.
+   */
+  subiendo?: boolean;
+}
+
 export interface Budget {
   id: string;
   name: string;

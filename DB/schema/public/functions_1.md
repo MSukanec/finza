@@ -1,9 +1,9 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-10T21:49:16.009Z
+> Generated: 2026-09-17T13:11:50.529Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Functions (chunk 1: activity_authors — list_workspace_members)
+## [PUBLIC] Functions (chunk 1: activity_authors — is_workspace_owner)
 
 ### `activity_authors(ws uuid)` 🔐
 
@@ -348,6 +348,34 @@ END $function$
 ```
 </details>
 
+### `completar_adjunto()`
+
+- **Returns**: trigger
+- **Kind**: function | VOLATILE | SECURITY INVOKER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.completar_adjunto()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+    SELECT t.workspace_id INTO NEW.workspace_id
+      FROM public.transactions t
+     WHERE t.id = NEW.transaction_id;
+
+    IF auth.uid() IS NOT NULL THEN
+        NEW.user_id := public.current_user_id();
+    END IF;
+
+    RETURN NEW;
+END;
+$function$
+```
+</details>
+
 ### `current_user_id()` 🔐
 
 - **Returns**: uuid
@@ -628,46 +656,6 @@ AS $function$
            AND m.role = 'owner'
            AND w.deleted_at IS NULL
     )
-$function$
-```
-</details>
-
-### `list_workspace_members(ws uuid)` 🔐
-
-- **Returns**: TABLE(id uuid, user_id uuid, email text, full_name text, role text, pending boolean, last_sign_in timestamp with time zone)
-- **Kind**: function | STABLE | SECURITY DEFINER
-
-<details><summary>Source</summary>
-
-```sql
-CREATE OR REPLACE FUNCTION public.list_workspace_members(ws uuid)
- RETURNS TABLE(id uuid, user_id uuid, email text, full_name text, role text, pending boolean, last_sign_in timestamp with time zone)
- LANGUAGE plpgsql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-BEGIN
-    IF NOT public.can_see_all(ws) THEN
-        RAISE EXCEPTION 'No tenés acceso a esta información en este espacio';
-    END IF;
-
-    RETURN QUERY
-        SELECT m.id, m.user_id, u.email, u.full_name, m.role, false, au.last_sign_in_at
-          FROM public.workspace_members m
-          JOIN public.users u ON u.id = m.user_id
-          LEFT JOIN auth.users au ON au.id = u.auth_id
-         WHERE m.workspace_id = ws
-
-        UNION ALL
-
-        -- Una invitación sin aceptar no tiene cuenta todavía: no hay conexión
-        -- que mostrar y la pantalla lo dice como "sin aceptar".
-        SELECT i.id, NULL::uuid, i.email, NULL::text, i.role, true, NULL::timestamptz
-          FROM public.workspace_invitations i
-         WHERE i.workspace_id = ws AND i.accepted_at IS NULL
-
-        ORDER BY 6, 5 DESC, 3;
-END;
 $function$
 ```
 </details>
