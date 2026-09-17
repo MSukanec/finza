@@ -5,6 +5,7 @@ import { Download, FileText, ImageIcon, Loader2, Paperclip, X } from 'lucide-rea
 import { useFinanceStore } from '@/stores/finance-store';
 import { toast } from '@/stores/toast-store';
 import { Field } from '@/components/ui/field';
+import { useGlobalDialog } from '@/components/providers/dialog-provider';
 import { ACEPTA, esImagen, pesoLegible, tipoDeAdjunto, validarAdjunto } from '@/lib/adjuntos';
 import type { TransactionAttachment } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -182,6 +183,18 @@ function BotonIcono({
 function Guardado({ adjunto, soloLectura }: { adjunto: TransactionAttachment; soloLectura: boolean }) {
   const attachmentUrl = useFinanceStore((s) => s.attachmentUrl);
   const removeAttachment = useFinanceStore((s) => s.removeAttachment);
+  const dialog = useGlobalDialog();
+
+  // Toda acción destructiva confirma antes. Se abre encima del formulario del
+  // movimiento; check-modales-dom prueba que eso no lo cierra.
+  const quitar = async () => {
+    const ok = await dialog.confirm(
+      'Quitar comprobante',
+      `Se quita "${adjunto.file_name}" de este movimiento.`,
+      { confirmar: 'Quitar' }
+    );
+    if (ok) await removeAttachment(adjunto.id);
+  };
 
   const abrir = async (descargar: boolean) => {
     // Safari en iPhone bloquea `window.open` si no pasa DENTRO del toque, y la
@@ -223,7 +236,7 @@ function Guardado({ adjunto, soloLectura }: { adjunto: TransactionAttachment; so
             <Download className="size-4" />
           </BotonIcono>
           {!soloLectura && (
-            <BotonIcono etiqueta="Quitar" onClick={() => void removeAttachment(adjunto.id)}>
+            <BotonIcono etiqueta="Quitar" onClick={() => void quitar()}>
               <X className="size-4" />
             </BotonIcono>
           )}

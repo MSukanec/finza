@@ -1,9 +1,9 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-17T13:52:44.684Z
+> Generated: 2026-09-17T15:29:04.694Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Functions (chunk 1: activity_authors — is_workspace_owner)
+## [PUBLIC] Functions (chunk 1: activity_authors — handle_updated_at)
 
 ### `activity_authors(ws uuid)` 🔐
 
@@ -186,6 +186,165 @@ BEGIN
           FROM public.wallets w
          WHERE w.workspace_id = ws AND w.deleted_at IS NULL
          ORDER BY w.name;
+END;
+$function$
+```
+</details>
+
+### `borrar_categoria(cat uuid, reemplazo uuid DEFAULT NULL::uuid)` 🔐
+
+- **Returns**: jsonb
+- **Kind**: function | VOLATILE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.borrar_categoria(cat uuid, reemplazo uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+    v_cat   public.categories%ROWTYPE;
+    v_dest  public.categories%ROWTYPE;
+    v_uso   jsonb;
+BEGIN
+    SELECT * INTO v_cat FROM public.categories WHERE id = cat AND deleted_at IS NULL;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Categoría no encontrada';
+    END IF;
+
+    -- También verifica el acceso.
+    v_uso := public.uso_de_categoria(cat);
+
+    IF reemplazo IS NULL THEN
+        IF (v_uso->>'total')::int > 0 THEN
+            RAISE EXCEPTION 'La categoría "%" está en uso: elegí con cuál reemplazarla', v_cat.name;
+        END IF;
+    ELSE
+        SELECT * INTO v_dest FROM public.categories WHERE id = reemplazo AND deleted_at IS NULL;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'La categoría de reemplazo no existe';
+        END IF;
+        IF v_dest.id = v_cat.id THEN
+            RAISE EXCEPTION 'Una categoría no se puede reemplazar por sí misma';
+        END IF;
+        IF v_dest.workspace_id <> v_cat.workspace_id THEN
+            RAISE EXCEPTION 'La categoría de reemplazo es de otro espacio';
+        END IF;
+        IF v_dest.type <> v_cat.type THEN
+            RAISE EXCEPTION 'Una categoría de % no se puede reemplazar por una de %',
+                CASE v_cat.type::text WHEN 'income' THEN 'ingresos' ELSE 'egresos' END,
+                CASE v_dest.type::text WHEN 'income' THEN 'ingresos' ELSE 'egresos' END;
+        END IF;
+
+        -- Movimientos, vivos y dados de baja, de quien sean.
+        PERFORM public.transferir_categoria(cat, reemplazo);
+
+        UPDATE public.debts SET category_id = reemplazo WHERE category_id = cat;
+
+        -- Presupuestos que ya tenían el reemplazo: se suman los límites.
+        UPDATE public.budget_categories destino
+           SET limit_amount = destino.limit_amount + origen.limit_amount
+          FROM public.budget_categories origen
+         WHERE origen.category_id = cat
+           AND destino.category_id = reemplazo
+           AND destino.budget_id = origen.budget_id;
+        DELETE FROM public.budget_categories origen
+         WHERE origen.category_id = cat
+           AND EXISTS (SELECT 1 FROM public.budget_categories d
+                        WHERE d.budget_id = origen.budget_id AND d.category_id = reemplazo);
+        UPDATE public.budget_categories SET category_id = reemplazo WHERE category_id = cat;
+
+        UPDATE public.import_rules SET category_id = reemplazo WHERE category_id = cat;
+    END IF;
+
+    UPDATE public.categories SET deleted_at = now() WHERE id = cat;
+
+    RETURN v_uso;
+END;
+$function$
+```
+</details>
+
+### `borrar_grupo(grupo uuid, reemplazo uuid DEFAULT NULL::uuid)` 🔐
+
+- **Returns**: jsonb
+- **Kind**: function | VOLATILE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.borrar_grupo(grupo uuid, reemplazo uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+    v_grupo     public.category_groups%ROWTYPE;
+    v_dest      public.category_groups%ROWTYPE;
+    v_cat       public.categories%ROWTYPE;
+    v_gemela    uuid;
+    v_movidas   integer := 0;
+    v_fusionadas integer := 0;
+    v_cuantas   integer;
+BEGIN
+    SELECT * INTO v_grupo FROM public.category_groups WHERE id = grupo AND deleted_at IS NULL;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Macrogrupo no encontrado';
+    END IF;
+    IF v_grupo.workspace_id IS NULL OR v_grupo.is_system THEN
+        RAISE EXCEPTION 'El macrogrupo "%" es del sistema y no se puede borrar', v_grupo.name;
+    END IF;
+    IF NOT public.can_see_all(v_grupo.workspace_id) THEN
+        RAISE EXCEPTION 'No tenés acceso para administrar las categorías de este espacio';
+    END IF;
+
+    SELECT count(*) INTO v_cuantas FROM public.categories WHERE group_id = grupo AND deleted_at IS NULL;
+
+    IF v_cuantas > 0 THEN
+        IF reemplazo IS NULL THEN
+            RAISE EXCEPTION 'El macrogrupo "%" tiene % categoría(s): elegí a qué grupo pasarlas', v_grupo.name, v_cuantas;
+        END IF;
+
+        SELECT * INTO v_dest FROM public.category_groups WHERE id = reemplazo AND deleted_at IS NULL;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'El macrogrupo de reemplazo no existe';
+        END IF;
+        IF v_dest.id = v_grupo.id THEN
+            RAISE EXCEPTION 'Un macrogrupo no se puede reemplazar por sí mismo';
+        END IF;
+        IF v_dest.workspace_id IS NOT NULL AND v_dest.workspace_id <> v_grupo.workspace_id THEN
+            RAISE EXCEPTION 'El macrogrupo de reemplazo es de otro espacio';
+        END IF;
+
+        FOR v_cat IN
+            SELECT * FROM public.categories WHERE group_id = grupo AND deleted_at IS NULL
+        LOOP
+            SELECT d.id INTO v_gemela
+              FROM public.categories d
+             WHERE d.group_id = reemplazo
+               AND d.deleted_at IS NULL
+               AND d.workspace_id = v_cat.workspace_id
+               AND d.type = v_cat.type
+               AND lower(btrim(d.name)) = lower(btrim(v_cat.name))
+             LIMIT 1;
+
+            IF v_gemela IS NOT NULL THEN
+                PERFORM public.borrar_categoria(v_cat.id, v_gemela);
+                v_fusionadas := v_fusionadas + 1;
+            ELSE
+                UPDATE public.categories SET group_id = reemplazo WHERE id = v_cat.id;
+                v_movidas := v_movidas + 1;
+            END IF;
+        END LOOP;
+    END IF;
+
+    UPDATE public.category_groups SET deleted_at = now() WHERE id = grupo;
+
+    RETURN jsonb_build_object('movidas', v_movidas, 'fusionadas', v_fusionadas);
 END;
 $function$
 ```
@@ -377,6 +536,27 @@ $function$
 ```
 </details>
 
+### `copiar_nombre_de_grupo()`
+
+- **Returns**: trigger
+- **Kind**: function | VOLATILE | SECURITY INVOKER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.copiar_nombre_de_grupo()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+    SELECT g.name INTO NEW.group_name FROM public.category_groups g WHERE g.id = NEW.group_id;
+    RETURN NEW;
+END;
+$function$
+```
+</details>
+
 ### `current_user_id()` 🔐
 
 - **Returns**: uuid
@@ -554,109 +734,6 @@ BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
 END;
-$function$
-```
-</details>
-
-### `invite_to_workspace(ws uuid, invitee_email text, invitee_role text DEFAULT 'member'::text)` 🔐
-
-- **Returns**: text
-- **Kind**: function | VOLATILE | SECURITY DEFINER
-
-<details><summary>Source</summary>
-
-```sql
-CREATE OR REPLACE FUNCTION public.invite_to_workspace(ws uuid, invitee_email text, invitee_role text DEFAULT 'member'::text)
- RETURNS text
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-DECLARE
-    v_me     uuid := public.current_user_id();
-    v_target uuid;
-    v_email  text := lower(trim(invitee_email));
-BEGIN
-    IF v_me IS NULL THEN
-        RAISE EXCEPTION 'No hay sesion activa';
-    END IF;
-    IF NOT public.is_workspace_owner(ws) THEN
-        RAISE EXCEPTION 'Solo el dueno del espacio puede invitar';
-    END IF;
-    IF invitee_role NOT IN ('owner','member','collaborator') THEN
-        RAISE EXCEPTION 'Rol invalido: %', invitee_role;
-    END IF;
-    IF v_email IS NULL OR v_email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' THEN
-        RAISE EXCEPTION 'Email invalido';
-    END IF;
-
-    SELECT id INTO v_target FROM public.users WHERE lower(email) = v_email;
-
-    IF v_target IS NOT NULL THEN
-        INSERT INTO public.workspace_members (workspace_id, user_id, role)
-        VALUES (ws, v_target, invitee_role)
-        ON CONFLICT (workspace_id, user_id) DO UPDATE SET role = EXCLUDED.role;
-        RETURN 'added';
-    END IF;
-
-    INSERT INTO public.workspace_invitations (workspace_id, email, role, invited_by)
-    VALUES (ws, v_email, invitee_role, v_me)
-    ON CONFLICT (workspace_id, email) DO UPDATE SET role = EXCLUDED.role, accepted_at = NULL;
-    RETURN 'invited';
-END;
-$function$
-```
-</details>
-
-### `is_workspace_member(ws uuid)` 🔐
-
-- **Returns**: boolean
-- **Kind**: function | STABLE | SECURITY DEFINER
-
-<details><summary>Source</summary>
-
-```sql
-CREATE OR REPLACE FUNCTION public.is_workspace_member(ws uuid)
- RETURNS boolean
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-    SELECT EXISTS (
-        SELECT 1
-          FROM public.workspace_members m
-          JOIN public.workspaces w ON w.id = m.workspace_id
-         WHERE m.workspace_id = ws
-           AND m.user_id = public.current_user_id()
-           AND w.deleted_at IS NULL
-    )
-$function$
-```
-</details>
-
-### `is_workspace_owner(ws uuid)` 🔐
-
-- **Returns**: boolean
-- **Kind**: function | STABLE | SECURITY DEFINER
-
-<details><summary>Source</summary>
-
-```sql
-CREATE OR REPLACE FUNCTION public.is_workspace_owner(ws uuid)
- RETURNS boolean
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-    SELECT EXISTS (
-        SELECT 1
-          FROM public.workspace_members m
-          JOIN public.workspaces w ON w.id = m.workspace_id
-         WHERE m.workspace_id = ws
-           AND m.user_id = public.current_user_id()
-           AND m.role = 'owner'
-           AND w.deleted_at IS NULL
-    )
 $function$
 ```
 </details>

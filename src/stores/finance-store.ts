@@ -2,11 +2,12 @@ import { create } from 'zustand';
 import { supabase } from '@/lib/supabase/client';
 import type { Account, Category, Transaction, Budget, Currency, Debt, Workspace, WorkspaceRole, WorkspaceMember, Person, ActivityEntry, Purge, Reconciliation, Partner, PartnerPosition, RegisteredUser, TransactionAttachment } from '@/lib/types';
 import { CURRENCIES, EXCHANGE_RATES } from '@/lib/mock-data';
-import { toast, useToastStore } from '@/stores/toast-store';
+import { toast } from '@/stores/toast-store';
 import { signoEnCaja } from '@/lib/money';
 import { optimizarLogo } from '@/lib/optimizar-imagen';
 import { validarAdjunto, rutaDeAdjunto, tipoDeAdjunto } from '@/lib/adjuntos';
 import { puedeCambiar, SOLO_QUIEN_LO_CARGO } from '@/lib/autoria';
+import { migrarCategoria, planDeBorrarGrupo, type UsoDeCategoria, type UsoDeGrupo } from '@/lib/categorias';
 
 // Todo borrado es lógico: se marca `deleted_at` y la fila queda. Ver DB/021.
 const nowIso = () => new Date().toISOString();
@@ -368,11 +369,23 @@ interface FinanceState {
   
   addCategory: (cat: any) => Promise<void>;
   updateCategory: (id: string, data: Partial<Category>) => Promise<void>;
-  removeCategory: (id: string) => Promise<void>;
+  /** En qué está usada: movimientos (también los de baja), deudas, presupuestos, reglas. */
+  categoryUsage: (id: string) => Promise<UsoDeCategoria>;
+  /**
+   * Borra una categoría. Si está en uso, `reemplazoId` es obligatorio y todo lo
+   * que la usaba pasa a esa. La base se niega a borrar algo en uso sin reemplazo.
+   */
+  removeCategory: (id: string, reemplazoId?: string | null) => Promise<void>;
+  /** Cuántas categorías tiene un macrogrupo, por tipo. */
+  groupUsage: (id: string) => Promise<UsoDeGrupo>;
+  /**
+   * Borra un macrogrupo. Si tiene categorías, pasan a `reemplazoId`; las que
+   * ya existen ahí con el mismo nombre y tipo se fusionan.
+   */
+  removeCategoryGroup: (id: string, reemplazoId?: string | null) => Promise<void>;
   /** Interno: resuelve (o crea) el grupo de categorias por nombre. */
   _resolveGroupId: (groupName: string) => Promise<string | null>;
-  removeCategoryAndTransfer: (oldId: string, newId: string) => Promise<void>;
-  renameCategoryGroup: (oldName: string, newName: string) => Promise<void>;
+  renameCategoryGroup: (groupId: string, newName: string) => Promise<void>;
   
   addBudget: (budget: Omit<Budget, 'id' | 'created_at'>) => Promise<void>;
   updateBudget: (id: string, data: Partial<Budget>) => Promise<void>;
@@ -1461,32 +1474,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         );
       },
       'No se pudo quitar el adjunto.'
-    ).then((quitado) => {
-      if (!quitado) return;
-      // Deshacer en vez de "¿Seguro?": en el teléfono, un segundo cajón
-      // encima del formulario se pelea con el primero, y un aviso con deshacer
-      // es más rápido cuando fue a propósito y igual de seguro cuando no.
-      useToastStore.getState().push({
-        tone: 'info',
-        message: `Se quitó "${antes.file_name}".`,
-        action: {
-          label: 'Deshacer',
-          run: () =>
-            void optimistic(
-              'attachments',
-              (list) => [...list.filter((a: TransactionAttachment) => a.id !== id), antes],
-              (list) => list.filter((a: TransactionAttachment) => a.id !== id),
-              async () => {
-                exigirFilas(
-                  await supabase.from('transaction_attachments').update({ deleted_at: null }).eq('id', id).select('id'),
-                  SOLO_QUIEN_LO_CARGO
-                );
-              },
-              'No se pudo recuperar el adjunto.'
-            ),
-        },
-      });
-    });
+    );
   },
 
   attachmentUrl: async (adjunto, opciones) => {
@@ -1931,116 +1919,127 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     );
   },
 
-  removeCategory: async (id) => {
-    const before = get().categories.find((c) => c.id === id);
-    if (!before) return;
-
-    optimistic(
-      'categories',
-      (list) => list.filter((c: Category) => c.id !== id),
-      (list) => [...list, before],
-      async () => {
-        const { error } = await supabase
-          .from('categories')
-          .update({ deleted_at: nowIso() })
-          .eq('id', id);
-        if (error) throw error;
-      },
-      'No se pudo eliminar la categoría.'
-    );
+  categoryUsage: async (id) => {
+    const { data, error } = await supabase.rpc('uso_de_categoria', { cat: id });
+    if (error) throw error;
+    return data as UsoDeCategoria;
   },
 
-  removeCategoryAndTransfer: async (oldId: string, newId: string) => {
-    const { currentWorkspaceId } = get();
-    if (!currentWorkspaceId) throw new Error('No hay un espacio activo.');
+  removeCategory: async (id, reemplazoId) => {
+    const antes = get();
+    const categoria = antes.categories.find((c) => c.id === id);
+    if (!categoria) return;
 
-    const before = get().categories.find((c) => c.id === oldId);
-    if (!before) return;
-    const movedTxIds = get().transactions.filter((t) => t.category_id === oldId).map((t) => t.id);
+    // Lo que se va a tocar, para deshacer EXACTAMENTE eso si la base se niega.
+    const txs = new Set(antes.transactions.filter((t) => t.category_id === id).map((t) => t.id));
+    const deudas = new Set(antes.debts.filter((d) => d.category_id === id).map((d) => d.id));
+    const presupuestos = antes.budgets.filter((b) => b.categories.some((l) => l.category_id === id));
 
-    // Los movimientos se reapuntan en memoria junto con la baja de la categoría:
-    // si no, la lista mostraría "Sin categoría" hasta la próxima recarga.
     set((st) => ({
-      transactions: st.transactions.map((t) =>
-        t.category_id === oldId ? { ...t, category_id: newId } : t
-      ),
+      categories: st.categories.filter((c) => c.id !== id),
+      ...(reemplazoId
+        ? migrarCategoria({ transactions: st.transactions, debts: st.debts, budgets: st.budgets }, id, reemplazoId)
+        : {}),
     }));
 
-    optimistic(
-      'categories',
-      (list) => list.filter((c: Category) => c.id !== oldId),
-      (list) => {
-        set((st) => ({
-          transactions: st.transactions.map((t) =>
-            movedTxIds.includes(t.id) ? { ...t, category_id: oldId } : t
+    const { error } = await supabase.rpc('borrar_categoria', { cat: id, reemplazo: reemplazoId ?? null });
+    if (!error) return;
+
+    console.error('No se pudo eliminar la categoría', error);
+    set((st) => ({
+      categories: st.categories.some((c) => c.id === id) ? st.categories : [...st.categories, categoria],
+      transactions: st.transactions.map((t) => (txs.has(t.id) ? { ...t, category_id: id } : t)),
+      debts: st.debts.map((d) => (deudas.has(d.id) ? { ...d, category_id: id } : d)),
+      budgets: st.budgets.map((b) => presupuestos.find((p) => p.id === b.id) ?? b),
+    }));
+    // Los mensajes de estas funciones están escritos para quien los lee
+    // ("está en uso: elegí con cuál reemplazarla").
+    toast.error(error.message || 'No se pudo eliminar la categoría.');
+  },
+
+  groupUsage: async (id) => {
+    const { data, error } = await supabase.rpc('uso_de_grupo', { grupo: id });
+    if (error) throw error;
+    return data as UsoDeGrupo;
+  },
+
+  removeCategoryGroup: async (id, reemplazoId) => {
+    const antes = get();
+    const grupo = antes.categoryGroups.find((g) => g.id === id);
+    if (!grupo) return;
+
+    const destino = reemplazoId ? antes.categoryGroups.find((g) => g.id === reemplazoId) : undefined;
+    const plan = reemplazoId ? planDeBorrarGrupo(antes.categories, id, reemplazoId) : { mover: [], fusionar: [] };
+    const fusionadas = new Set(plan.fusionar.map((f) => f.origen));
+    const movidas = new Set(plan.mover);
+
+    // Para deshacer: las categorías del grupo tal como estaban, y a qué
+    // categoría apuntaba cada movimiento, deuda y presupuesto que se fusiona.
+    const categoriasAntes = antes.categories.filter((c) => c.group_id === id);
+    const txAntes = new Map(
+      antes.transactions.filter((t) => t.category_id && fusionadas.has(t.category_id)).map((t) => [t.id, t.category_id!])
+    );
+    const deudasAntes = new Map(
+      antes.debts.filter((d) => fusionadas.has(d.category_id)).map((d) => [d.id, d.category_id])
+    );
+    const presupuestosAntes = antes.budgets.filter((b) => b.categories.some((l) => fusionadas.has(l.category_id)));
+
+    set((st) => {
+      let listas = { transactions: st.transactions, debts: st.debts, budgets: st.budgets };
+      for (const f of plan.fusionar) listas = migrarCategoria(listas, f.origen, f.destino);
+      return {
+        ...listas,
+        categoryGroups: st.categoryGroups.filter((g) => g.id !== id),
+        categories: st.categories
+          .filter((c) => !fusionadas.has(c.id))
+          .map((c) =>
+            movidas.has(c.id) ? { ...c, group_id: reemplazoId!, group_name: destino?.name ?? c.group_name } : c
           ),
-        }));
-        return [...list, before];
-      },
-      async () => {
-        const ws = (q: any) => q.eq('workspace_id', currentWorkspaceId);
-        // Por función y no con un UPDATE: la RLS sólo deja cambiar movimientos
-        // propios, y el UPDATE directo movería los tuyos y dejaría los de los
-        // demás colgados de la categoría borrada, sin error (DB/045).
-        const r1 = await supabase.rpc('transferir_categoria', { origen: oldId, destino: newId });
-        if (r1.error) throw r1.error;
-        const r2 = await ws(
-          supabase.from('debts').update({ category_id: newId }).eq('category_id', oldId)
-        );
-        if (r2.error) throw r2.error;
-        const r3 = await ws(
-          supabase.from('categories').update({ deleted_at: nowIso() }).eq('id', oldId)
-        );
-        if (r3.error) throw r3.error;
-      },
-      'No se pudo reasignar la categoría.'
-    );
+      };
+    });
+
+    const { error } = await supabase.rpc('borrar_grupo', { grupo: id, reemplazo: reemplazoId ?? null });
+    if (!error) return;
+
+    console.error('No se pudo eliminar el macrogrupo', error);
+    const idsDelGrupo = new Set(categoriasAntes.map((c) => c.id));
+    set((st) => ({
+      categoryGroups: st.categoryGroups.some((g) => g.id === id) ? st.categoryGroups : [...st.categoryGroups, grupo],
+      categories: [...st.categories.filter((c) => !idsDelGrupo.has(c.id)), ...categoriasAntes],
+      transactions: st.transactions.map((t) => (txAntes.has(t.id) ? { ...t, category_id: txAntes.get(t.id)! } : t)),
+      debts: st.debts.map((d) => (deudasAntes.has(d.id) ? { ...d, category_id: deudasAntes.get(d.id)! } : d)),
+      budgets: st.budgets.map((b) => presupuestosAntes.find((p) => p.id === b.id) ?? b),
+    }));
+    toast.error(error.message || 'No se pudo eliminar el macrogrupo.');
   },
 
-  renameCategoryGroup: async (oldName: string, newName: string) => {
-    const { currentWorkspaceId } = get();
-    if (!currentWorkspaceId) throw new Error('No hay un espacio activo.');
+  renameCategoryGroup: async (groupId, newName) => {
+    const grupo = get().categoryGroups.find((g) => g.id === groupId);
+    if (!grupo) return;
+    const nombreViejo = grupo.name;
 
-    const renameIn = (list: any[], from: string, to: string) =>
-      list.map((g: any) => (g.name === from ? { ...g, name: to } : g));
-
+    // Por id y no por nombre: dos espacios pueden tener un grupo que se llama
+    // igual. El nombre que repite cada categoría lo actualiza la base (DB/047);
+    // acá se actualiza en memoria sólo para que la pantalla no espere.
     set((st) => ({
-      categories: st.categories.map((c) =>
-        c.group_name === oldName ? { ...c, group_name: newName } : c
-      ),
+      categories: st.categories.map((c) => (c.group_id === groupId ? { ...c, group_name: newName } : c)),
     }));
 
-    optimistic(
+    await optimistic(
       'categoryGroups',
-      (list) => renameIn(list, oldName, newName),
+      (list) => list.map((g: any) => (g.id === groupId ? { ...g, name: newName } : g)),
       (list) => {
         set((st) => ({
-          categories: st.categories.map((c) =>
-            c.group_name === newName ? { ...c, group_name: oldName } : c
-          ),
+          categories: st.categories.map((c) => (c.group_id === groupId ? { ...c, group_name: nombreViejo } : c)),
         }));
-        return renameIn(list, newName, oldName);
+        return list.map((g: any) => (g.id === groupId ? { ...g, name: nombreViejo } : g));
       },
-      async () => {
-        // El match es por nombre, no por id: sin acotar al espacio activo esto
-        // renombraba el grupo en todos los espacios donde el usuario es miembro
-        // —incluidos los compartidos con socios—. Los grupos de sistema
-        // (workspace_id NULL) tampoco se tocan: son de todos.
-        const r1 = await supabase
-          .from('category_groups')
-          .update({ name: newName })
-          .eq('workspace_id', currentWorkspaceId)
-          .eq('name', oldName);
-        if (r1.error) throw r1.error;
-
-        const r2 = await supabase
-          .from('categories')
-          .update({ group_name: newName })
-          .eq('workspace_id', currentWorkspaceId)
-          .eq('group_name', oldName);
-        if (r2.error) throw r2.error;
-      },
-      'No se pudo renombrar el grupo.'
+      async () =>
+        exigirFilas(
+          await supabase.from('category_groups').update({ name: newName }).eq('id', groupId).select('id'),
+          'No tenés permiso para renombrar este macrogrupo.'
+        ),
+      'No se pudo renombrar el macrogrupo.'
     );
   },
 

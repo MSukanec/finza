@@ -1,16 +1,31 @@
 'use client';
 
-import React, { createContext, useContext, useState, useRef } from 'react';
-import { ResponsiveModal, ResponsiveModalContent, ResponsiveModalHeader, ResponsiveModalTitle, ResponsiveModalDescription } from '@/components/ui/responsive-modal';
+import React, { createContext, useContext, useState } from 'react';
+import {
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalHeader,
+  ResponsiveModalTitle,
+  ResponsiveModalDescription,
+  ResponsiveModalBody,
+  ResponsiveModalFooter,
+} from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAutoFoco } from '@/components/ui/autofocus';
-import { useFinanceStore } from '@/stores/finance-store';
 
+/**
+ * Los modales que cualquier pantalla puede pedir sin armar uno propio:
+ * confirmar, pedir un texto y avisar.
+ *
+ * Toda acción destructiva de la app pasa por `confirm` antes de ejecutarse.
+ * Borrar algo que puede estar en uso —una categoría, un macrogrupo— usa en
+ * cambio `BorrarConReemplazo`, que además dice en qué está usado y deja elegir
+ * con qué reemplazarlo.
+ */
 type DialogContextType = {
-  confirm: (title: string, message: string) => Promise<boolean>;
+  confirm: (title: string, message: string, opciones?: { confirmar?: string }) => Promise<boolean>;
   prompt: (title: string, message?: string, defaultValue?: string) => Promise<string | null>;
-  deleteCategory: (category: any) => Promise<boolean>;
   /** Aviso de un solo botón. Reemplaza los alert() del navegador. */
   notify: (title: string, message: string) => void;
 };
@@ -23,166 +38,100 @@ export function useGlobalDialog() {
   return context;
 }
 
+type Confirmacion = { title: string; message: string; confirmar: string; resolve: (ok: boolean) => void };
+type Pedido = { title: string; message: string; value: string; resolve: (valor: string | null) => void };
+
 export function DialogProvider({ children }: { children: React.ReactNode }) {
   const autoFoco = useAutoFoco();
-  // Confirm State
-  const [confirmState, setConfirmState] = useState<{ isOpen: boolean; title: string; message: string; resolve: (val: boolean) => void } | null>(null);
-  
-  // Prompt State
-  const [promptState, setPromptState] = useState<{ isOpen: boolean; title: string; message: string; value: string; resolve: (val: string | null) => void } | null>(null);
+  const [confirmacion, setConfirmacion] = useState<Confirmacion | null>(null);
+  const [pedido, setPedido] = useState<Pedido | null>(null);
+  const [aviso, setAviso] = useState<{ title: string; message: string } | null>(null);
 
-  // Category Delete State
-  const [catDeleteState, setCatDeleteState] = useState<{ isOpen: boolean; category: any; targetId: string; resolve: (val: boolean) => void } | null>(null);
-
-  // Aviso simple (errores que no pertenecen a ningún formulario)
-  const [notifyState, setNotifyState] = useState<{ title: string; message: string } | null>(null);
-
-  const categories = useFinanceStore(s => s.categories);
-  const removeCategoryAndTransfer = useFinanceStore(s => s.removeCategoryAndTransfer);
-  const removeCategory = useFinanceStore(s => s.removeCategory);
-
-  const handleNotify = (title: string, message: string) => setNotifyState({ title, message });
-
-  const handleConfirm = (title: string, message: string) => {
-    return new Promise<boolean>((resolve) => {
-      setConfirmState({ isOpen: true, title, message, resolve });
+  const confirm: DialogContextType['confirm'] = (title, message, opciones) =>
+    new Promise<boolean>((resolve) => {
+      setConfirmacion({ title, message, confirmar: opciones?.confirmar ?? 'Continuar', resolve });
     });
+
+  const prompt: DialogContextType['prompt'] = (title, message, defaultValue) =>
+    new Promise<string | null>((resolve) => {
+      setPedido({ title, message: message || '', value: defaultValue || '', resolve });
+    });
+
+  const notify: DialogContextType['notify'] = (title, message) => setAviso({ title, message });
+
+  // Cerrar por cualquier vía —la X, tocar afuera, deslizar la hoja— cuenta como
+  // cancelar. Sin esto, la promesa quedaba sin resolver y quien esperaba la
+  // respuesta se quedaba esperando para siempre.
+  const cerrarConfirmacion = (ok: boolean) => {
+    confirmacion?.resolve(ok);
+    setConfirmacion(null);
   };
-
-  const handlePrompt = (title: string, message?: string, defaultValue?: string) => {
-    return new Promise<string | null>((resolve) => {
-      setPromptState({ isOpen: true, title, message: message || '', value: defaultValue || '', resolve });
-    });
-  };
-
-  const handleDeleteCategory = (category: any) => {
-    return new Promise<boolean>((resolve) => {
-      if (category.stats?.uses > 0) {
-        setCatDeleteState({ isOpen: true, category, targetId: '', resolve });
-      } else {
-        handleConfirm('Eliminar Categoría', `¿Estás seguro de que deseas eliminar permanentemente la categoría "${category.name}"?`).then(async (ok) => {
-           if (ok) {
-               try {
-                 await removeCategory(category.id);
-               } catch (e: any) {
-                 handleNotify('No se pudo eliminar', e?.message || 'Ocurrió un error al eliminar la categoría.');
-                 return resolve(false);
-               }
-           }
-           resolve(ok);
-        });
-      }
-    });
+  const cerrarPedido = (valor: string | null) => {
+    pedido?.resolve(valor);
+    setPedido(null);
   };
 
   return (
-    <DialogContext.Provider value={{ confirm: handleConfirm, prompt: handlePrompt, deleteCategory: handleDeleteCategory, notify: handleNotify }}>
+    <DialogContext.Provider value={{ confirm, prompt, notify }}>
       {children}
 
-      {/* CONFIRM MODAL */}
-      <ResponsiveModal open={!!notifyState} onOpenChange={(open) => { if (!open) setNotifyState(null); }}>
-        {notifyState && (
+      <ResponsiveModal open={!!aviso} onOpenChange={(open) => !open && setAviso(null)}>
+        {aviso && (
           <ResponsiveModalContent>
             <ResponsiveModalHeader>
-              <ResponsiveModalTitle>{notifyState.title}</ResponsiveModalTitle>
-              <ResponsiveModalDescription>{notifyState.message}</ResponsiveModalDescription>
+              <ResponsiveModalTitle>{aviso.title}</ResponsiveModalTitle>
+              <ResponsiveModalDescription>{aviso.message}</ResponsiveModalDescription>
             </ResponsiveModalHeader>
-            <div className="pb-4 pt-2">
-              <Button className="w-full" onClick={() => setNotifyState(null)}>Entendido</Button>
-            </div>
+            <ResponsiveModalFooter>
+              <Button onClick={() => setAviso(null)}>Entendido</Button>
+            </ResponsiveModalFooter>
           </ResponsiveModalContent>
         )}
       </ResponsiveModal>
 
-      <ResponsiveModal open={!!confirmState?.isOpen} onOpenChange={(open) => { if (!open && confirmState) { confirmState.resolve(false); setConfirmState(null); } }}>
-         {confirmState && (
-           <ResponsiveModalContent>
-             <ResponsiveModalHeader>
-               <ResponsiveModalTitle>{confirmState.title}</ResponsiveModalTitle>
-               <ResponsiveModalDescription>{confirmState.message}</ResponsiveModalDescription>
-             </ResponsiveModalHeader>
-             <div className="flex justify-end gap-3 mt-4">
-               <Button variant="outline" onClick={() => { confirmState.resolve(false); setConfirmState(null); }}>Cancelar</Button>
-               <Button variant="destructive" onClick={() => { confirmState.resolve(true); setConfirmState(null); }}>Continuar</Button>
-             </div>
-           </ResponsiveModalContent>
-         )}
+      <ResponsiveModal open={!!confirmacion} onOpenChange={(open) => !open && cerrarConfirmacion(false)}>
+        {confirmacion && (
+          <ResponsiveModalContent>
+            <ResponsiveModalHeader>
+              <ResponsiveModalTitle>{confirmacion.title}</ResponsiveModalTitle>
+              <ResponsiveModalDescription>{confirmacion.message}</ResponsiveModalDescription>
+            </ResponsiveModalHeader>
+            <ResponsiveModalFooter>
+              <Button variant="ghost" onClick={() => cerrarConfirmacion(false)}>
+                Cancelar
+              </Button>
+              <Button variant="destructive" onClick={() => cerrarConfirmacion(true)}>
+                {confirmacion.confirmar}
+              </Button>
+            </ResponsiveModalFooter>
+          </ResponsiveModalContent>
+        )}
       </ResponsiveModal>
 
-      {/* PROMPT MODAL */}
-      <ResponsiveModal open={!!promptState?.isOpen} onOpenChange={(open) => { if (!open && promptState) { promptState.resolve(null); setPromptState(null); } }}>
-         {promptState && (
-           <ResponsiveModalContent>
-             <ResponsiveModalHeader>
-               <ResponsiveModalTitle>{promptState.title}</ResponsiveModalTitle>
-               {promptState.message && <ResponsiveModalDescription>{promptState.message}</ResponsiveModalDescription>}
-             </ResponsiveModalHeader>
-             <div className="mt-4 flex flex-col gap-4">
-               <Input 
-                 autoFocus={autoFoco} 
-                 value={promptState.value} 
-                 onChange={(e) => setPromptState(prev => prev ? { ...prev, value: e.target.value } : null)} 
-                 onKeyDown={(e) => {
-                     if (e.key === 'Enter') {
-                         promptState.resolve(promptState.value);
-                         setPromptState(null);
-                     }
-                 }}
-               />
-               <div className="flex justify-end gap-3">
-                 <Button variant="outline" onClick={() => { promptState.resolve(null); setPromptState(null); }}>Cancelar</Button>
-                 <Button onClick={() => { promptState.resolve(promptState.value); setPromptState(null); }}>Guardar</Button>
-               </div>
-             </div>
-           </ResponsiveModalContent>
-         )}
+      <ResponsiveModal open={!!pedido} onOpenChange={(open) => !open && cerrarPedido(null)}>
+        {pedido && (
+          <ResponsiveModalContent>
+            <ResponsiveModalHeader>
+              <ResponsiveModalTitle>{pedido.title}</ResponsiveModalTitle>
+              {pedido.message && <ResponsiveModalDescription>{pedido.message}</ResponsiveModalDescription>}
+            </ResponsiveModalHeader>
+            <ResponsiveModalBody>
+              <Input
+                autoFocus={autoFoco}
+                value={pedido.value}
+                onChange={(e) => setPedido((p) => (p ? { ...p, value: e.target.value } : null))}
+                onKeyDown={(e) => e.key === 'Enter' && cerrarPedido(pedido.value)}
+              />
+            </ResponsiveModalBody>
+            <ResponsiveModalFooter>
+              <Button variant="ghost" onClick={() => cerrarPedido(null)}>
+                Cancelar
+              </Button>
+              <Button onClick={() => cerrarPedido(pedido.value)}>Guardar</Button>
+            </ResponsiveModalFooter>
+          </ResponsiveModalContent>
+        )}
       </ResponsiveModal>
-
-      {/* DELETE CATEGORY WITH TRANSFER REALLOCATION MODAL */}
-      <ResponsiveModal open={!!catDeleteState?.isOpen} onOpenChange={(open) => { if (!open && catDeleteState) { catDeleteState.resolve(false); setCatDeleteState(null); } }}>
-         {catDeleteState && (
-           <ResponsiveModalContent>
-             <ResponsiveModalHeader>
-               <ResponsiveModalTitle>Eliminar y Reasignar</ResponsiveModalTitle>
-               <ResponsiveModalDescription>
-                 La categoría "{catDeleteState.category.name}" tiene {catDeleteState.category.stats.uses} uso(s).
-                 Selecciona una nueva categoría para mover estos registros antes de eliminarla permanentemente.
-               </ResponsiveModalDescription>
-             </ResponsiveModalHeader>
-             <div className="mt-4 flex flex-col gap-4">
-               <select 
-                 className="w-full p-2 rounded-md border bg-background"
-                 value={catDeleteState.targetId} 
-                 onChange={(e) => setCatDeleteState(prev => prev ? { ...prev, targetId: e.target.value } : null)}
-               >
-                 <option value="" disabled>Selecciona una categoría destino...</option>
-                 {categories
-                     .filter(c => c.id !== catDeleteState.category.id && c.type === catDeleteState.category.type)
-                     .sort((a, b) => a.name.localeCompare(b.name))
-                     .map(c => (
-                   <option key={c.id} value={c.id}>{c.group_name ? `${c.group_name} — ${c.name}` : c.name}</option>
-                 ))}
-               </select>
-               <div className="flex justify-end gap-3">
-                 <Button variant="outline" onClick={() => { catDeleteState.resolve(false); setCatDeleteState(null); }}>Cancelar</Button>
-                 <Button 
-                   disabled={!catDeleteState.targetId}
-                   variant="destructive" 
-                   onClick={async () => { 
-                       if (catDeleteState.targetId === '' || !removeCategoryAndTransfer) return;
-                       await removeCategoryAndTransfer(catDeleteState.category.id, catDeleteState.targetId);
-                       catDeleteState.resolve(true); 
-                       setCatDeleteState(null); 
-                   }}
-                 >
-                   Reasignar y Eliminar
-                 </Button>
-               </div>
-             </div>
-           </ResponsiveModalContent>
-         )}
-      </ResponsiveModal>
-
     </DialogContext.Provider>
   );
 }

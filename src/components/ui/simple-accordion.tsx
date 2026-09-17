@@ -20,9 +20,17 @@ export function SimpleAccordion({
   defaultOpen = false,
   isOpen: controlledIsOpen,
   onToggle,
+  actions,
 }: {
   title: React.ReactNode;
   summary?: React.ReactNode;
+  /**
+   * Botones del encabezado (renombrar, borrar). Van AFUERA del botón que
+   * abre y cierra: un <button> dentro de otro es HTML inválido, el navegador
+   * lo reacomoda a su manera y React falla al hidratar. Además, tocar
+   * "borrar" no tiene que abrir la sección.
+   */
+  actions?: React.ReactNode;
   children: React.ReactNode;
   defaultOpen?: boolean;
   isOpen?: boolean;
@@ -41,14 +49,14 @@ export function SimpleAccordion({
 
   return (
     <div className="mb-3 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-soft-xs">
+      <div className="group flex items-stretch bg-accent/20 transition-colors hover:bg-accent/40">
       <button
         type="button"
         onClick={handleToggle}
         aria-expanded={isOpen}
         aria-controls={panelId}
         className={cn(
-          'flex w-full select-none items-center gap-3 bg-accent/20 p-4 text-left transition-colors',
-          'hover:bg-accent/40',
+          'flex min-w-0 flex-1 select-none items-center gap-3 p-4 text-left',
           'outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring'
         )}
       >
@@ -67,6 +75,8 @@ export function SimpleAccordion({
           {summary && <span className="shrink-0 text-right">{summary}</span>}
         </span>
       </button>
+      {actions && <div className="flex shrink-0 items-center pr-2">{actions}</div>}
+      </div>
 
       {isOpen && (
         <div id={panelId} className="border-t border-border/60 bg-card">

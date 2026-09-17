@@ -1,244 +1,264 @@
 'use client';
 
+import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Pencil, Plus, Repeat, Tags, Trash2, FolderOpen } from 'lucide-react';
 import { useFinanceStore } from '@/stores/finance-store';
 import { useUIStore } from '@/stores/ui-store';
 import { getIcon } from '@/lib/icons';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, ChevronDown, ChevronRight, Repeat, Tags } from 'lucide-react';
-import { useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { formatMoney } from '@/lib/money';
-import { useRouter } from 'next/navigation';
+import { describirUso, describirUsoDeGrupo } from '@/lib/categorias';
 import { SimpleAccordion } from '@/components/ui/simple-accordion';
 import { useGlobalDialog } from '@/components/providers/dialog-provider';
 import { PageLayout } from '@/components/layout/page-layout';
+import { BorrarConReemplazo } from '@/components/borrar-con-reemplazo';
+import type { Category, CategoryGroup } from '@/lib/types';
 
+type Tipo = 'income' | 'expense';
+type Totales = { usos: number; ARS: number; USD: number };
+type CategoriaConUso = Category & { totales: Totales };
+type Grupo = { id: string; nombre: string; esSistema: boolean; totales: Totales; categorias: CategoriaConUso[] };
+
+const ARS = { id: 'ars', code: 'ARS', symbol: '$', name: 'Pesos' } as const;
+const USD = { id: 'usd', code: 'USD', symbol: 'US$', name: 'Dólares' } as const;
+const vacio = (): Totales => ({ usos: 0, ARS: 0, USD: 0 });
+
+/**
+ * Macrogrupos y categorías.
+ *
+ * Se agrupa por `group_id`, el grupo real, y no por el nombre que repite cada
+ * categoría: ese texto llegó a estar desincronizado y mostraba categorías en el
+ * grupo equivocado (DB/047 ahora lo mantiene la base).
+ *
+ * Borrar pasa siempre por `BorrarConReemplazo`: pregunta a la base si está en
+ * uso, y si lo está pide con qué reemplazarlo antes de dejar confirmar.
+ */
 export function CategoriesView() {
   const categories = useFinanceStore((s) => s.categories);
+  const categoryGroups = useFinanceStore((s) => s.categoryGroups);
   const transactions = useFinanceStore((s) => s.transactions);
-  const removeCategory = useFinanceStore((s) => s.removeCategory);
+  const currencies = useFinanceStore((s) => s.currencies);
   const renameCategoryGroup = useFinanceStore((s) => s.renameCategoryGroup);
+  const removeCategory = useFinanceStore((s) => s.removeCategory);
+  const removeCategoryGroup = useFinanceStore((s) => s.removeCategoryGroup);
+  const categoryUsage = useFinanceStore((s) => s.categoryUsage);
+  const groupUsage = useFinanceStore((s) => s.groupUsage);
+  const addCategory = useFinanceStore((s) => s.addCategory);
   const openSheet = useUIStore((s) => s.openSheet);
   const router = useRouter();
   const dialog = useGlobalDialog();
 
-  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [abierto, setAbierto] = useState<string | null>(null);
+  const [borrandoCategoria, setBorrandoCategoria] = useState<Category | null>(null);
+  const [borrandoGrupo, setBorrandoGrupo] = useState<CategoryGroup | null>(null);
 
-  // Group and enrich data
-  const { incomes, expenses } = useMemo(() => {
-     const statsByCat = new Map<string, { uses: number, ARS: number, USD: number }>();
-     
-     transactions.forEach(t => {
-         if (!t.category_id) return;
-         const current = statsByCat.get(t.category_id) || { uses: 0, ARS: 0, USD: 0 };
-         current.uses += 1;
-         const curr = useFinanceStore.getState().currencies.find(c => c.id === t.currency_id);
-         if (curr?.code === 'USD') {
-             current.USD += Math.abs(t.amount);
-         } else {
-             current.ARS += Math.abs(t.amount);
-         }
-         statsByCat.set(t.category_id, current);
-     });
+  const nombreDeGrupo = useMemo(() => new Map(categoryGroups.map((g) => [g.id, g.name])), [categoryGroups]);
 
-     const buildGroups = (typeFilter: 'income'|'expense') => {
-         const filteredCats = categories.filter(c => c.type === typeFilter);
-         const groupsMap = new Map<string, any>();
+  const { egresos, ingresos, vacios } = useMemo(() => {
+    const porCategoria = new Map<string, Totales>();
+    const esUsd = new Set(currencies.filter((c) => c.code === 'USD').map((c) => c.id));
+    for (const t of transactions) {
+      if (!t.category_id) continue;
+      const tot = porCategoria.get(t.category_id) ?? vacio();
+      tot.usos += 1;
+      if (esUsd.has(t.currency_id)) tot.USD += Math.abs(t.amount);
+      else tot.ARS += Math.abs(t.amount);
+      porCategoria.set(t.category_id, tot);
+    }
 
-         filteredCats.forEach(cat => {
-             const gName = (cat.group_name || 'General').trim();
-             if (!groupsMap.has(gName)) {
-                 groupsMap.set(gName, {
-                     groupName: gName,
-                     totalUses: 0,
-                     totalARS: 0,
-                     totalUSD: 0,
-                     cats: []
-                 });
-             }
-             
-             const stats = statsByCat.get(cat.id) || { uses: 0, ARS: 0, USD: 0 };
-             const group = groupsMap.get(gName);
-             
-             group.totalUses += stats.uses;
-             group.totalARS += stats.ARS;
-             group.totalUSD += stats.USD;
-             
-             group.cats.push({
-                 ...cat,
-                 stats
-             });
-         });
+    const armar = (tipo: Tipo): Grupo[] => {
+      const grupos = new Map<string, Grupo>();
+      for (const cat of categories.filter((c) => c.type === tipo)) {
+        const id = cat.group_id ?? `sin-grupo:${cat.group_name ?? 'General'}`;
+        if (!grupos.has(id)) {
+          const g = categoryGroups.find((x) => x.id === cat.group_id);
+          grupos.set(id, {
+            id,
+            nombre: g?.name ?? cat.group_name ?? 'General',
+            esSistema: !g || g.is_system || !g.workspace_id,
+            totales: vacio(),
+            categorias: [],
+          });
+        }
+        const grupo = grupos.get(id)!;
+        const totales = porCategoria.get(cat.id) ?? vacio();
+        grupo.totales.usos += totales.usos;
+        grupo.totales.ARS += totales.ARS;
+        grupo.totales.USD += totales.USD;
+        grupo.categorias.push({ ...cat, totales });
+      }
+      const lista = [...grupos.values()].sort((a, b) => a.nombre.localeCompare(b.nombre));
+      lista.forEach((g) => g.categorias.sort((a, b) => a.name.localeCompare(b.name)));
+      return lista;
+    };
 
-         const groupsArray = Array.from(groupsMap.values());
-         // Sort groups alphabetically
-         groupsArray.sort((a,b) => a.groupName.localeCompare(b.groupName));
-         
-         // Sort categories within groups alphabetically
-         groupsArray.forEach(g => {
-             g.cats.sort((a: any, b: any) => a.name.localeCompare(b.name));
-         });
+    // Un grupo sin categorías no tiene tipo, así que no entra en Egresos ni en
+    // Ingresos. Antes no aparecía en ningún lado: había cuatro en Samurai que no
+    // se podían ver ni borrar.
+    const conCategorias = new Set(categories.map((c) => c.group_id));
+    const sinNada = categoryGroups
+      .filter((g) => g.workspace_id && !g.is_system && !conCategorias.has(g.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
 
-         return groupsArray;
-     };
+    return { egresos: armar('expense'), ingresos: armar('income'), vacios: sinNada };
+  }, [categories, categoryGroups, transactions, currencies]);
 
-     return {
-         incomes: buildGroups('income'),
-         expenses: buildGroups('expense')
-     };
-  }, [categories, transactions]);
+  // ---------------------------------------------------------------- acciones
 
-
-  const renderGroup = (group: any, type: 'income' | 'expense') => {
-      const gId = `${type}-${group.groupName}`;
-      return (
-          <SimpleAccordion 
-             key={gId}
-             isOpen={openGroup === gId}
-             onToggle={() => setOpenGroup(prev => prev === gId ? null : gId)}
-             title={
-                 <div className="flex items-center gap-2">
-                     <span className="font-semibold text-sm tracking-tight">{group.groupName}</span>
-                     <div 
-                         role="button"
-                         tabIndex={0}
-                         onClick={async (e) => {
-                             e.stopPropagation();
-                             const newName = await dialog.prompt('Renombrar Macrogrupo', 'Nuevo nombre para el macrogrupo:', group.groupName);
-                             if (newName && newName.trim() !== '' && newName.trim() !== group.groupName) {
-                                 try {
-                                     await renameCategoryGroup(group.groupName, newName.trim());
-                                 } catch (err: any) {
-                                     dialog.notify('No se pudo renombrar', err?.message || 'Ocurrió un error.');
-                                 }
-                             }
-                         }}
-                         onKeyDown={async (e) => {
-                             if(e.key === 'Enter' || e.key === ' ') {
-                                 e.stopPropagation();
-                                 const newName = await dialog.prompt('Renombrar Macrogrupo', 'Nuevo nombre para el macrogrupo:', group.groupName);
-                                 if (newName && newName.trim() !== '' && newName.trim() !== group.groupName) {
-                                     try {
-                                     await renameCategoryGroup(group.groupName, newName.trim());
-                                 } catch (err: any) {
-                                     dialog.notify('No se pudo renombrar', err?.message || 'Ocurrió un error.');
-                                 }
-                                 }
-                             }
-                         }}
-                         className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                         title="Editar nombre del grupo"
-                     >
-                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                     </div>
-                 </div>
-             }
-             summary={
-                <div className="flex items-center gap-4 text-xs text-muted-foreground mr-2">
-                    <span className="bg-accent text-accent-foreground px-2 py-1 rounded-lg tabular-nums">Usos: {group.totalUses}</span>
-                    {(group.totalARS > 0 || group.totalUSD === 0) && (
-                        <span className={cn("font-semibold tabular-nums", type === 'income' ? "text-income" : "text-expense")}>
-                            {formatMoney(group.totalARS, { id: 'ars', code: 'ARS', symbol: '$', name: 'Pesos' } as any)}
-                        </span>
-                    )}
-                    {group.totalUSD > 0 && (
-                        <span className={cn("font-semibold tabular-nums", type === 'income' ? "text-income" : "text-expense")}>
-                            {formatMoney(group.totalUSD, { id: 'usd', code: 'USD', symbol: 'US$', name: 'Dólares' } as any)}
-                        </span>
-                    )}
-                </div>
-             }
-          >
-              <div className="flex flex-col space-y-1">
-                  {group.cats.map((cat: any) => {
-                      const Icon = cat.icon ? getIcon(cat.icon) : getIcon('folder');
-                      const s = cat.stats;
-                      return (
-                          <div
-                              key={cat.id}
-                              onClick={() => router.push(`/transactions?category=${cat.id}`)}
-                              className="group flex items-center justify-between p-3 rounded-xl hover:bg-accent/60 cursor-pointer transition-colors"
-                          >
-                              <div className="flex items-center gap-4 min-w-0 flex-1">
-                                  <div className="flex size-10 items-center justify-center rounded-xl bg-accent text-accent-foreground flex-shrink-0">
-                                     {cat.is_recurring ? (
-                                         <Repeat className="size-5" />
-                                     ) : (
-                                         <Icon className="size-5" />
-                                     )}
-                                   </div>
-                                   <div className="min-w-0">
-                                       <div className="flex items-center gap-2">
-                                           <p className="font-semibold text-sm truncate text-foreground">{cat.name}</p>
-                                           {cat.is_recurring && (
-                                                <Badge variant="secondary" className="text-[10px] h-5 bg-primary/10 text-primary border-none shrink-0 uppercase tracking-widest px-1.5">
-                                                    Recurrente
-                                                </Badge>
-                                           )}
-                                       </div>
-                                       <p className="text-xs text-muted-foreground/70 truncate">{cat.is_default ? 'Categoría de Sistema' : 'Categoría Personalizada'}</p>
-                                   </div>
-                              </div>
-                              
-                              <div className="flex items-center gap-6 text-right">
-                                  <div className="hidden sm:flex flex-col text-xs text-muted-foreground tabular-nums">
-                                      <span>Usos: {s.uses}</span>
-                                  </div>
-                                  <div className="flex flex-col text-sm font-semibold tabular-nums items-end min-w-[80px]">
-                                      {(s.ARS > 0 || s.USD === 0) && (
-                                          <span>{formatMoney(s.ARS, { id: 'ars', code: 'ARS', symbol: '$', name: 'Pesos' } as any)}</span>
-                                      )}
-                                      {s.USD > 0 && (
-                                          <span className="text-muted-foreground">{formatMoney(s.USD, { id: 'usd', code: 'USD', symbol: 'US$', name: 'Dólares' } as any)}</span>
-                                      )}
-                                  </div>
-                                  {!cat.is_default && (
-                                      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                          <button
-                                              onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  openSheet('edit-category', { category: cat });
-                                              }}
-                                              className="p-2 rounded-lg hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors"
-                                              title="Editar categoría"
-                                          >
-                                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                                          </button>
-                                          <button
-                                              onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  dialog.deleteCategory(cat);
-                                              }}
-                                              className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                                              title="Eliminar categoría"
-                                          >
-                                              <Trash2 className="size-4" />
-                                          </button>
-                                      </div>
-                                  )}
-                                  {cat.is_default && (
-                                      <div className="w-16 flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                                          <button
-                                              onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  openSheet('edit-category', { category: cat });
-                                              }}
-                                              className="p-2 rounded-lg hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors"
-                                              title="Ver/Editar"
-                                          >
-                                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                                          </button>
-                                      </div> /* placeholder for alignment */
-                                  )}
-                              </div>
-                          </div>
-                      );
-                  })}
-              </div>
-          </SimpleAccordion>
-      );
+  const renombrar = async (grupo: Grupo) => {
+    const nuevo = (await dialog.prompt('Renombrar macrogrupo', 'Nuevo nombre:', grupo.nombre))?.trim();
+    if (nuevo && nuevo !== grupo.nombre) await renameCategoryGroup(grupo.id, nuevo);
   };
+
+  const nuevoGrupo = async () => {
+    const nombre = (await dialog.prompt('Nuevo macrogrupo', 'Nombre del grupo:'))?.trim();
+    if (nombre) await addCategory({ name: 'General', type: 'expense', group_name: nombre });
+  };
+
+  /** Con qué se puede reemplazar una categoría: las otras del MISMO tipo. */
+  const opcionesParaCategoria = (cat: Category) =>
+    categories
+      .filter((c) => c.id !== cat.id && c.type === cat.type)
+      .map((c) => ({
+        value: c.id,
+        label: c.name,
+        hint: (c.group_id && nombreDeGrupo.get(c.group_id)) || c.group_name,
+      }))
+      .sort((a, b) => `${a.hint} ${a.label}`.localeCompare(`${b.hint} ${b.label}`));
+
+  const opcionesParaGrupo = (grupo: CategoryGroup) =>
+    categoryGroups
+      .filter((g) => g.id !== grupo.id)
+      .map((g) => ({ value: g.id, label: g.name }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+  // ---------------------------------------------------------------- dibujo
+
+  const botonIcono = (etiqueta: string, onClick: () => void, icono: React.ReactNode, peligro = false) => (
+    <button
+      type="button"
+      aria-label={etiqueta}
+      title={etiqueta}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className={cn(
+        'flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors',
+        peligro ? 'hover:bg-destructive/10 hover:text-destructive' : 'hover:bg-accent/60 hover:text-foreground'
+      )}
+    >
+      {icono}
+    </button>
+  );
+
+  // En el teléfono no hay "pasar el mouse": las acciones se ven siempre. En
+  // pantalla grande aparecen al pasar por la fila, para no llenar la lista.
+  const acciones = 'flex items-center md:opacity-0 md:transition-opacity md:group-hover:opacity-100 md:group-focus-within:opacity-100';
+
+  const montos = (t: Totales, tipo: Tipo, grande = false) => (
+    <div className={cn('flex flex-col items-end tabular-nums', grande ? 'text-sm font-semibold' : 'text-xs')}>
+      {(t.ARS > 0 || t.USD === 0) && (
+        <span className={cn(!grande && 'font-semibold', tipo === 'income' ? 'text-income' : 'text-expense')}>
+          {formatMoney(t.ARS, ARS as any)}
+        </span>
+      )}
+      {t.USD > 0 && <span className="text-muted-foreground">{formatMoney(t.USD, USD as any)}</span>}
+    </div>
+  );
+
+  const dibujarGrupo = (grupo: Grupo, tipo: Tipo) => {
+    const clave = `${tipo}-${grupo.id}`;
+    const real = categoryGroups.find((g) => g.id === grupo.id);
+    return (
+      <SimpleAccordion
+        key={clave}
+        isOpen={abierto === clave}
+        onToggle={() => setAbierto((prev) => (prev === clave ? null : clave))}
+        title={<span className="truncate text-sm font-semibold tracking-tight">{grupo.nombre}</span>}
+        actions={
+          !grupo.esSistema && real ? (
+            <span className={acciones}>
+              {botonIcono('Renombrar macrogrupo', () => void renombrar(grupo), <Pencil className="size-3.5" />)}
+              {botonIcono('Eliminar macrogrupo', () => setBorrandoGrupo(real), <Trash2 className="size-3.5" />, true)}
+            </span>
+          ) : undefined
+        }
+        summary={
+          <div className="mr-2 flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="rounded-lg bg-accent px-2 py-1 tabular-nums text-accent-foreground">
+              {grupo.totales.usos} {grupo.totales.usos === 1 ? 'uso' : 'usos'}
+            </span>
+            {montos(grupo.totales, tipo)}
+          </div>
+        }
+      >
+        <div className="flex flex-col space-y-1">
+          {grupo.categorias.map((cat) => {
+            const Icono = getIcon(cat.icon || 'folder');
+            return (
+              <div
+                key={cat.id}
+                onClick={() => router.push(`/transactions?category=${cat.id}`)}
+                className="group flex cursor-pointer items-center justify-between gap-3 rounded-xl p-3 transition-colors hover:bg-accent/60"
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+                    {cat.is_recurring ? <Repeat className="size-5" /> : <Icono className="size-5" />}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-semibold text-foreground">{cat.name}</p>
+                      {cat.is_recurring && (
+                        <Badge
+                          variant="secondary"
+                          className="h-5 shrink-0 border-none bg-primary/10 px-1.5 text-[10px] uppercase tracking-widest text-primary"
+                        >
+                          Recurrente
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs tabular-nums text-muted-foreground">
+                      {cat.totales.usos} {cat.totales.usos === 1 ? 'uso' : 'usos'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex shrink-0 items-center gap-2">
+                  {montos(cat.totales, tipo, true)}
+                  <span className={acciones}>
+                    {botonIcono('Editar categoría', () => openSheet('edit-category', { category: cat }), <Pencil className="size-4" />)}
+                    {botonIcono('Eliminar categoría', () => setBorrandoCategoria(cat), <Trash2 className="size-4" />, true)}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </SimpleAccordion>
+    );
+  };
+
+  const seccion = (titulo: string, tipo: Tipo, grupos: Grupo[]) => (
+    <div className="pb-2">
+      <div className="mb-4 flex items-center gap-2 pl-1">
+        <Badge
+          variant="secondary"
+          className={cn(
+            'border-none px-3 py-1 text-sm',
+            tipo === 'expense' ? 'bg-expense/15 text-expense' : 'bg-income/15 text-income'
+          )}
+        >
+          {titulo}
+        </Badge>
+        <span className="text-xs text-muted-foreground">Macrogrupos y categorías</span>
+      </div>
+      <div className="space-y-3">{grupos.map((g) => dibujarGrupo(g, tipo))}</div>
+    </div>
+  );
 
   return (
     <PageLayout
@@ -246,50 +266,84 @@ export function CategoriesView() {
       icon={Tags}
       actions={
         <>
-          <Button size="sm" variant="outline" className="gap-2" onClick={async () => {
-             const newName = await dialog.prompt('Nuevo Macrogrupo', 'Ingresa el nombre del nuevo grupo:');
-             if (newName && newName.trim() !== '') {
-                 useFinanceStore.getState().addCategory({ name: 'General', type: 'expense', group_name: newName.trim() });
-             }
-          }}>
+          <Button size="sm" variant="outline" className="gap-2" onClick={() => void nuevoGrupo()}>
             <Plus className="size-4" />
-            <span className="hidden sm:inline">Nuevo Grupo</span>
+            <span className="hidden sm:inline">Nuevo grupo</span>
           </Button>
           <Button size="sm" className="gap-2" onClick={() => openSheet('new-category')}>
             <Plus className="size-4" />
-            <span className="hidden sm:inline">Nueva Categoría</span>
+            <span className="hidden sm:inline">Nueva categoría</span>
           </Button>
         </>
       }
     >
+      {seccion('Egresos', 'expense', egresos)}
+      {seccion('Ingresos', 'income', ingresos)}
 
-      {/* Expense Categories */}
-      <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 delay-100 pb-2">
-        <div className="flex items-center gap-2 mb-4 pl-1">
-          <Badge variant="secondary" className="bg-expense/15 text-expense border-none px-3 py-1 text-sm">
-            Egresos
-          </Badge>
-          <span className="text-xs text-muted-foreground">Macrogrupos y Categorías</span>
+      {vacios.length > 0 && (
+        <div>
+          <div className="mb-3 flex items-center gap-2 pl-1">
+            <Badge variant="secondary" className="border-none px-3 py-1 text-sm">
+              Sin categorías
+            </Badge>
+            <span className="text-xs text-muted-foreground">Macrogrupos vacíos</span>
+          </div>
+          <div className="space-y-1 rounded-2xl border border-border/60 bg-card p-2">
+            {vacios.map((g) => (
+              <div key={g.id} className="group flex items-center justify-between gap-3 rounded-xl px-3 py-2">
+                <span className="flex min-w-0 items-center gap-2 text-sm">
+                  <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{g.name}</span>
+                </span>
+                <span className={acciones}>
+                  {botonIcono(
+                    'Renombrar macrogrupo',
+                    () => void renombrar({ id: g.id, nombre: g.name, esSistema: false, totales: vacio(), categorias: [] }),
+                    <Pencil className="size-3.5" />
+                  )}
+                  {botonIcono('Eliminar macrogrupo', () => setBorrandoGrupo(g), <Trash2 className="size-3.5" />, true)}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
-        
-        <div className="space-y-3">
-             {expenses.map(g => renderGroup(g, 'expense'))}
-        </div>
-      </div>
+      )}
 
-      {/* Income Categories */}
-      <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 delay-200">
-        <div className="flex items-center gap-2 mb-4 pl-1">
-          <Badge variant="secondary" className="bg-income/15 text-income border-none px-3 py-1 text-sm">
-            Ingresos
-          </Badge>
-          <span className="text-xs text-muted-foreground">Macrogrupos y Categorías</span>
-        </div>
-        
-        <div className="space-y-3">
-             {incomes.map(g => renderGroup(g, 'income'))}
-        </div>
-      </div>
+      {borrandoCategoria && (
+        <BorrarConReemplazo
+          abierto
+          onCerrar={() => setBorrandoCategoria(null)}
+          titulo="Eliminar categoría"
+          nombre={borrandoCategoria.name}
+          cargarUso={async () => {
+            const uso = await categoryUsage(borrandoCategoria.id);
+            return { total: uso.total, descripcion: describirUso(uso) };
+          }}
+          opciones={opcionesParaCategoria(borrandoCategoria)}
+          etiquetaReemplazo="Reemplazar por"
+          explicacionReemplazo="Todo lo que la usaba pasa a la que elijas."
+          sinOpciones={`No hay otra categoría de ${borrandoCategoria.type === 'income' ? 'ingresos' : 'egresos'} para reemplazarla. Creá una primero.`}
+          onConfirmar={(reemplazo) => void removeCategory(borrandoCategoria.id, reemplazo)}
+        />
+      )}
+
+      {borrandoGrupo && (
+        <BorrarConReemplazo
+          abierto
+          onCerrar={() => setBorrandoGrupo(null)}
+          titulo="Eliminar macrogrupo"
+          nombre={borrandoGrupo.name}
+          cargarUso={async () => {
+            const uso = await groupUsage(borrandoGrupo.id);
+            return { total: uso.total, descripcion: describirUsoDeGrupo(uso) };
+          }}
+          opciones={opcionesParaGrupo(borrandoGrupo)}
+          etiquetaReemplazo="Pasar a"
+          explicacionReemplazo="Sus categorías pasan a ese grupo; si ahí ya hay una con el mismo nombre, se fusionan."
+          sinOpciones="No hay otro macrogrupo al que pasar sus categorías. Creá uno primero."
+          onConfirmar={(reemplazo) => void removeCategoryGroup(borrandoGrupo.id, reemplazo)}
+        />
+      )}
     </PageLayout>
   );
 }

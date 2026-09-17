@@ -153,6 +153,31 @@ además si el movimiento es PROPIO, igual que editarlo. Escribir acá un
 `npm run check:adjuntos`**: ataca la tabla y el bucket como colaborador, como
 alguien de otro espacio y como administrador, y hace rollback.
 
+## Borrar categorías y macrogrupos
+
+Pedido del usuario (2026-09-17): toda acción destructiva confirma antes, y
+borrar algo que puede estar en uso dice en qué está usado y deja reemplazarlo.
+
+- **Categoría**: `uso_de_categoria` cuenta movimientos (también los dados de
+  baja, que un vaciado revive), deudas, presupuestos y reglas de importación.
+  `borrar_categoria(cat, reemplazo)` se niega si está en uso sin reemplazo;
+  con reemplazo migra todo en una transacción y recién ahí da de baja. El
+  reemplazo tiene que ser del mismo espacio y del **mismo tipo** (gastos
+  pasados a una de ingresos contarían como ingresos). Un presupuesto que tenía
+  las dos queda con una línea con la suma de los límites.
+- **Macrogrupo**: `borrar_grupo(grupo, reemplazo)` pasa sus categorías al otro
+  grupo; la que ya exista ahí con el mismo nombre (sin importar mayúsculas) y
+  tipo se **fusiona** con `borrar_categoria`. Los grupos de sistema no se borran.
+  Un grupo sin categorías no tiene tipo: la pantalla lo muestra aparte.
+- **`categories.group_name` lo pone la base** desde `group_id` (DB/047). Agrupar
+  siempre por `group_id`: el texto llegó a estar desincronizado.
+- `src/lib/categorias.ts` repite las mismas reglas en memoria para que la
+  pantalla no espere. Si se cambia una regla, se cambia en los dos lados:
+  `check:categorias` prueba la base y `check:ui` la memoria, con los mismos casos.
+- El modal es `BorrarConReemplazo` y es genérico: lo próximo que se pueda borrar
+  estando en uso lo usa en vez de inventar otro. `check:ui` falla si una acción
+  destructiva se llama sin `dialog.confirm` o sin ese modal.
+
 ## Vaciar la caja
 
 Vaciar un espacio para empezar de cero es una operación de la app, no de un

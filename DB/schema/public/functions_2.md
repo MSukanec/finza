@@ -1,9 +1,112 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-17T13:52:44.684Z
+> Generated: 2026-09-17T15:29:04.694Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Functions (chunk 2: list_workspace_members — workspace_role)
+## [PUBLIC] Functions (chunk 2: invite_to_workspace — transferir_categoria)
+
+### `invite_to_workspace(ws uuid, invitee_email text, invitee_role text DEFAULT 'member'::text)` 🔐
+
+- **Returns**: text
+- **Kind**: function | VOLATILE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.invite_to_workspace(ws uuid, invitee_email text, invitee_role text DEFAULT 'member'::text)
+ RETURNS text
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+    v_me     uuid := public.current_user_id();
+    v_target uuid;
+    v_email  text := lower(trim(invitee_email));
+BEGIN
+    IF v_me IS NULL THEN
+        RAISE EXCEPTION 'No hay sesion activa';
+    END IF;
+    IF NOT public.is_workspace_owner(ws) THEN
+        RAISE EXCEPTION 'Solo el dueno del espacio puede invitar';
+    END IF;
+    IF invitee_role NOT IN ('owner','member','collaborator') THEN
+        RAISE EXCEPTION 'Rol invalido: %', invitee_role;
+    END IF;
+    IF v_email IS NULL OR v_email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' THEN
+        RAISE EXCEPTION 'Email invalido';
+    END IF;
+
+    SELECT id INTO v_target FROM public.users WHERE lower(email) = v_email;
+
+    IF v_target IS NOT NULL THEN
+        INSERT INTO public.workspace_members (workspace_id, user_id, role)
+        VALUES (ws, v_target, invitee_role)
+        ON CONFLICT (workspace_id, user_id) DO UPDATE SET role = EXCLUDED.role;
+        RETURN 'added';
+    END IF;
+
+    INSERT INTO public.workspace_invitations (workspace_id, email, role, invited_by)
+    VALUES (ws, v_email, invitee_role, v_me)
+    ON CONFLICT (workspace_id, email) DO UPDATE SET role = EXCLUDED.role, accepted_at = NULL;
+    RETURN 'invited';
+END;
+$function$
+```
+</details>
+
+### `is_workspace_member(ws uuid)` 🔐
+
+- **Returns**: boolean
+- **Kind**: function | STABLE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.is_workspace_member(ws uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+    SELECT EXISTS (
+        SELECT 1
+          FROM public.workspace_members m
+          JOIN public.workspaces w ON w.id = m.workspace_id
+         WHERE m.workspace_id = ws
+           AND m.user_id = public.current_user_id()
+           AND w.deleted_at IS NULL
+    )
+$function$
+```
+</details>
+
+### `is_workspace_owner(ws uuid)` 🔐
+
+- **Returns**: boolean
+- **Kind**: function | STABLE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.is_workspace_owner(ws uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+    SELECT EXISTS (
+        SELECT 1
+          FROM public.workspace_members m
+          JOIN public.workspaces w ON w.id = m.workspace_id
+         WHERE m.workspace_id = ws
+           AND m.user_id = public.current_user_id()
+           AND m.role = 'owner'
+           AND w.deleted_at IS NULL
+    )
+$function$
+```
+</details>
 
 ### `list_workspace_members(ws uuid)` 🔐
 
@@ -314,6 +417,28 @@ BEGIN
        AND t.settles_at IS NOT NULL
        AND t.settles_at > now()
      ORDER BY t.settles_at;
+END;
+$function$
+```
+</details>
+
+### `propagar_nombre_de_grupo()`
+
+- **Returns**: trigger
+- **Kind**: function | VOLATILE | SECURITY INVOKER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.propagar_nombre_de_grupo()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+    UPDATE public.categories SET group_name = NEW.name
+     WHERE group_id = NEW.id AND group_name IS DISTINCT FROM NEW.name;
+    RETURN NEW;
 END;
 $function$
 ```
@@ -630,131 +755,6 @@ BEGIN
 
     RETURN v_filas;
 END;
-$function$
-```
-</details>
-
-### `vaciar_espacio(ws uuid, motivo text DEFAULT NULL::text)` 🔐
-
-- **Returns**: uuid
-- **Kind**: function | VOLATILE | SECURITY DEFINER
-
-<details><summary>Source</summary>
-
-```sql
-CREATE OR REPLACE FUNCTION public.vaciar_espacio(ws uuid, motivo text DEFAULT NULL::text)
- RETURNS uuid
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-DECLARE
-    v_id     uuid;
-    v_saldos jsonb;
-    v_filas  integer;
-BEGIN
-    IF NOT public.is_workspace_owner(ws) THEN
-        RAISE EXCEPTION 'Solo el administrador del espacio puede vaciarlo';
-    END IF;
-
-    PERFORM set_config('app.silenciar_historial', 'on', true);
-
-    SELECT coalesce(jsonb_agg(jsonb_build_object('wallet_id', id, 'initial_balance', initial_balance)), '[]'::jsonb)
-      INTO v_saldos
-      FROM public.wallets
-     WHERE workspace_id = ws AND deleted_at IS NULL AND initial_balance <> 0;
-
-    INSERT INTO public.purges (workspace_id, user_id, reason, balances)
-    VALUES (ws, public.current_user_id(), nullif(btrim(coalesce(motivo, '')), ''), v_saldos)
-    RETURNING id INTO v_id;
-
-    UPDATE public.transactions
-       SET deleted_at = now(), purge_id = v_id
-     WHERE workspace_id = ws AND deleted_at IS NULL;
-    GET DIAGNOSTICS v_filas = ROW_COUNT;
-
-    UPDATE public.wallets
-       SET initial_balance = 0
-     WHERE workspace_id = ws AND deleted_at IS NULL AND initial_balance <> 0;
-
-    UPDATE public.purges SET transactions_count = v_filas WHERE id = v_id;
-
-    RETURN v_id;
-END;
-$function$
-```
-</details>
-
-### `wallet_expected_balance(w uuid, at_time timestamp with time zone DEFAULT now())` 🔐
-
-- **Returns**: numeric
-- **Kind**: function | STABLE | SECURITY DEFINER
-
-<details><summary>Source</summary>
-
-```sql
-CREATE OR REPLACE FUNCTION public.wallet_expected_balance(w uuid, at_time timestamp with time zone DEFAULT now())
- RETURNS numeric
- LANGUAGE plpgsql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-DECLARE
-    v_ws  uuid;
-    v_bal numeric;
-BEGIN
-    SELECT workspace_id INTO v_ws FROM public.wallets WHERE id = w;
-
-    -- Mismo mensaje para "no existe" y "no sos miembro": distinguirlos
-    -- convertiría la función en un detector de billeteras ajenas.
-    IF v_ws IS NULL OR NOT public.can_see_all(v_ws) THEN
-        RAISE EXCEPTION 'La billetera no existe o no tenés acceso';
-    END IF;
-
-    WITH alcance AS (
-        -- La propia más sus subcuentas. Para una hoja, sólo la propia.
-        SELECT id, initial_balance FROM public.wallets
-         WHERE (id = w OR parent_id = w) AND deleted_at IS NULL
-    )
-    SELECT COALESCE(SUM(a.initial_balance), 0)
-         + COALESCE((
-             SELECT SUM(
-                 CASE WHEN t.type IN ('income', 'contribution') THEN t.amount ELSE -t.amount END
-             )
-               FROM public.transactions t
-              WHERE t.wallet_id IN (SELECT id FROM alcance)
-                AND t.deleted_at IS NULL
-                AND COALESCE(t.settles_at, t.date) <= at_time
-           ), 0)
-      INTO v_bal
-      FROM alcance a;
-
-    RETURN v_bal;
-END;
-$function$
-```
-</details>
-
-### `workspace_role(ws uuid)` 🔐
-
-- **Returns**: text
-- **Kind**: function | STABLE | SECURITY DEFINER
-
-<details><summary>Source</summary>
-
-```sql
-CREATE OR REPLACE FUNCTION public.workspace_role(ws uuid)
- RETURNS text
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-    SELECT m.role
-      FROM public.workspace_members m
-      JOIN public.workspaces w ON w.id = m.workspace_id
-     WHERE m.workspace_id = ws
-       AND m.user_id = public.current_user_id()
-       AND w.deleted_at IS NULL
 $function$
 ```
 </details>

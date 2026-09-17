@@ -219,6 +219,8 @@ export interface CategoryGroup {
   id: string;
   name: string;
   is_system: boolean;
+  /** NULL en los grupos de sistema, que comparten todos los espacios y no se borran. */
+  workspace_id?: string | null;
 }
 
 export interface Category {

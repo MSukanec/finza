@@ -5,6 +5,7 @@ import { useFinanceStore } from '@/stores/finance-store';
 import { Panel } from '@/components/ui/panel';
 import { Button } from '@/components/ui/button';
 import { WorkspaceLogo } from '@/components/workspace-logo';
+import { useGlobalDialog } from '@/components/providers/dialog-provider';
 import { ImageIcon, Upload, Trash2 } from 'lucide-react';
 
 /** Lo que acepta el bucket. Declararlo acá evita el viaje de ida y vuelta. */
@@ -17,7 +18,8 @@ export function LogoUploader() {
   const workspaces = useFinanceStore((s) => s.workspaces);
   const currentWorkspaceId = useFinanceStore((s) => s.currentWorkspaceId);
   const subir = useFinanceStore((s) => s.uploadWorkspaceLogo);
-  const quitar = useFinanceStore((s) => s.removeWorkspaceLogo);
+  const removeWorkspaceLogo = useFinanceStore((s) => s.removeWorkspaceLogo);
+  const dialog = useGlobalDialog();
 
   const input = useRef<HTMLInputElement>(null);
   const [trabajando, setTrabajando] = useState(false);
@@ -78,9 +80,15 @@ export function LogoUploader() {
                 size="sm"
                 disabled={trabajando}
                 onClick={async () => {
+                  const ok = await dialog.confirm(
+                    'Quitar el logo',
+                    'El espacio vuelve a mostrar el ícono por defecto. Para volver a tenerlo hay que subirlo de nuevo.',
+                    { confirmar: 'Quitar' }
+                  );
+                  if (!ok) return;
                   setTrabajando(true);
                   try {
-                    await quitar(currentWorkspaceId!);
+                    await removeWorkspaceLogo(currentWorkspaceId!);
                   } catch (e: any) {
                     setError(e?.message || 'No se pudo quitar.');
                   } finally {

@@ -257,12 +257,66 @@ const registrar = (nombre, ok, detalle = '') => casos.push({ nombre, ok, detalle
     `líneas de finance-store.ts: ${sinVerificar.join(', ')}`
   );
 
-  // Pasar movimientos de una categoría a otra toca los de todos: va por la
-  // función, porque un UPDATE directo movería sólo los propios.
+  // Borrar con reemplazo toca movimientos de todos, deudas, presupuestos y
+  // reglas: va por las funciones de la base (DB/047), que lo hacen en una sola
+  // transacción. Un UPDATE directo movería sólo los movimientos propios.
   registrar(
-    'Reorganizar categorías usa la función, no un UPDATE',
-    store.includes("rpc('transferir_categoria'") &&
-      !/from\('transactions'\)\s*\.update\(\{\s*category_id/.test(store)
+    'Borrar categorías y grupos usa las funciones de la base, no UPDATEs',
+    (() => {
+      // Sólo el tramo de categorías del store: borrar una deuda también da de
+      // baja la categoría que la deuda creó, y ése es otro flujo.
+      const desde = store.indexOf('  categoryUsage: async');
+      const hasta = store.indexOf('  // === BUDGETS ===');
+      const tramo = store.slice(desde, hasta);
+      return (
+        desde > 0 && hasta > desde &&
+        tramo.includes("rpc('borrar_categoria'") &&
+        tramo.includes("rpc('borrar_grupo'") &&
+        !/from\('(transactions|categories|debts|budget_categories|import_rules)'\)\s*\.update\(/.test(tramo)
+      );
+    })()
+  );
+}
+
+// ------------------------------------------- Toda acción destructiva confirma antes
+//
+// Regla del usuario: nada se borra, se quita ni se deshace con un solo toque.
+// Recorre las pantallas y, por cada llamada a una acción destructiva, exige una
+// confirmación en las líneas previas: `dialog.confirm(...)`, o que viva dentro
+// de `onConfirmar` de BorrarConReemplazo (que ya pregunta y muestra el uso).
+{
+  const { default: fs } = await import('node:fs');
+  const DESTRUCTIVAS = [
+    'removeTransaction', 'removeBudget', 'removeDebt', 'removePartner', 'removeMember',
+    'deleteWorkspace', 'leaveWorkspace', 'removeAttachment', 'revertImportBatch',
+    'removeCategory', 'removeCategoryGroup', 'removeAccount', 'removeWorkspaceLogo',
+  ];
+  const patron = new RegExp(`\\b(${DESTRUCTIVAS.join('|')})\\(`, 'g');
+  const sinConfirmar = [];
+
+  const recorrer = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const ruta = `${dir}/${e.name}`;
+      if (e.isDirectory()) { if (!ruta.includes('/stores')) recorrer(ruta); continue; }
+      if (!e.name.endsWith('.tsx')) continue;
+      const src = fs.readFileSync(ruta, 'utf8');
+      for (const m of src.matchAll(patron)) {
+        // La declaración del hook (`useFinanceStore((s) => s.removeX)`) no es una llamada.
+        const linea = src.slice(src.lastIndexOf('\n', m.index) + 1, src.indexOf('\n', m.index));
+        if (/useFinanceStore\(/.test(linea)) continue;
+        const antes = src.slice(Math.max(0, m.index - 700), m.index);
+        if (!/dialog\.confirm\(|onConfirmar=/.test(antes)) {
+          sinConfirmar.push(`${ruta.replace('src/', '')}:${src.slice(0, m.index).split('\n').length} ${m[1]}`);
+        }
+      }
+    }
+  };
+  recorrer('src');
+
+  registrar(
+    'Toda acción destructiva de la app pide confirmación antes',
+    sinConfirmar.length === 0,
+    sinConfirmar.join(' | ')
   );
 }
 

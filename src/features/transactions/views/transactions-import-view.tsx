@@ -21,6 +21,7 @@ import { Picker, type PickerOption } from '@/components/ui/picker';
 import { PageLayout } from '@/components/layout/page-layout';
 import { supabase } from '@/lib/supabase/client';
 import { useFinanceStore } from '@/stores/finance-store';
+import { useGlobalDialog } from '@/components/providers/dialog-provider';
 import { cn } from '@/lib/utils';
 import {
   clave,
@@ -138,6 +139,7 @@ const ordenarPendientesPrimero = (a: Destino, b: Destino) => {
 };
 
 export function TransactionsImportView() {
+  const dialog = useGlobalDialog();
   const [paso, setPaso] = useState<Paso>('archivo');
   const [lectura, setLectura] = useState<Lectura | null>(null);
   const [billeteras, setBilleteras] = useState<Destino[]>([]);
@@ -145,7 +147,6 @@ export function TransactionsImportView() {
   const [saltearRepetidas, setSaltearRepetidas] = useState(true);
   const [registro, setRegistro] = useState<string[]>([]);
   const [lotes, setLotes] = useState<Lote[]>([]);
-  const [confirmando, setConfirmando] = useState<string | null>(null);
   const [reglas, setReglas] = useState<Regla[]>([]);
   const inputArchivo = useRef<HTMLInputElement>(null);
 
@@ -844,8 +845,13 @@ export function TransactionsImportView() {
     }
   };
 
-  const revertir = async (id: string) => {
-    setConfirmando(null);
+  const revertir = async (id: string, filas: number) => {
+    const ok = await dialog.confirm(
+      'Deshacer importación',
+      `Se dan de baja los ${filas} movimientos que cargó esta importación.`,
+      { confirmar: 'Deshacer' }
+    );
+    if (!ok) return;
     try {
       await useFinanceStore.getState().revertImportBatch(id);
       await cargarLotes();
@@ -1026,20 +1032,9 @@ export function TransactionsImportView() {
                 <Badge variant="outline" className="tabular-nums">
                   {lote.rows_imported} filas
                 </Badge>
-                {confirmando === lote.id ? (
-                  <span className="flex gap-2">
-                    <Button variant="destructive" size="sm" onClick={() => revertir(lote.id)}>
-                      Deshacer
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => setConfirmando(null)}>
-                      Cancelar
-                    </Button>
-                  </span>
-                ) : (
-                  <Button variant="outline" size="sm" onClick={() => setConfirmando(lote.id)}>
-                    Deshacer
-                  </Button>
-                )}
+                <Button variant="outline" size="sm" onClick={() => void revertir(lote.id, lote.rows_imported)}>
+                  Deshacer
+                </Button>
               </li>
             ))}
           </ul>
