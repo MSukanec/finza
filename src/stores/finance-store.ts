@@ -6,6 +6,7 @@ import { toast, useToastStore } from '@/stores/toast-store';
 import { signoEnCaja } from '@/lib/money';
 import { optimizarLogo } from '@/lib/optimizar-imagen';
 import { validarAdjunto, rutaDeAdjunto, tipoDeAdjunto } from '@/lib/adjuntos';
+import { puedeCambiar, SOLO_QUIEN_LO_CARGO } from '@/lib/autoria';
 
 // Todo borrado es lógico: se marca `deleted_at` y la fila queda. Ver DB/021.
 const nowIso = () => new Date().toISOString();
@@ -200,6 +201,18 @@ function optimistic(
  * antes que la fila.
  */
 const escriturasPendientes = new Map<string, Promise<boolean>>();
+
+/**
+ * Exige que una escritura haya tocado alguna fila.
+ *
+ * Un UPDATE que la RLS filtra no da error: "sale bien" sobre cero filas. Sin
+ * esto, editar un movimiento ajeno se vería guardado en pantalla y volvería a
+ * su valor en la próxima recarga, sin que nadie se entere de por qué.
+ */
+function exigirFilas(res: { error: unknown; data: unknown[] | null }, motivo: string) {
+  if (res.error) throw res.error;
+  if (!res.data?.length) throw new Error(motivo);
+}
 
 /**
  * El recorte que aplica una vista previa de rol, copiado de las políticas de la
@@ -1195,6 +1208,10 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   updateTransaction: async (id, data) => {
     const before = get().transactions.find((t) => t.id === id);
     if (!before) return;
+    if (!puedeCambiar(before, get().appUserId)) {
+      toast.error(SOLO_QUIEN_LO_CARGO);
+      return;
+    }
 
     const patch: Record<string, unknown> = {};
     if (data.type) patch.type = data.type;
@@ -1214,8 +1231,10 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       (list) => byDateDesc(list.map((t: Transaction) => (t.id === id ? { ...t, ...data } : t))),
       (list) => byDateDesc(list.map((t: Transaction) => (t.id === id ? before : t))),
       async () => {
-        const { error } = await supabase.from('transactions').update(patch).eq('id', id);
-        if (error) throw error;
+        exigirFilas(
+          await supabase.from('transactions').update(patch).eq('id', id).select('id'),
+          SOLO_QUIEN_LO_CARGO
+        );
       },
       'No se pudo guardar el cambio.'
     );
@@ -1224,17 +1243,20 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   removeTransaction: async (id) => {
     const before = get().transactions.find((t) => t.id === id);
     if (!before) return;
+    if (!puedeCambiar(before, get().appUserId)) {
+      toast.error(SOLO_QUIEN_LO_CARGO);
+      return;
+    }
 
     optimistic(
       'transactions',
       (list) => list.filter((t: Transaction) => t.id !== id),
       (list) => byDateDesc([before, ...list]),
       async () => {
-        const { error } = await supabase
-          .from('transactions')
-          .update({ deleted_at: nowIso() })
-          .eq('id', id);
-        if (error) throw error;
+        exigirFilas(
+          await supabase.from('transactions').update({ deleted_at: nowIso() }).eq('id', id).select('id'),
+          SOLO_QUIEN_LO_CARGO
+        );
       },
       'No se pudo eliminar el movimiento.'
     );
@@ -1246,6 +1268,17 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
 
     const removed = get().transactions.filter((t) => t.import_batch_id === loteId);
 
+    // Todo o nada. Si parte del lote ya es de otra persona (se reasignó la
+    // autoría después de importar), deshacer sólo lo propio dejaría la
+    // importación a medias y sin forma de entender qué quedó.
+    const ajenos = removed.filter((t) => !puedeCambiar(t, get().appUserId)).length;
+    if (ajenos > 0) {
+      toast.error(
+        `No se puede deshacer: ${ajenos} de los ${removed.length} movimientos de esta importación son de otra persona, y sólo quien cargó un movimiento puede darlo de baja.`
+      );
+      return;
+    }
+
     optimistic(
       'transactions',
       (list) => list.filter((t: Transaction) => t.import_batch_id !== loteId),
@@ -1255,13 +1288,16 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         // no por la cadena vieja `import_batch`, que no era única entre espacios:
         // dos espacios que importaban en el mismo milisegundo generaban la misma.
         // Igual se acota al espacio activo, que es barato y cierra el tema.
-        const { error } = await supabase
-          .from('transactions')
-          .update({ deleted_at: nowIso() })
-          .eq('workspace_id', currentWorkspaceId)
-          .eq('import_batch_id', loteId)
-          .is('deleted_at', null);
-        if (error) throw error;
+        exigirFilas(
+          await supabase
+            .from('transactions')
+            .update({ deleted_at: nowIso() })
+            .eq('workspace_id', currentWorkspaceId)
+            .eq('import_batch_id', loteId)
+            .is('deleted_at', null)
+            .select('id'),
+          SOLO_QUIEN_LO_CARGO
+        );
 
         // El lote queda, marcado: sirve para saber que esa importación existió
         // y se deshizo, en vez de desaparecer sin dejar rastro.
@@ -1276,46 +1312,45 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   },
 
   toggleCheckpoint: async (id: string, current: boolean) => {
-    // Optimistic UI
-    set(state => ({
-      transactions: state.transactions.map(t => 
-        t.id === id ? { ...t, is_checkpoint: !current } : t
-      )
-    }));
-    
-    // DB Update
-    const { error } = await supabase.from('transactions').update({ is_checkpoint: !current }).eq('id', id);
-    if (error) {
-      console.error('Error toggling checkpoint:', error);
-      // Revert on failure
-      set(state => ({
-        transactions: state.transactions.map(t => 
-          t.id === id ? { ...t, is_checkpoint: current } : t
-        )
-      }));
+    const before = get().transactions.find((t) => t.id === id);
+    if (!before) return;
+    if (!puedeCambiar(before, get().appUserId)) {
+      toast.error(SOLO_QUIEN_LO_CARGO);
+      return;
     }
+
+    await optimistic(
+      'transactions',
+      (list) => list.map((t: Transaction) => (t.id === id ? { ...t, is_checkpoint: !current } : t)),
+      (list) => list.map((t: Transaction) => (t.id === id ? { ...t, is_checkpoint: before.is_checkpoint } : t)),
+      async () =>
+        exigirFilas(
+          await supabase.from('transactions').update({ is_checkpoint: !current }).eq('id', id).select('id'),
+          SOLO_QUIEN_LO_CARGO
+        ),
+      'No se pudo marcar el movimiento.'
+    );
   },
 
   toggleTransactionStatus: async (id: string, status: 'draft' | 'warning' | 'reviewed') => {
-    // Optimistic UI
-    const previousStatus = get().transactions.find(t => t.id === id)?.status || 'draft';
-    set(state => ({
-      transactions: state.transactions.map(t => 
-        t.id === id ? { ...t, status } : t
-      )
-    }));
-    
-    // DB Update
-    const { error } = await supabase.from('transactions').update({ status }).eq('id', id);
-    if (error) {
-      console.error('Error toggling transaction status:', error);
-      // Revert on failure
-      set(state => ({
-        transactions: state.transactions.map(t => 
-          t.id === id ? { ...t, status: previousStatus } : t
-        )
-      }));
+    const before = get().transactions.find((t) => t.id === id);
+    if (!before) return;
+    if (!puedeCambiar(before, get().appUserId)) {
+      toast.error(SOLO_QUIEN_LO_CARGO);
+      return;
     }
+
+    await optimistic(
+      'transactions',
+      (list) => list.map((t: Transaction) => (t.id === id ? { ...t, status } : t)),
+      (list) => list.map((t: Transaction) => (t.id === id ? { ...t, status: before.status } : t)),
+      async () =>
+        exigirFilas(
+          await supabase.from('transactions').update({ status }).eq('id', id).select('id'),
+          SOLO_QUIEN_LO_CARGO
+        ),
+      'No se pudo cambiar el estado del movimiento.'
+    );
   },
 
   // === SOCIOS ===
@@ -1326,6 +1361,10 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   attachFiles: async (transactionId, archivos) => {
     const { currentWorkspaceId, appUserId } = get();
     if (!currentWorkspaceId) throw new Error('No hay un espacio activo.');
+    if (!puedeCambiar(get().transactions.find((t) => t.id === transactionId), appUserId)) {
+      toast.error(SOLO_QUIEN_LO_CARGO);
+      return;
+    }
 
     // Lo que no se puede subir se avisa ANTES de mostrarlo: una fila que
     // aparece y a los dos segundos desaparece es peor que un aviso claro.
@@ -1405,17 +1444,20 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   removeAttachment: async (id) => {
     const antes = get().attachments.find((a) => a.id === id);
     if (!antes) return;
+    if (!puedeCambiar(get().transactions.find((t) => t.id === antes.transaction_id), get().appUserId)) {
+      toast.error(SOLO_QUIEN_LO_CARGO);
+      return;
+    }
 
     await optimistic(
       'attachments',
       (list) => list.filter((a: TransactionAttachment) => a.id !== id),
       (list) => [...list, antes],
       async () => {
-        const { error } = await supabase
-          .from('transaction_attachments')
-          .update({ deleted_at: nowIso() })
-          .eq('id', id);
-        if (error) throw error;
+        exigirFilas(
+          await supabase.from('transaction_attachments').update({ deleted_at: nowIso() }).eq('id', id).select('id'),
+          SOLO_QUIEN_LO_CARGO
+        );
       },
       'No se pudo quitar el adjunto.'
     ).then((quitado) => {
@@ -1434,11 +1476,10 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
               (list) => [...list.filter((a: TransactionAttachment) => a.id !== id), antes],
               (list) => list.filter((a: TransactionAttachment) => a.id !== id),
               async () => {
-                const { error } = await supabase
-                  .from('transaction_attachments')
-                  .update({ deleted_at: null })
-                  .eq('id', id);
-                if (error) throw error;
+                exigirFilas(
+                  await supabase.from('transaction_attachments').update({ deleted_at: null }).eq('id', id).select('id'),
+                  SOLO_QUIEN_LO_CARGO
+                );
               },
               'No se pudo recuperar el adjunto.'
             ),
@@ -1933,9 +1974,10 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       },
       async () => {
         const ws = (q: any) => q.eq('workspace_id', currentWorkspaceId);
-        const r1 = await ws(
-          supabase.from('transactions').update({ category_id: newId }).eq('category_id', oldId)
-        );
+        // Por función y no con un UPDATE: la RLS sólo deja cambiar movimientos
+        // propios, y el UPDATE directo movería los tuyos y dejaría los de los
+        // demás colgados de la categoría borrada, sin error (DB/045).
+        const r1 = await supabase.rpc('transferir_categoria', { origen: oldId, destino: newId });
         if (r1.error) throw r1.error;
         const r2 = await ws(
           supabase.from('debts').update({ category_id: newId }).eq('category_id', oldId)

@@ -238,6 +238,52 @@ try {
   ok('ve los dos archivos',
     (await cuantas(`select count(*) as n from storage.objects where bucket_id='adjuntos' and name in ($1, $2)`, [rutaAjena, rutaMia])) === 2);
 
+  // Ver no es cambiar: el administrador ve y descarga lo de la encargada, pero
+  // no le adjunta ni le quita nada. Cada uno tiene el control de lo suyo.
+  await negado('no puede subir un archivo al movimiento del colaborador',
+    `insert into storage.objects (bucket_id, name) values ('adjuntos', $1)`,
+    [`${WS}/${mio.id}/00000000-0000-0000-0000-000000000006-del-admin.pdf`]);
+  await negado('no puede colgar un adjunto del movimiento del colaborador',
+    `insert into public.transaction_attachments (transaction_id, storage_path, file_name, size_bytes)
+     values ($1, $2, 'del-admin.pdf', 1)`,
+    [mio.id, `${WS}/${mio.id}/del-admin.pdf`]);
+  const quitoDelColab = (await c.query(
+    'update public.transaction_attachments set deleted_at = null where id = $1', [adjMio.id]
+  )).rowCount;
+  ok('no puede quitar ni recuperar un adjunto del colaborador', quitoDelColab === 0, `afectó ${quitoDelColab}`);
+  const editoDelColab = (await c.query('update public.transactions set amount = 1 where id = $1', [mio.id])).rowCount;
+  ok('no puede editar el movimiento del colaborador', editoDelColab === 0, `afectó ${editoDelColab}`);
+
+  const rutaAdmin = `${WS}/${ajeno.id}/00000000-0000-0000-0000-000000000007-remito.pdf`;
+  const subioAdmin = (await c.query(
+    `insert into storage.objects (bucket_id, name) values ('adjuntos', $1)`, [rutaAdmin]
+  )).rowCount;
+  ok('sí adjunta a un movimiento suyo', subioAdmin === 1);
+
+  // ============================================================ un miembro (socio)
+  console.log('\n--- un miembro (socio) ---\n');
+  await c.query('reset role');
+  await c.query(`update public.workspace_members set role = 'member' where workspace_id = $1 and user_id = $2`, [WS, COLAB]);
+  await ser(COLAB);
+
+  ok('ve el comprobante que subió el administrador',
+    (await cuantas('select count(*) as n from public.transaction_attachments where id = $1', [adjAjeno.id])) === 1);
+  ok('puede descargarlo (ve el archivo)',
+    (await cuantas(`select count(*) as n from storage.objects where bucket_id='adjuntos' and name = $1`, [rutaAjena])) === 1);
+  await negado('no puede adjuntarle nada al movimiento del administrador',
+    `insert into storage.objects (bucket_id, name) values ('adjuntos', $1)`,
+    [`${WS}/${ajeno.id}/00000000-0000-0000-0000-000000000008-socio.pdf`]);
+  const quitoSocio = (await c.query(
+    'update public.transaction_attachments set deleted_at = now() where id = $1', [adjAjeno.id]
+  )).rowCount;
+  ok('no puede quitarle el comprobante', quitoSocio === 0, `afectó ${quitoSocio}`);
+  const editoSocio = (await c.query('update public.transactions set amount = 1 where id = $1', [ajeno.id])).rowCount;
+  ok('no puede editar el movimiento del administrador', editoSocio === 0, `afectó ${editoSocio}`);
+  const borroSocio = (await c.query('update public.transactions set deleted_at = now() where id = $1', [ajeno.id])).rowCount;
+  ok('no puede darlo de baja', borroSocio === 0, `afectó ${borroSocio}`);
+  const editoPropio = (await c.query(`update public.transactions set description = 'corregido' where id = $1`, [mio.id])).rowCount;
+  ok('sí edita el suyo', editoPropio === 1);
+
   // Como postgres: la sesión de un usuario no lee `storage.buckets`, y un
   // "no lo veo" acá daría por privado un bucket que no se pudo mirar.
   await c.query('reset role');

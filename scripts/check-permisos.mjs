@@ -192,6 +192,10 @@ try {
   await negado('no puede registrar un arqueo',
     'select public.record_reconciliation((select id from public.billeteras_para_cargar($1) limit 1), 0)', [WS]);
   await negado('no puede vaciar el espacio', 'select public.vaciar_espacio($1, null)', [WS]);
+  await negado('no puede pasar los movimientos de una categoría a otra',
+    `select public.transferir_categoria(
+       (select id from public.categories where workspace_id=$1 order by id limit 1),
+       (select id from public.categories where workspace_id=$1 order by id desc limit 1))`, [WS]);
   await negado('no puede invitar a nadie',
     `select public.invite_to_workspace($1, 'colado@ejemplo.com', 'owner')`, [WS]);
   await negado('no puede clonar el espacio', `select public.clone_workspace($1, 'copia')`, [WS]);
@@ -226,6 +230,23 @@ try {
     (await c.query('select public.wallet_expected_balance((select id from public.wallets where workspace_id=$1 limit 1)) as s', [WS])).rows.length === 1);
   ok('el administrador lista los miembros',
     (await c.query('select * from public.list_workspace_members($1)', [WS])).rows.length > 0);
+
+  // Ver todo no es poder cambiar todo (DB/045): cada uno edita lo que cargó.
+  const tocoAjeno = (await c.query('update public.transactions set amount = 1 where id = $1', [mio[0].id])).rowCount;
+  ok('el administrador no edita un movimiento que cargó otro', tocoAjeno === 0, `afectó ${tocoAjeno}`);
+  const borroAjeno = (await c.query('delete from public.transactions where id = $1', [mio[0].id])).rowCount;
+  ok('el administrador no borra un movimiento que cargó otro', borroAjeno === 0, `borró ${borroAjeno}`);
+
+  // Reorganizar categorías sí toca movimientos de todos: es estructura del
+  // espacio, no el contenido de un movimiento. Por eso va por función.
+  const { rows: [cats] } = await c.query(
+    `select (select id from public.categories where workspace_id=$1 order by id limit 1) as a,
+            (select id from public.categories where workspace_id=$1 order by id desc limit 1) as b`, [WS]);
+  const deOtros = await cuantas(
+    'select count(*) as n from public.transactions where category_id=$1 and user_id <> public.current_user_id()', [cats.a]);
+  const movidos = (await c.query('select public.transferir_categoria($1, $2) as n', [cats.a, cats.b])).rows[0].n;
+  ok('el administrador pasa de categoría también los movimientos de otros',
+    deOtros === 0 || movidos >= deOtros, `había ${deOtros} ajenos, movió ${movidos}`);
 } finally {
   await c.query('rollback').catch(() => {});
   await c.end();

@@ -21,6 +21,7 @@ import {
 import { useGlobalDialog } from '@/components/providers/dialog-provider';
 import { UserAvatar, personName } from '@/components/ui/user-avatar';
 import { useMemo } from 'react';
+import { puedeCambiar } from '@/lib/autoria';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -67,6 +68,7 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
   const toggleTransactionStatus = useFinanceStore((s) => s.toggleTransactionStatus);
   const people = useFinanceStore((s) => s.people);
   const adjuntos = useFinanceStore((s) => s.attachments);
+  const appUserId = useFinanceStore((s) => s.appUserId);
   const dialog = useGlobalDialog();
 
   // Un conteo por movimiento, armado una vez: buscarlo fila por fila recorrería
@@ -212,7 +214,11 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
                       </p>
                     </div>
 
-                    {/* Acciones: solo en desktop, al pasar el mouse. En mobile se toca la fila. */}
+                    {/* Acciones: solo en desktop, al pasar el mouse. En mobile se toca la fila.
+                        Y sólo en lo propio: cada uno cambia lo que cargó (DB/045).
+                        Lo ajeno se abre igual tocando la fila, para verlo y
+                        descargar sus comprobantes. */}
+                    {puedeCambiar(tx, appUserId) && (
                     <div className="hidden shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 md:flex">
                       <IconButton
                         label="Cambiar estado de revisión"
@@ -245,6 +251,7 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
                         <Trash2 className="size-4" />
                       </IconButton>
                     </div>
+                    )}
                   </div>
                 </div>
               );

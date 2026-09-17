@@ -27,7 +27,13 @@ export function AttachmentsField({
   transactionId,
   pendientes = [],
   onPendientesChange = () => {},
+  soloLectura = false,
 }: {
+  /**
+   * Movimiento de otra persona: se ven y se descargan sus comprobantes, pero
+   * no se adjunta ni se quita nada. Ver DB/045.
+   */
+  soloLectura?: boolean;
   /** Movimiento ya guardado: lo que se elige se sube en el acto. */
   transactionId?: string | null;
   /** Movimiento nuevo: lo elegido espera acá hasta guardar. */
@@ -70,7 +76,12 @@ export function AttachmentsField({
 
   return (
     <div className="space-y-1.5">
-      <Field label="Comprobantes" hint={cantidad > 0 ? String(cantidad) : undefined}>
+      <Field label="Comprobantes" hint={cantidad > 0 && !soloLectura ? String(cantidad) : undefined}>
+        {soloLectura ? (
+          <p className="text-right text-base text-muted-foreground md:text-[15px]">
+            {cantidad === 0 ? 'Ninguno' : cantidad === 1 ? '1 archivo' : `${cantidad} archivos`}
+          </p>
+        ) : (
         <div className="flex justify-end">
           <button
             type="button"
@@ -81,6 +92,7 @@ export function AttachmentsField({
             Adjuntar
           </button>
         </div>
+        )}
         <input
           ref={entrada}
           type="file"
@@ -92,7 +104,7 @@ export function AttachmentsField({
       </Field>
 
       {props.transactionId
-        ? guardados.map((a) => <Guardado key={a.id} adjunto={a} />)
+        ? guardados.map((a) => <Guardado key={a.id} adjunto={a} soloLectura={soloLectura} />)
         : props.pendientes.map((archivo, i) => (
             <Pendiente
               key={`${archivo.name}-${archivo.size}-${i}`}
@@ -167,7 +179,7 @@ function BotonIcono({
   );
 }
 
-function Guardado({ adjunto }: { adjunto: TransactionAttachment }) {
+function Guardado({ adjunto, soloLectura }: { adjunto: TransactionAttachment; soloLectura: boolean }) {
   const attachmentUrl = useFinanceStore((s) => s.attachmentUrl);
   const removeAttachment = useFinanceStore((s) => s.removeAttachment);
 
@@ -210,9 +222,11 @@ function Guardado({ adjunto }: { adjunto: TransactionAttachment }) {
           <BotonIcono etiqueta="Descargar" onClick={() => void abrir(true)}>
             <Download className="size-4" />
           </BotonIcono>
-          <BotonIcono etiqueta="Quitar" onClick={() => void removeAttachment(adjunto.id)}>
-            <X className="size-4" />
-          </BotonIcono>
+          {!soloLectura && (
+            <BotonIcono etiqueta="Quitar" onClick={() => void removeAttachment(adjunto.id)}>
+              <X className="size-4" />
+            </BotonIcono>
+          )}
         </>
       )}
     </Fila>

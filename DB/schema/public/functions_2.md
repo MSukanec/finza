@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-17T13:11:50.529Z
+> Generated: 2026-09-17T13:33:56.364Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -586,6 +586,50 @@ AS $function$
         p_type,
         public.normalizar_texto(p_description)
     )
+$function$
+```
+</details>
+
+### `transferir_categoria(origen uuid, destino uuid)` 🔐
+
+- **Returns**: integer
+- **Kind**: function | VOLATILE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.transferir_categoria(origen uuid, destino uuid)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+    v_ws_origen  uuid;
+    v_ws_destino uuid;
+    v_filas      integer;
+BEGIN
+    SELECT workspace_id INTO v_ws_origen  FROM public.categories WHERE id = origen;
+    SELECT workspace_id INTO v_ws_destino FROM public.categories WHERE id = destino;
+
+    IF v_ws_origen IS NULL OR v_ws_destino IS NULL THEN
+        RAISE EXCEPTION 'Categoría no encontrada';
+    END IF;
+    IF v_ws_origen <> v_ws_destino THEN
+        RAISE EXCEPTION 'Las dos categorías tienen que ser del mismo espacio';
+    END IF;
+    IF NOT public.can_see_all(v_ws_origen) THEN
+        RAISE EXCEPTION 'No tenés acceso para reorganizar las categorías de este espacio';
+    END IF;
+
+    UPDATE public.transactions
+       SET category_id = destino
+     WHERE category_id = origen
+       AND workspace_id = v_ws_origen;
+    GET DIAGNOSTICS v_filas = ROW_COUNT;
+
+    RETURN v_filas;
+END;
 $function$
 ```
 </details>

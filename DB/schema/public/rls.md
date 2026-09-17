@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-17T13:11:50.529Z
+> Generated: 2026-09-17T13:33:56.364Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -323,7 +323,7 @@ can_see_all(workspace_id)
 ```sql
 ((EXISTS ( SELECT 1
    FROM transactions t
-  WHERE (t.id = transaction_attachments.transaction_id))) AND (user_id = current_user_id()) AND (storage_path ~~ ((((workspace_id)::text || '/'::text) || (transaction_id)::text) || '/%'::text)))
+  WHERE ((t.id = transaction_attachments.transaction_id) AND (t.user_id = current_user_id())))) AND (user_id = current_user_id()) AND (storage_path ~~ ((((workspace_id)::text || '/'::text) || (transaction_id)::text) || '/%'::text)))
 ```
 
 #### adjuntos_select
@@ -345,13 +345,13 @@ can_see_all(workspace_id)
 ```sql
 (EXISTS ( SELECT 1
    FROM transactions t
-  WHERE (t.id = transaction_attachments.transaction_id)))
+  WHERE ((t.id = transaction_attachments.transaction_id) AND (t.user_id = current_user_id()))))
 ```
 - **WITH CHECK**:
 ```sql
 (EXISTS ( SELECT 1
    FROM transactions t
-  WHERE (t.id = transaction_attachments.transaction_id)))
+  WHERE ((t.id = transaction_attachments.transaction_id) AND (t.user_id = current_user_id()))))
 ```
 
 ### `transactions` (4 policies)
@@ -362,7 +362,7 @@ can_see_all(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-(is_workspace_member(workspace_id) AND (can_see_all(workspace_id) OR (user_id = current_user_id())))
+(is_workspace_member(workspace_id) AND (user_id = current_user_id()))
 ```
 
 #### transactions_insert
@@ -389,11 +389,11 @@ can_see_all(workspace_id)
 - **Roles**: {authenticated}
 - **USING**:
 ```sql
-(is_workspace_member(workspace_id) AND (can_see_all(workspace_id) OR (user_id = current_user_id())))
+(is_workspace_member(workspace_id) AND (user_id = current_user_id()))
 ```
 - **WITH CHECK**:
 ```sql
-(is_workspace_member(workspace_id) AND (can_see_all(workspace_id) OR (user_id = current_user_id())))
+(is_workspace_member(workspace_id) AND (user_id = current_user_id()))
 ```
 
 ### `users` (2 policies)

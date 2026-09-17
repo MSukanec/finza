@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-17T13:11:50.529Z
+> Generated: 2026-09-17T13:33:56.364Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -26,7 +26,7 @@
 - **`workspace_members`** (5 cols | FK: user_id → users, workspace_id → workspaces)
 - **`workspaces`** (7 cols | FK: user_id → users)
 
-### Functions (38)
+### Functions (39)
 
 - `activity_authors(ws uuid)` → TABLE(id uuid, full_name text, email text, avatar_url text, es_miembro boolean) 🔐 *(public/functions_1.md)*
 - `admin_list_users()` → TABLE(id uuid, email text, full_name text, avatar_url text, is_admin boolean, created_at timestamp with time zone, last_sign_in timestamp with time zone, espacios integer, invitado boolean) 🔐 *(public/functions_1.md)*
@@ -63,6 +63,7 @@
 - `set_transaction_fingerprint()` → trigger *(public/functions_2.md)*
 - `sync_user_profile()` → trigger 🔐 *(public/functions_2.md)*
 - `transaction_fingerprint(p_wallet uuid, p_date timestamp with time zone, p_amount numeric, p_type text, p_description text)` → text *(public/functions_2.md)*
+- `transferir_categoria(origen uuid, destino uuid)` → integer 🔐 *(public/functions_2.md)*
 - `vaciar_espacio(ws uuid, motivo text DEFAULT NULL::text)` → uuid 🔐 *(public/functions_2.md)*
 - `wallet_expected_balance(w uuid, at_time timestamp with time zone DEFAULT now())` → numeric 🔐 *(public/functions_2.md)*
 - `workspace_role(ws uuid)` → text 🔐 *(public/functions_2.md)*

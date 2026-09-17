@@ -203,6 +203,69 @@ const registrar = (nombre, ok, detalle = '') => casos.push({ nombre, ok, detalle
   );
 }
 
+// ------------------------------------------- Cada uno cambia lo suyo (DB/045)
+//
+// Ver no es cambiar. Lo ajeno se abre para mirarlo y descargar sus
+// comprobantes; editarlo, borrarlo, marcarlo o adjuntarle es de quien lo cargó.
+{
+  const { default: fs } = await import('node:fs');
+  const formulario = fs.readFileSync('src/features/transactions/components/transaction-form.tsx', 'utf8');
+  const lista = fs.readFileSync('src/features/transactions/components/transaction-list.tsx', 'utf8');
+  const adjuntos = fs.readFileSync('src/features/transactions/components/attachments-field.tsx', 'utf8');
+  const store = fs.readFileSync('src/stores/finance-store.ts', 'utf8');
+
+  registrar(
+    'El formulario bloquea los campos de un movimiento ajeno',
+    /<fieldset\s+disabled=\{soloLectura\}/.test(formulario)
+  );
+
+  // Si los comprobantes quedaran adentro del fieldset, sus botones de abrir y
+  // descargar también se desactivarían: justo lo que sí tiene que poder hacer.
+  const cierre = formulario.indexOf('</fieldset>');
+  const comprobantes = formulario.indexOf('<AttachmentsField transactionId');
+  registrar(
+    'Los comprobantes quedan fuera del bloqueo, para poder descargarlos',
+    cierre > 0 && comprobantes > cierre
+  );
+  registrar(
+    'En un movimiento ajeno no se ofrece guardar',
+    /soloLectura \? \(\s*<Button[^>]*onClick=\{closeSheet\}/.test(formulario)
+  );
+  registrar(
+    'La lista sólo muestra acciones en lo propio',
+    /puedeCambiar\(tx, appUserId\) && \(\s*<div className="hidden shrink-0/.test(lista)
+  );
+  registrar(
+    'Sin permiso no se ofrece adjuntar ni quitar',
+    adjuntos.includes('{soloLectura ? (') && adjuntos.includes('{!soloLectura && (')
+  );
+
+  // Un UPDATE que la RLS filtra no da error: sale "bien" con cero filas y la
+  // pantalla muestra un cambio que nunca se guardó. Toda escritura sobre
+  // movimientos o adjuntos tiene que pedir las filas de vuelta y exigirlas.
+  const sinVerificar = [];
+  const patron = /from\('(transactions|transaction_attachments)'\)\s*\.update\(/g;
+  for (const m of store.matchAll(patron)) {
+    const tramo = store.slice(m.index, store.indexOf(';', m.index));
+    if (!tramo.includes(".select('id')")) {
+      sinVerificar.push(store.slice(0, m.index).split('\n').length);
+    }
+  }
+  registrar(
+    'Toda escritura sobre movimientos verifica que la base cambió algo',
+    sinVerificar.length === 0,
+    `líneas de finance-store.ts: ${sinVerificar.join(', ')}`
+  );
+
+  // Pasar movimientos de una categoría a otra toca los de todos: va por la
+  // función, porque un UPDATE directo movería sólo los propios.
+  registrar(
+    'Reorganizar categorías usa la función, no un UPDATE',
+    store.includes("rpc('transferir_categoria'") &&
+      !/from\('transactions'\)\s*\.update\(\{\s*category_id/.test(store)
+  );
+}
+
 let fallas = 0;
 for (const c of casos) {
   if (c.ok) console.log(`OK   ${c.nombre}`);

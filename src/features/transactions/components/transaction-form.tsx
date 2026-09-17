@@ -10,6 +10,7 @@ import {
   ResponsiveModalTitle,
   ResponsiveModalBody,
   ResponsiveModalFooter,
+  ResponsiveModalDescription,
 } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +21,8 @@ import { Picker } from '@/components/ui/picker';
 import { parseAmount, formatMoney } from '@/lib/money';
 import { AlertTriangle } from 'lucide-react';
 import { AttachmentsField } from './attachments-field';
+import { puedeCambiar } from '@/lib/autoria';
+import { personName } from '@/components/ui/user-avatar';
 import type { TransactionType } from '@/lib/types';
 
 /**
@@ -57,6 +60,19 @@ export function TransactionForm() {
   const isEdit = activeSheet === 'edit-transaction';
   const isOpen = activeSheet === 'new-transaction' || isEdit;
   const editing = isEdit ? (sheetData?.transaction as any) : null;
+
+  /**
+   * Movimiento de otra persona: se abre para VERLO y descargar sus
+   * comprobantes, no para cambiarlo. Cada uno edita lo que cargó (DB/045).
+   *
+   * Se abre igual, en vez de no abrirse, porque ver es un derecho de quien ve
+   * el movimiento: el detalle completo y la factura son justamente lo que
+   * alguien quiere mirar de un gasto que cargó otro.
+   */
+  const appUserId = useFinanceStore((s) => s.appUserId);
+  const people = useFinanceStore((s) => s.people);
+  const soloLectura = isEdit && !!editing && !puedeCambiar(editing, appUserId);
+  const autor = editing?.user_id ? people[editing.user_id] : undefined;
 
   const [type, setType] = useState<TransactionType>('expense');
   // En el teléfono no se enfoca solo: el teclado taparía el formulario
@@ -244,7 +260,7 @@ export function TransactionForm() {
   // ---------------------------------------------------------------- guardar
 
   const handleSubmit = async () => {
-    if (submitting) return;
+    if (submitting || soloLectura) return;
 
     if (parsedAmount === null || parsedAmount <= 0) {
       return setError('Ingresá un monto mayor a cero.');
@@ -314,11 +330,26 @@ export function TransactionForm() {
       <ResponsiveModalContent>
         <ResponsiveModalHeader>
           <ResponsiveModalTitle>
-            {isEdit ? 'Editar movimiento' : 'Nuevo movimiento'}
+            {soloLectura ? 'Movimiento' : isEdit ? 'Editar movimiento' : 'Nuevo movimiento'}
           </ResponsiveModalTitle>
+          {soloLectura && (
+            <ResponsiveModalDescription>
+              Lo cargó {personName(autor)}. Sólo quien lo cargó puede cambiarlo.
+            </ResponsiveModalDescription>
+          )}
         </ResponsiveModalHeader>
 
         <ResponsiveModalBody className="space-y-2">
+          {/* Un `fieldset disabled` nativo bloquea TODOS los controles de adentro
+              —inputs, desplegables, botones— sin tener que acordarse de cada uno:
+              un campo nuevo agregado mañana queda bloqueado solo.
+              `!opacity-100` porque se está leyendo, no es un campo apagado: el
+              texto gris al 50% no se lee.
+              Los comprobantes van AFUERA: abrir y descargar sigue andando. */}
+          <fieldset
+            disabled={soloLectura}
+            className="min-w-0 space-y-2 [&_:disabled]:cursor-default [&_:disabled]:!opacity-100"
+          >
           <Field label="Tipo">
             <Picker
               value={type}
@@ -510,9 +541,11 @@ export function TransactionForm() {
             </Field>
           )}
 
+          </fieldset>
+
           {/* En todos los tipos: una transferencia también tiene su captura. */}
           {isEdit && editing ? (
-            <AttachmentsField transactionId={editing.id} />
+            <AttachmentsField transactionId={editing.id} soloLectura={soloLectura} />
           ) : (
             <AttachmentsField pendientes={pendientes} onPendientesChange={setPendientes} />
           )}
@@ -548,12 +581,15 @@ export function TransactionForm() {
         </ResponsiveModalBody>
 
         <ResponsiveModalFooter>
-          <Button
-            onClick={handleSubmit}
-            disabled={submitting}
-          >
-            {submitting ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Guardar movimiento'}
-          </Button>
+          {soloLectura ? (
+            <Button variant="secondary" onClick={closeSheet}>
+              Cerrar
+            </Button>
+          ) : (
+            <Button onClick={handleSubmit} disabled={submitting}>
+              {submitting ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Guardar movimiento'}
+            </Button>
+          )}
         </ResponsiveModalFooter>
       </ResponsiveModalContent>
     </ResponsiveModal>

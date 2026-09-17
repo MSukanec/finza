@@ -88,6 +88,23 @@ Tres roles, en `workspace_members.role`: `owner` (Administrador), `member`
 (Miembro) y `collaborator` (Colaborador). Los dos primeros ven el espacio
 entero; el tercero **sólo los movimientos que cargó él**.
 
+**Ver y cambiar son dos reglas distintas** (DB/045, decidido con el usuario el
+2026-09-17). Ver depende del rol, como dice arriba. Cambiar un movimiento
+—editarlo, darlo de baja, marcarlo, adjuntarle o quitarle un comprobante— es
+**sólo de quien lo cargó, sea cual sea su rol**: el administrador tampoco toca lo
+que cargó un socio o la encargada. Lo ajeno se abre en modo lectura, y sus
+comprobantes se ven y se descargan igual. `puedeCambiar()` en `src/lib/autoria.ts`
+es la misma regla del lado de la app, para no ofrecer botones que la base rechaza.
+
+La única escritura sobre movimientos de todos que sigue existiendo es reorganizar
+categorías (`transferir_categoria`), porque es estructura del espacio y no el
+contenido de un movimiento. Va por función con guardia `can_see_all`.
+
+Un UPDATE que la RLS filtra **no da error**: sale bien sobre cero filas. Toda
+escritura del store sobre movimientos pide `.select('id')` y pasa por
+`exigirFilas`; si no, la pantalla muestra guardado algo que nunca se guardó.
+`check:ui` falla si aparece un UPDATE sin verificar.
+
 **El límite vive en la base, no en la pantalla.** La persona tiene un token
 válido y puede consultar Supabase por fuera de la app: esconder un menú no
 protege nada. Todo está en DB/034 (políticas) y DB/035 (guardias de funciones).
@@ -115,11 +132,12 @@ Los comprobantes de un movimiento (DB/044): la tabla `transaction_attachments`
 dice qué es y de quién; el archivo vive en el bucket **privado** `adjuntos`, en
 `<espacio>/<movimiento>/<id>-<nombre>`. Se abren con URL firmada de un minuto.
 
-**No tienen una regla de permisos propia, y no hay que dársela.** Cada política
-—de la tabla y del bucket— pregunta si el movimiento existe, y esa subconsulta
-pasa por la RLS de `transactions` de quien consulta. Quien ve el movimiento ve
-sus adjuntos; si cambia quién ve movimientos, los adjuntos siguen solos. Escribir
-acá un `can_see_all` es abrir la puerta a que las dos reglas se separen.
+**No tienen una regla de permisos propia, y no hay que dársela: van de la mano
+del movimiento.** Leer pregunta si el movimiento existe, y esa subconsulta pasa
+por la RLS de `transactions` de quien consulta: quien ve el movimiento ve y
+descarga sus comprobantes, los haya subido quien sea. Adjuntar y quitar preguntan
+además si el movimiento es PROPIO, igual que editarlo. Escribir acá un
+`can_see_all` es abrir la puerta a que las reglas se separen.
 
 1. `workspace_id` y `user_id` los pone un trigger. No se le cree al cliente.
 2. De una fila sólo se puede cambiar `deleted_at` (GRANT por columna): quitar un
