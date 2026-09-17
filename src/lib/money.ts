@@ -128,3 +128,23 @@ export function esMovimientoDeSocio(t: { type: TransactionType }): boolean {
 export function signoEnCaja(type: TransactionType): 1 | -1 {
   return type === 'income' || type === 'contribution' ? 1 : -1;
 }
+
+/**
+ * Si un movimiento ofrece "Se paga", la fecha en que la plata sale de verdad.
+ *
+ * Sólo en un EGRESO y sólo desde una billetera que acepta pagos a fecha
+ * (DB/046): cheques, cuenta corriente con un proveedor. Pagar con la caja del
+ * mostrador es pagar en el acto. Los ingresos no la usan.
+ *
+ * Un gasto que YA tiene fecha de pago la sigue ofreciendo aunque su billetera
+ * haya dejado de aceptar pagos a fecha: esconderla haría que guardar cualquier
+ * otro cambio la borrara sin avisar.
+ */
+export function ofreceFechaDePago(
+  type: TransactionType,
+  billetera: { allows_deferred_payment?: boolean } | null | undefined,
+  fechaDePagoExistente?: string | null
+): boolean {
+  if (type !== 'expense') return false;
+  return billetera?.allows_deferred_payment === true || !!fechaDePagoExistente;
+}

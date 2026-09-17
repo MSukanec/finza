@@ -595,6 +595,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       balance: Number(w.initial_balance || 0),
       parent_id: w.parent_id ?? null,
       is_default: w.is_default === true,
+      allows_deferred_payment: w.allows_deferred_payment === true,
       color: '#3b82f6',
       icon: 'wallet',
       created_at: w.created_at
@@ -1762,6 +1763,8 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       currency_id: acc.currency_id,
       initial_balance: Number(acc.initial_balance || 0),
       balance: Number(acc.initial_balance || 0),
+      parent_id: acc.parent_id || null,
+      allows_deferred_payment: acc.allows_deferred_payment === true,
       color: '#3b82f6',
       icon: 'wallet',
       created_at: nowIso(),
@@ -1781,6 +1784,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
           initial_balance: acc.initial_balance || 0,
           currency_code: acc.currency_id.toUpperCase(),
           parent_id: acc.parent_id || null,
+          allows_deferred_payment: acc.allows_deferred_payment === true,
         });
         if (error) throw error;
       },
@@ -1798,6 +1802,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     if (data.currency_id) patch.currency_code = data.currency_id.toUpperCase();
     if (data.initial_balance !== undefined) patch.initial_balance = data.initial_balance;
     if (data.parent_id !== undefined) patch.parent_id = data.parent_id || null;
+    if (data.allows_deferred_payment !== undefined) patch.allows_deferred_payment = data.allows_deferred_payment;
 
     optimistic(
       'accounts',

@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-17T13:33:56.364Z
+> Generated: 2026-09-17T13:52:44.684Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -163,14 +163,14 @@ $function$
 
 ### `billeteras_para_cargar(ws uuid)` 🔐
 
-- **Returns**: TABLE(id uuid, name text, type text, currency_code text)
+- **Returns**: TABLE(id uuid, name text, type text, currency_code text, parent_id uuid, allows_deferred_payment boolean)
 - **Kind**: function | STABLE | SECURITY DEFINER
 
 <details><summary>Source</summary>
 
 ```sql
 CREATE OR REPLACE FUNCTION public.billeteras_para_cargar(ws uuid)
- RETURNS TABLE(id uuid, name text, type text, currency_code text)
+ RETURNS TABLE(id uuid, name text, type text, currency_code text, parent_id uuid, allows_deferred_payment boolean)
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO 'public', 'pg_temp'
@@ -180,8 +180,9 @@ BEGIN
         RAISE EXCEPTION 'No sos miembro de este espacio';
     END IF;
 
+    -- Sigue sin saldos: nombre, moneda, jerarquía y si acepta pagos a fecha.
     RETURN QUERY
-        SELECT w.id, w.name, w.type::text, w.currency_code
+        SELECT w.id, w.name, w.type::text, w.currency_code, w.parent_id, w.allows_deferred_payment
           FROM public.wallets w
          WHERE w.workspace_id = ws AND w.deleted_at IS NULL
          ORDER BY w.name;

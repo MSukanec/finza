@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-17T13:33:56.364Z
+> Generated: 2026-09-17T13:52:44.684Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -21,7 +21,7 @@
 - **`transactions`** (26 cols | FK: purge_id → purges, related_transaction_id → transactions, wallet_id → wallets, workspace_id → workspaces, import_batch_id → import_batches, user_id → users, category_id → categories, partner_id → partners)
 - **`users`** (8 cols)
 - **`wallet_reconciliations`** (14 cols | FK: adjustment_transaction_id → transactions, workspace_id → workspaces, wallet_id → wallets, user_id → users)
-- **`wallets`** (13 cols | FK: user_id → users, parent_id → wallets, workspace_id → workspaces)
+- **`wallets`** (14 cols | FK: user_id → users, parent_id → wallets, workspace_id → workspaces)
 - **`workspace_invitations`** (7 cols | FK: invited_by → users, workspace_id → workspaces)
 - **`workspace_members`** (5 cols | FK: user_id → users, workspace_id → workspaces)
 - **`workspaces`** (7 cols | FK: user_id → users)
@@ -32,7 +32,7 @@
 - `admin_list_users()` → TABLE(id uuid, email text, full_name text, avatar_url text, is_admin boolean, created_at timestamp with time zone, last_sign_in timestamp with time zone, espacios integer, invitado boolean) 🔐 *(public/functions_1.md)*
 - `aprender_regla(ws uuid, p_field text, p_pattern text, p_source text DEFAULT NULL::text, p_type text DEFAULT NULL::text, p_category uuid DEFAULT NULL::uuid, p_wallet uuid DEFAULT NULL::uuid, p_match text DEFAULT 'exact'::text)` → uuid 🔐 *(public/functions_1.md)*
 - `avatar_de_metadata(meta jsonb)` → text *(public/functions_1.md)*
-- `billeteras_para_cargar(ws uuid)` → TABLE(id uuid, name text, type text, currency_code text) 🔐 *(public/functions_1.md)*
+- `billeteras_para_cargar(ws uuid)` → TABLE(id uuid, name text, type text, currency_code text, parent_id uuid, allows_deferred_payment boolean) 🔐 *(public/functions_1.md)*
 - `can_see_all(ws uuid)` → boolean 🔐 *(public/functions_1.md)*
 - `check_wallet_depth()` → trigger *(public/functions_1.md)*
 - `check_wallet_is_leaf()` → trigger *(public/functions_1.md)*

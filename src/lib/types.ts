@@ -44,6 +44,12 @@ export interface Account {
   parent_id?: string | null;
   /** La que el formulario propone cuando hay varias hermanas. */
   is_default?: boolean;
+  /**
+   * Desde acá se puede pagar otro día que el del gasto: cheques, cuenta
+   * corriente con un proveedor. Es lo que hace aparecer "Se paga" en un egreso.
+   * Ver DB/046.
+   */
+  allows_deferred_payment?: boolean;
   /** Tiene subcuentas: agrupa y no recibe movimientos. */
   isGroup?: boolean;
   color: string;

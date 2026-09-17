@@ -25,6 +25,17 @@ import { useState, useEffect } from 'react';
 import { parseAmount } from '@/lib/money';
 import { Scale } from 'lucide-react';
 
+/**
+ * Si desde esta billetera se puede pagar otro día que el del gasto.
+ *
+ * "No" primero: es lo común. Una caja del mostrador paga en el acto, y
+ * ofrecerle una fecha de pago sólo agrega un campo al pedo al cargar un gasto.
+ */
+const OPCIONES_PAGOS_A_FECHA = [
+  { value: 'no', label: 'No', hint: 'se paga en el acto' },
+  { value: 'si', label: 'Sí', hint: 'cheques o a cuenta' },
+];
+
 export function AccountForm() {
   const activeSheet = useUIStore((s) => s.activeSheet);
   const sheetData = useUIStore((s) => s.sheetData);
@@ -45,6 +56,7 @@ export function AccountForm() {
   const [type, setType] = useState('bank');
   const [currencyId, setCurrencyId] = useState('ars');
   const [initialBalance, setInitialBalance] = useState('');
+  const [pagosAFecha, setPagosAFecha] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,11 +73,13 @@ export function AccountForm() {
           // Un saldo en cero se muestra vacío, con el placeholder. Antes escribía
           // un "0" literal en el campo, que había que borrar para escribir encima.
           setInitialBalance(acc.initial_balance ? String(acc.initial_balance) : '');
+          setPagosAFecha(acc.allows_deferred_payment === true);
        } else {
           setName('');
           setType('bank');
           setCurrencyId('ars');
           setInitialBalance('');
+          setPagosAFecha(false);
         }
         setError(null);
         setSubmitting(false);
@@ -90,14 +104,16 @@ export function AccountForm() {
             name: name.trim(),
             type: type as any,
             currency_id: currencyId,
-            initial_balance: parsedBalance
+            initial_balance: parsedBalance,
+            allows_deferred_payment: pagosAFecha,
          });
       } else {
          await addAccount({
             name: name.trim(),
             type,
             currency_id: currencyId,
-            initial_balance: parsedBalance
+            initial_balance: parsedBalance,
+            allows_deferred_payment: pagosAFecha,
          });
       }
       closeSheet();
@@ -145,6 +161,18 @@ export function AccountForm() {
                 placeholder="Elegir moneda"
               />
             </Field>
+
+          {/* Decide si en un egreso desde esta billetera aparece "Se paga". No
+              depende del tipo de cuenta: hay cheques del banco, pero también
+              compras a cuenta que se pagan después en efectivo (DB/046). */}
+          <Field label="Pagos a fecha" hint={pagosAFecha ? 'cheques, cuenta corriente' : undefined}>
+            <Picker
+              value={pagosAFecha ? 'si' : 'no'}
+              onValueChange={(v) => setPagosAFecha(v === 'si')}
+              options={OPCIONES_PAGOS_A_FECHA}
+              searchable={false}
+            />
+          </Field>
 
           <Field
             label="Saldo inicial"

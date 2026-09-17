@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-17T13:33:56.364Z
+> Generated: 2026-09-17T13:52:44.684Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 

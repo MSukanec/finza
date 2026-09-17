@@ -18,7 +18,7 @@ import { useAutoFoco } from '@/components/ui/autofocus';
 import { Textarea } from '@/components/ui/textarea';
 import { Field } from '@/components/ui/field';
 import { Picker } from '@/components/ui/picker';
-import { parseAmount, formatMoney } from '@/lib/money';
+import { parseAmount, formatMoney, ofreceFechaDePago } from '@/lib/money';
 import { AlertTriangle } from 'lucide-react';
 import { AttachmentsField } from './attachments-field';
 import { puedeCambiar } from '@/lib/autoria';
@@ -162,9 +162,9 @@ export function TransactionForm() {
   const isTransfer = type === 'transfer';
   // Aporte y retiro: la plata es de un socio, no del negocio.
   const isEquity = type === 'contribution' || type === 'withdrawal';
-  // Sólo un gasto o un ingreso pueden cobrarse o pagarse otro día: hay un
-  // tercero de por medio. Lo demás mueve plata en el acto.
-  const aplazable = type === 'income' || type === 'expense';
+  // Sólo un gasto o un ingreso tienen un comprobante de un tercero (factura,
+  // ticket). Una transferencia entre billeteras propias, no.
+  const conReferencia = type === 'income' || type === 'expense';
 
   const typeCategories = useMemo(
     () => (isTransfer || isEquity ? [] : categories.filter((c) => c.type === type)),
@@ -226,6 +226,9 @@ export function TransactionForm() {
   const account =
     sortedAccounts.find((a) => a.id === accountId) ?? (isEdit ? null : sortedAccounts[0] ?? null);
   const destination = sortedAccounts.find((a) => a.id === destinationAccountId) ?? null;
+
+  // "Se paga" sólo en un egreso desde una billetera que acepta pagos a fecha.
+  const muestraPago = ofreceFechaDePago(type, account, editing?.settles_at);
 
   const currency = currencies.find((c) => c.id === account?.currency_id) || currencies[0];
   const parsedAmount = parseAmount(amount);
@@ -294,10 +297,10 @@ export function TransactionForm() {
         partner_id: isEquity ? partnerId : null,
         // Mediodía local, igual que `date`, para que no se corra un día.
         settles_at:
-          aplazable && settlesAt ? new Date(`${settlesAt}T12:00:00`).toISOString() : null,
+          muestraPago && settlesAt ? new Date(`${settlesAt}T12:00:00`).toISOString() : null,
         // Mismo criterio que la fecha de pago: sólo donde hay un comprobante de
         // por medio. Una transferencia entre billeteras propias no tiene factura.
-        reference: aplazable ? reference.trim() || null : null,
+        reference: conReferencia ? reference.trim() || null : null,
         account_id: account.id,
         destination_account_id: isTransfer ? destination!.id : null,
         description: description.trim() || defaultDescription(type),
@@ -364,7 +367,7 @@ export function TransactionForm() {
                   setCategoryId('');
                 }
                 if (nuevo !== 'contribution' && nuevo !== 'withdrawal') setPartnerId('');
-                if (nuevo !== 'income' && nuevo !== 'expense') setSettlesAt('');
+                if (nuevo !== 'expense') setSettlesAt('');
               }}
               options={TYPES}
               searchable={false}
@@ -380,14 +383,11 @@ export function TransactionForm() {
             />
           </Field>
 
-          {/* La segunda fecha: la del cheque o el pago a plazo.
-              Sólo donde tiene sentido. Un gasto se paga y un ingreso se cobra,
-              y las dos cosas pueden caer otro día. Una transferencia entre
-              billeteras propias, un aporte y un retiro no: esa plata se mueve
-              cuando se mueve, no hay un tercero que la difiera. */}
-          {aplazable && (
+          {/* La segunda fecha: la del cheque o el pago a cuenta. Cuándo
+              aparece, en `muestraPago`. */}
+          {muestraPago && (
             <Field
-              label={type === 'income' ? 'Se cobra' : 'Se paga'}
+              label="Se paga"
               htmlFor="tx-pago"
               hint={
                 settlesAt ? (
@@ -529,7 +529,7 @@ export function TransactionForm() {
             />
           </Field>
 
-          {aplazable && (
+          {conReferencia && (
             <Field label="Referencia" hint="opcional" htmlFor="tx-ref">
               <Input
                 id="tx-ref"
