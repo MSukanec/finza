@@ -320,6 +320,33 @@ const registrar = (nombre, ok, detalle = '') => casos.push({ nombre, ok, detalle
   );
 }
 
+// ------------------------------------------- Orden del formulario de movimiento
+//
+// Decidido con el usuario: Fecha, Tipo, Billetera, Se paga, Monto, y recién
+// después la clasificación. "Se paga" depende de la billetera (DB/046): arriba
+// de ella, cambiar de billetera hacía aparecer un campo por encima de donde se
+// estaba tocando.
+{
+  const { default: fs } = await import('node:fs');
+  const f = fs.readFileSync('src/features/transactions/components/transaction-form.tsx', 'utf8');
+  const posiciones = [
+    ['Fecha', f.indexOf('<Field label="Fecha"')],
+    ['Tipo', f.indexOf('<Field label="Tipo"')],
+    ['Billetera', f.indexOf("<Field label={isTransfer ? 'Desde' : 'Billetera'}")],
+    ['Se paga', f.indexOf('label="Se paga"')],
+    ['Monto', f.indexOf('label="Monto"')],
+    ['Macrogrupo', f.indexOf('<Field label="Macrogrupo"')],
+    ['Categoría', f.indexOf('<Field label="Categoría"')],
+  ];
+  const faltan = posiciones.filter(([, i]) => i < 0).map(([n]) => n);
+  const enOrden = faltan.length === 0 && posiciones.every(([, i], k) => k === 0 || posiciones[k - 1][1] < i);
+  registrar(
+    'Formulario de movimiento: Fecha, Tipo, Billetera, Se paga, Monto, Macrogrupo, Categoría',
+    enOrden,
+    faltan.length ? `faltan: ${faltan.join(', ')}` : [...posiciones].sort((a, b) => a[1] - b[1]).map(([n]) => n).join(' → ')
+  );
+}
+
 let fallas = 0;
 for (const c of casos) {
   if (c.ok) console.log(`OK   ${c.nombre}`);

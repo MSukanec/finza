@@ -181,6 +181,10 @@ export function AccountsView() {
                                         {acc.isGroup
                                           ? `Suma de ${group.accounts.filter((h: any) => h.parent_id === acc.id).length} cajas`
                                           : `${accountTypeLabels[acc.type]} · ${group.currency.code}`}
+                                        {/* Se ve acá y no sólo al editarla: es lo que
+                                            decide si un egreso desde esta billetera
+                                            pregunta "Se paga" (DB/046). */}
+                                        {acc.allows_deferred_payment && !acc.isGroup && ' · pagos a fecha'}
                                       </p>
                                   </div>
                              </div>

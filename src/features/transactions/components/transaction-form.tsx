@@ -249,9 +249,15 @@ export function TransactionForm() {
         label: acc.parent_id
           ? `${nombrePadre.get(acc.parent_id) ?? ''} › ${acc.name}`
           : acc.name,
-        hint: currencies.find((c) => c.id === acc.currency_id)?.code,
+        hint: [
+          currencies.find((c) => c.id === acc.currency_id)?.code,
+          // Anticipa que elegirla va a preguntar "Se paga".
+          acc.allows_deferred_payment && type === 'expense' ? 'a fecha' : null,
+        ]
+          .filter(Boolean)
+          .join(' · '),
       }));
-  }, [sortedAccounts, accounts, currencies]);
+  }, [sortedAccounts, accounts, currencies, type]);
 
   const groupOptions = useMemo(() => groups.map((g) => ({ value: g, label: g })), [groups]);
 
@@ -353,6 +359,21 @@ export function TransactionForm() {
             disabled={soloLectura}
             className="min-w-0 space-y-2 [&_:disabled]:cursor-default [&_:disabled]:!opacity-100"
           >
+          {/* El orden sigue cómo se piensa un gasto y qué depende de qué:
+              la fecha casi nunca se toca; el tipo decide qué campos hay; la
+              billetera decide si aparece "Se paga" (DB/046), así que va
+              pegado debajo de ella y no arriba —cambiar de billetera no hace
+              aparecer ni desaparecer nada por encima de donde se está tocando—;
+              recién después la clasificación. */}
+          <Field label="Fecha" htmlFor="tx-fecha" hint="cuándo pasó">
+            <Input
+              id="tx-fecha"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </Field>
+
           <Field label="Tipo">
             <Picker
               value={type}
@@ -374,14 +395,25 @@ export function TransactionForm() {
             />
           </Field>
 
-          <Field label="Fecha" htmlFor="tx-fecha" hint="cuándo pasó">
-            <Input
-              id="tx-fecha"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
+          <Field label={isTransfer ? 'Desde' : 'Billetera'}>
+            <Picker
+              value={account?.id}
+              onValueChange={setAccountId}
+              options={walletOptions}
+              placeholder="Elegir billetera"
             />
           </Field>
+
+          {isTransfer && (
+            <Field label="Hasta">
+              <Picker
+                value={destination?.id}
+                onValueChange={setDestinationAccountId}
+                options={walletOptions.filter((o) => o.value !== account?.id)}
+                placeholder="Elegir billetera"
+              />
+            </Field>
+          )}
 
           {/* La segunda fecha: la del cheque o el pago a cuenta. Cuándo
               aparece, en `muestraPago`. */}
@@ -414,6 +446,31 @@ export function TransactionForm() {
               />
             </Field>
           )}
+
+          {/* Monto. Texto y no number: un input numérico rechaza la coma, así
+              que "1.234,56" quedaba vacío. Se parsea con parseAmount. */}
+          <Field
+            label="Monto"
+            htmlFor="tx-monto"
+            hint={
+              parsedAmount !== null && parsedAmount > 0
+                ? formatMoney(parsedAmount, currency)
+                : currency?.code
+            }
+          >
+            <Input
+              id="tx-monto"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="0,00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+              className="font-semibold tabular-nums"
+              autoFocus={autoFoco}
+            />
+          </Field>
 
           {isEquity && (
             <Field
@@ -456,26 +513,6 @@ export function TransactionForm() {
             </>
           )}
 
-          <Field label={isTransfer ? 'Desde' : 'Billetera'}>
-            <Picker
-              value={account?.id}
-              onValueChange={setAccountId}
-              options={walletOptions}
-              placeholder="Elegir billetera"
-            />
-          </Field>
-
-          {isTransfer && (
-            <Field label="Hasta">
-              <Picker
-                value={destination?.id}
-                onValueChange={setDestinationAccountId}
-                options={walletOptions.filter((o) => o.value !== account?.id)}
-                placeholder="Elegir billetera"
-              />
-            </Field>
-          )}
-
           {isRecurring && !isTransfer && !isEquity && (
             <Field label="Período" htmlFor="tx-periodo">
               <Input
@@ -486,31 +523,6 @@ export function TransactionForm() {
               />
             </Field>
           )}
-
-          {/* Monto. Texto y no number: un input numérico rechaza la coma, así
-              que "1.234,56" quedaba vacío. Se parsea con parseAmount. */}
-          <Field
-            label="Monto"
-            htmlFor="tx-monto"
-            hint={
-              parsedAmount !== null && parsedAmount > 0
-                ? formatMoney(parsedAmount, currency)
-                : currency?.code
-            }
-          >
-            <Input
-              id="tx-monto"
-              type="text"
-              inputMode="decimal"
-              autoComplete="off"
-              placeholder="0,00"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-              className="font-semibold tabular-nums"
-              autoFocus={autoFoco}
-            />
-          </Field>
 
           <Field label="Descripción" htmlFor="tx-desc">
             <Textarea
