@@ -177,6 +177,14 @@ borrar algo que puede estar en uso dice en qué está usado y deja reemplazarlo.
 - El modal es `BorrarConReemplazo` y es genérico: lo próximo que se pueda borrar
   estando en uso lo usa en vez de inventar otro. `check:ui` falla si una acción
   destructiva se llama sin `dialog.confirm` o sin ese modal.
+- **Billetera** (DB/048, `uso_de_billetera` / `borrar_billetera`): mismo flujo,
+  con tres cosas que no tiene una categoría. El **saldo inicial** se suma al de
+  la que reemplaza —el saldo es inicial más movimientos, y moverlos sin él hace
+  desaparecer plata— y por eso las dos tienen que ser de la **misma moneda**.
+  Los **arqueos** van con los movimientos. Las **subcuentas** quedan sueltas, no
+  se borran, y la que reemplaza no puede ser una que agrupe (no recibe
+  movimientos). Un saldo inicial distinto de cero ya cuenta como "en uso".
+  `npm run check:billeteras`.
 
 ## Vaciar la caja
 

@@ -1,9 +1,9 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-17T15:29:04.694Z
+> Generated: 2026-09-17T21:48:54.883Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Functions (chunk 1: activity_authors — handle_updated_at)
+## [PUBLIC] Functions (chunk 1: activity_authors — handle_new_workspace)
 
 ### `activity_authors(ws uuid)` 🔐
 
@@ -186,6 +186,81 @@ BEGIN
           FROM public.wallets w
          WHERE w.workspace_id = ws AND w.deleted_at IS NULL
          ORDER BY w.name;
+END;
+$function$
+```
+</details>
+
+### `borrar_billetera(billetera uuid, reemplazo uuid DEFAULT NULL::uuid)` 🔐
+
+- **Returns**: jsonb
+- **Kind**: function | VOLATILE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.borrar_billetera(billetera uuid, reemplazo uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+    v_w    public.wallets%ROWTYPE;
+    v_dest public.wallets%ROWTYPE;
+    v_uso  jsonb;
+BEGIN
+    SELECT * INTO v_w FROM public.wallets WHERE id = billetera AND deleted_at IS NULL;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Billetera no encontrada';
+    END IF;
+
+    -- También verifica el acceso.
+    v_uso := public.uso_de_billetera(billetera);
+
+    IF reemplazo IS NULL THEN
+        IF (v_uso->>'total')::int > 0 THEN
+            RAISE EXCEPTION 'La billetera "%" está en uso: elegí con cuál reemplazarla', v_w.name;
+        END IF;
+    ELSE
+        SELECT * INTO v_dest FROM public.wallets WHERE id = reemplazo AND deleted_at IS NULL;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'La billetera de reemplazo no existe';
+        END IF;
+        IF v_dest.id = v_w.id THEN
+            RAISE EXCEPTION 'Una billetera no se puede reemplazar por sí misma';
+        END IF;
+        IF v_dest.workspace_id <> v_w.workspace_id THEN
+            RAISE EXCEPTION 'La billetera de reemplazo es de otro espacio';
+        END IF;
+        IF v_dest.currency_code <> v_w.currency_code THEN
+            RAISE EXCEPTION 'No se puede reemplazar una billetera en % por una en %: los saldos no se pueden sumar',
+                v_w.currency_code, v_dest.currency_code;
+        END IF;
+        -- Una billetera que agrupa no recibe movimientos (DB/037): la base los
+        -- rechazaría de a uno y quedaría todo a medias.
+        IF EXISTS (SELECT 1 FROM public.wallets h WHERE h.parent_id = v_dest.id AND h.deleted_at IS NULL) THEN
+            RAISE EXCEPTION 'La billetera "%" agrupa subcuentas y no recibe movimientos: elegí una de sus cajas', v_dest.name;
+        END IF;
+
+        UPDATE public.transactions SET wallet_id = reemplazo WHERE wallet_id = billetera;
+        UPDATE public.wallet_reconciliations SET wallet_id = reemplazo WHERE wallet_id = billetera;
+        UPDATE public.import_rules SET wallet_id = reemplazo WHERE wallet_id = billetera;
+
+        -- La plata que había antes del primer movimiento sigue existiendo.
+        UPDATE public.wallets
+           SET initial_balance = initial_balance + v_w.initial_balance
+         WHERE id = reemplazo;
+    END IF;
+
+    -- Las subcuentas quedan sueltas, con su saldo. Va después de mover los
+    -- movimientos: si la que reemplaza fuera una de ellas, primero recibe y
+    -- después deja de colgar de la que se borra.
+    UPDATE public.wallets SET parent_id = NULL WHERE parent_id = billetera;
+
+    UPDATE public.wallets SET deleted_at = now() WHERE id = billetera;
+
+    RETURN v_uso;
 END;
 $function$
 ```
@@ -710,28 +785,6 @@ BEGIN
     INSERT INTO public.workspace_members (workspace_id, user_id, role)
     VALUES (NEW.id, NEW.user_id, 'owner')
     ON CONFLICT (workspace_id, user_id) DO NOTHING;
-    RETURN NEW;
-END;
-$function$
-```
-</details>
-
-### `handle_updated_at()` 🔐
-
-- **Returns**: trigger
-- **Kind**: function | VOLATILE | SECURITY DEFINER
-
-<details><summary>Source</summary>
-
-```sql
-CREATE OR REPLACE FUNCTION public.handle_updated_at()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-BEGIN
-    NEW.updated_at = NOW();
     RETURN NEW;
 END;
 $function$

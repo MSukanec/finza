@@ -38,3 +38,35 @@ export function saldoTotal(
 ): number {
   return raices(cuentas).reduce((s, a) => s + convertir(a.balance, a.currency_id), 0);
 }
+
+/** Lo que devuelve `uso_de_billetera` (DB/048). */
+export interface UsoDeBilletera {
+  movimientos: number;
+  movimientos_de_baja: number;
+  arqueos: number;
+  reglas: number;
+  subcuentas: number;
+  saldo_inicial: number | string;
+  total: number;
+}
+
+/**
+ * "345 movimientos, 3 arqueos y un saldo inicial". Vacío si no hay nada.
+ *
+ * El saldo inicial se nombra porque también se migra: si no se dijera, borrar
+ * una billetera con saldo inicial y sin movimientos parecería no costar nada.
+ */
+export function describirUsoDeBilletera(uso: UsoDeBilletera): string {
+  const partes: string[] = [];
+  const plural = (n: number, singular: string, muchos: string) => `${n} ${n === 1 ? singular : muchos}`;
+  if (uso.movimientos) partes.push(plural(uso.movimientos, 'movimiento', 'movimientos'));
+  if (uso.movimientos_de_baja) {
+    partes.push(plural(uso.movimientos_de_baja, 'movimiento dado de baja', 'movimientos dados de baja'));
+  }
+  if (uso.arqueos) partes.push(plural(uso.arqueos, 'arqueo', 'arqueos'));
+  if (uso.reglas) partes.push(plural(uso.reglas, 'regla de importación', 'reglas de importación'));
+  if (uso.subcuentas) partes.push(plural(uso.subcuentas, 'subcuenta', 'subcuentas'));
+  if (Number(uso.saldo_inicial) !== 0) partes.push('un saldo inicial');
+  if (partes.length <= 1) return partes.join('');
+  return `${partes.slice(0, -1).join(', ')} y ${partes[partes.length - 1]}`;
+}

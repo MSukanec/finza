@@ -8,6 +8,7 @@ import { optimizarLogo } from '@/lib/optimizar-imagen';
 import { validarAdjunto, rutaDeAdjunto, tipoDeAdjunto } from '@/lib/adjuntos';
 import { puedeCambiar, SOLO_QUIEN_LO_CARGO } from '@/lib/autoria';
 import { migrarCategoria, planDeBorrarGrupo, type UsoDeCategoria, type UsoDeGrupo } from '@/lib/categorias';
+import type { UsoDeBilletera } from '@/lib/cuentas';
 
 // Todo borrado es lógico: se marca `deleted_at` y la fila queda. Ver DB/021.
 const nowIso = () => new Date().toISOString();
@@ -365,7 +366,14 @@ interface FinanceState {
   removeDebt: (id: string) => Promise<void>;
   addAccount: (acc: any) => Promise<void>;
   updateAccount: (id: string, data: Partial<Account>) => Promise<void>;
-  removeAccount: (id: string) => Promise<void>;
+  /** En qué está usada: movimientos, arqueos, reglas, subcuentas y saldo inicial. */
+  accountUsage: (id: string) => Promise<UsoDeBilletera>;
+  /**
+   * Borra una billetera. Si está en uso, `reemplazoId` es obligatorio: recibe
+   * sus movimientos, arqueos, reglas y su saldo inicial. Sus subcuentas quedan
+   * sueltas. La base se niega a borrar algo en uso sin reemplazo.
+   */
+  removeAccount: (id: string, reemplazoId?: string | null) => Promise<void>;
   
   addCategory: (cat: any) => Promise<void>;
   updateCategory: (id: string, data: Partial<Category>) => Promise<void>;
@@ -1804,20 +1812,55 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     );
   },
 
-  removeAccount: async (id) => {
-    const before = get().accounts.find((a) => a.id === id);
-    if (!before) return;
+  accountUsage: async (id) => {
+    const { data, error } = await supabase.rpc('uso_de_billetera', { billetera: id });
+    if (error) throw error;
+    return data as UsoDeBilletera;
+  },
 
-    optimistic(
-      'accounts',
-      (list) => list.filter((a: Account) => a.id !== id),
-      (list) => [...list, before],
-      async () => {
-        const { error } = await supabase.from('wallets').update({ deleted_at: nowIso() }).eq('id', id);
-        if (error) throw error;
-      },
-      'No se pudo eliminar la billetera.'
-    );
+  removeAccount: async (id, reemplazoId) => {
+    const antes = get();
+    const cuenta = antes.accounts.find((a) => a.id === id);
+    if (!cuenta) return;
+
+    // Lo que se va a tocar, para deshacer exactamente eso si la base se niega.
+    const movidos = new Set(antes.transactions.filter((t) => t.account_id === id).map((t) => t.id));
+    const hijas = antes.accounts.filter((a) => a.parent_id === id).map((a) => a.id);
+    const destinoAntes = reemplazoId ? antes.accounts.find((a) => a.id === reemplazoId) : undefined;
+
+    set((st) => {
+      const cuentas = st.accounts
+        .filter((a) => a.id !== id)
+        // Las subcuentas quedan sueltas, igual que en la base.
+        .map((a) => (a.parent_id === id ? { ...a, parent_id: null } : a))
+        // El saldo inicial se suma: si no, desaparece plata que existe.
+        .map((a) =>
+          a.id === reemplazoId
+            ? { ...a, initial_balance: (a.initial_balance ?? 0) + (cuenta.initial_balance ?? 0) }
+            : a
+        );
+      const movimientos = reemplazoId
+        ? st.transactions.map((t) => (t.account_id === id ? { ...t, account_id: reemplazoId } : t))
+        : st.transactions;
+      return { accounts: withBalances(cuentas, movimientos), transactions: movimientos };
+    });
+
+    const { error } = await supabase.rpc('borrar_billetera', { billetera: id, reemplazo: reemplazoId ?? null });
+    if (!error) return;
+
+    console.error('No se pudo eliminar la billetera', error);
+    set((st) => {
+      const cuentas = st.accounts
+        .map((a) => (hijas.includes(a.id) ? { ...a, parent_id: id } : a))
+        .map((a) => (a.id === reemplazoId && destinoAntes ? destinoAntes : a));
+      const movimientos = st.transactions.map((t) => (movidos.has(t.id) ? { ...t, account_id: id } : t));
+      return {
+        accounts: withBalances(cuentas.some((a) => a.id === id) ? cuentas : [...cuentas, cuenta], movimientos),
+        transactions: movimientos,
+      };
+    });
+    // El mensaje de la base está escrito para quien lo lee.
+    toast.error(error.message || 'No se pudo eliminar la billetera.');
   },
 
   // === CATEGORIES ===

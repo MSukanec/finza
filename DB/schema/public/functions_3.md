@@ -1,9 +1,101 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-17T15:29:04.694Z
+> Generated: 2026-09-17T21:48:54.883Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
-## [PUBLIC] Functions (chunk 3: uso_de_categoria — workspace_role)
+## [PUBLIC] Functions (chunk 3: transferir_categoria — workspace_role)
+
+### `transferir_categoria(origen uuid, destino uuid)` 🔐
+
+- **Returns**: integer
+- **Kind**: function | VOLATILE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.transferir_categoria(origen uuid, destino uuid)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+    v_ws_origen  uuid;
+    v_ws_destino uuid;
+    v_filas      integer;
+BEGIN
+    SELECT workspace_id INTO v_ws_origen  FROM public.categories WHERE id = origen;
+    SELECT workspace_id INTO v_ws_destino FROM public.categories WHERE id = destino;
+
+    IF v_ws_origen IS NULL OR v_ws_destino IS NULL THEN
+        RAISE EXCEPTION 'Categoría no encontrada';
+    END IF;
+    IF v_ws_origen <> v_ws_destino THEN
+        RAISE EXCEPTION 'Las dos categorías tienen que ser del mismo espacio';
+    END IF;
+    IF NOT public.can_see_all(v_ws_origen) THEN
+        RAISE EXCEPTION 'No tenés acceso para reorganizar las categorías de este espacio';
+    END IF;
+
+    UPDATE public.transactions
+       SET category_id = destino
+     WHERE category_id = origen
+       AND workspace_id = v_ws_origen;
+    GET DIAGNOSTICS v_filas = ROW_COUNT;
+
+    RETURN v_filas;
+END;
+$function$
+```
+</details>
+
+### `uso_de_billetera(billetera uuid)` 🔐
+
+- **Returns**: jsonb
+- **Kind**: function | STABLE | SECURITY DEFINER
+
+<details><summary>Source</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION public.uso_de_billetera(billetera uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+    v_ws uuid;
+    v    jsonb;
+BEGIN
+    SELECT workspace_id INTO v_ws FROM public.wallets WHERE id = billetera AND deleted_at IS NULL;
+    IF v_ws IS NULL THEN
+        RAISE EXCEPTION 'Billetera no encontrada';
+    END IF;
+    IF NOT public.can_see_all(v_ws) THEN
+        RAISE EXCEPTION 'No tenés acceso para administrar las billeteras de este espacio';
+    END IF;
+
+    SELECT jsonb_build_object(
+        'movimientos',         (SELECT count(*) FROM public.transactions t WHERE t.wallet_id = billetera AND t.deleted_at IS NULL),
+        'movimientos_de_baja', (SELECT count(*) FROM public.transactions t WHERE t.wallet_id = billetera AND t.deleted_at IS NOT NULL),
+        'arqueos',             (SELECT count(*) FROM public.wallet_reconciliations r WHERE r.wallet_id = billetera AND r.deleted_at IS NULL),
+        'reglas',              (SELECT count(*) FROM public.import_rules i WHERE i.wallet_id = billetera AND i.deleted_at IS NULL),
+        'subcuentas',          (SELECT count(*) FROM public.wallets h WHERE h.parent_id = billetera AND h.deleted_at IS NULL),
+        'saldo_inicial',       (SELECT initial_balance FROM public.wallets WHERE id = billetera)
+    ) INTO v;
+
+    RETURN v || jsonb_build_object(
+        'total',
+        (v->>'movimientos')::int + (v->>'movimientos_de_baja')::int + (v->>'arqueos')::int
+        + (v->>'reglas')::int + (v->>'subcuentas')::int
+        -- Un saldo inicial distinto de cero también es "estar en uso": si se
+        -- borrara sin más, ese dinero desaparecería del total del espacio.
+        + CASE WHEN (v->>'saldo_inicial')::numeric <> 0 THEN 1 ELSE 0 END
+    );
+END;
+$function$
+```
+</details>
 
 ### `uso_de_categoria(cat uuid)` 🔐
 

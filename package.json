@@ -14,6 +14,7 @@
     "check:permisos": "node scripts/check-permisos.mjs",
     "check:adjuntos": "node scripts/check-adjuntos.mjs",
     "check:categorias": "node scripts/check-categorias.mjs",
+    "check:billeteras": "node scripts/check-billeteras.mjs",
     "start": "next start",
     "lint": "eslint",
     "db:sql": "node scripts/db.mjs",

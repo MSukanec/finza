@@ -264,6 +264,27 @@ const registrar = (nombre, ok, detalle = '') => casos.push({ nombre, ok, detalle
   // Borrar con reemplazo toca movimientos de todos, deudas, presupuestos y
   // reglas: va por las funciones de la base (DB/047), que lo hacen en una sola
   // transacción. Un UPDATE directo movería sólo los movimientos propios.
+  // Borrar una billetera se lleva movimientos, arqueos y el saldo inicial: va
+  // por la función (DB/048), que lo hace todo en una transacción y suma el
+  // saldo inicial al de la que reemplaza.
+  registrar(
+    'Borrar billeteras usa la función de la base',
+    (() => {
+      const desde = store.indexOf('  accountUsage: async');
+      const hasta = store.indexOf('  // === CATEGORIES ===');
+      const tramo = store.slice(desde, hasta);
+      return desde > 0 && hasta > desde && tramo.includes("rpc('borrar_billetera'") &&
+        !/from\('wallets'\)\s*\.update\(\{\s*deleted_at/.test(tramo);
+    })()
+  );
+  registrar(
+    'La pantalla de billeteras ofrece borrar, con reemplazo',
+    (() => {
+      const vista = fs.readFileSync('src/features/accounts/views/accounts-view.tsx', 'utf8');
+      return vista.includes('BorrarConReemplazo') && vista.includes('removeAccount(');
+    })()
+  );
+
   registrar(
     'Borrar categorías y grupos usa las funciones de la base, no UPDATEs',
     (() => {

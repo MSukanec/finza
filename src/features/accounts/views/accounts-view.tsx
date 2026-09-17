@@ -7,16 +7,22 @@ import { getIcon } from '@/lib/icons';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { EXCHANGE_RATES } from '@/lib/mock-data';
-import { Plus, TrendingUp, Wallet, Scale } from 'lucide-react';
+import { Plus, TrendingUp, Wallet, Scale, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useUIStore } from '@/stores/ui-store';
 import { cn } from '@/lib/utils';
 import { PageLayout } from '@/components/layout/page-layout';
 import { Kpi } from '@/components/ui/panel';
+import { BorrarConReemplazo } from '@/components/borrar-con-reemplazo';
+import { describirUsoDeBilletera } from '@/lib/cuentas';
+import type { Account } from '@/lib/types';
 
 // Native UI Accordion Helper Component (Same pattern used in Categories)
 export function AccountsView() {
   const reconciliations = useFinanceStore((s) => s.reconciliations);
+  const accountUsage = useFinanceStore((s) => s.accountUsage);
+  const removeAccount = useFinanceStore((s) => s.removeAccount);
+  const [borrando, setBorrando] = useState<Account | null>(null);
 
   /** Último arqueo por billetera, para mostrarlo y para marcar pendientes. */
   const lastByWallet = useMemo(() => {
@@ -71,6 +77,24 @@ export function AccountsView() {
   };
 
   // Group accounts by currency
+  /**
+   * Con qué se puede reemplazar una billetera al borrarla.
+   *
+   * Misma moneda (los saldos se suman) y sólo las que reciben movimientos: una
+   * que agrupa subcuentas no puede, y la base lo rechaza.
+   */
+  const opcionesDeReemplazo = (cuenta: Account) => {
+    const agrupan = new Set(accounts.map((a) => a.parent_id).filter(Boolean) as string[]);
+    const nombrePadre = new Map(accounts.map((a) => [a.id, a.name]));
+    return accounts
+      .filter((a) => a.id !== cuenta.id && a.currency_id === cuenta.currency_id && !agrupan.has(a.id))
+      .map((a) => ({
+        value: a.id,
+        label: a.parent_id ? `${nombrePadre.get(a.parent_id) ?? ''} › ${a.name}` : a.name,
+      }))
+      .sort((x, y) => x.label.localeCompare(y.label));
+  };
+
   const groupedAccounts = useMemo(() => {
      const groupsMap = new Map<string, { currency: any, total: number, accounts: any[] }>();
 
@@ -257,6 +281,22 @@ export function AccountsView() {
                                      </span>
                                  </button>
                                  )}
+
+                                 {/* Borrar una billetera no es borrar un nombre: se lleva
+                                     movimientos, arqueos y el saldo inicial. Por eso pasa
+                                     por el modal que dice en qué está usada y pide con cuál
+                                     reemplazarla (DB/048). */}
+                                 <button
+                                     onClick={(e) => {
+                                         e.stopPropagation();
+                                         setBorrando(acc);
+                                     }}
+                                     aria-label={`Eliminar ${acc.name}`}
+                                     title="Eliminar billetera"
+                                     className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                                 >
+                                     <Trash2 className="size-4" />
+                                 </button>
                              </div>
                          </div>
                      );
@@ -264,6 +304,24 @@ export function AccountsView() {
                </div>
              </SimpleAccordion>
          ))}
+
+         {borrando && (
+             <BorrarConReemplazo
+                 abierto
+                 onCerrar={() => setBorrando(null)}
+                 titulo="Eliminar billetera"
+                 nombre={borrando.name}
+                 cargarUso={async () => {
+                     const uso = await accountUsage(borrando.id);
+                     return { total: uso.total, descripcion: describirUsoDeBilletera(uso) };
+                 }}
+                 opciones={opcionesDeReemplazo(borrando)}
+                 etiquetaReemplazo="Pasar todo a"
+                 explicacionReemplazo="Sus movimientos, arqueos y su saldo inicial pasan a la que elijas; sus subcuentas, si tiene, quedan sueltas."
+                 sinOpciones={`No hay otra billetera en ${borrando.currency_id.toUpperCase()} que pueda recibir sus movimientos. Creá una primero.`}
+                 onConfirmar={(reemplazo) => void removeAccount(borrando.id, reemplazo)}
+             />
+         )}
 
          {groupedAccounts.length === 0 && (
              <div className="text-center py-12 border border-dashed border-border rounded-2xl">
