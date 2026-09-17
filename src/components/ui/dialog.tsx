@@ -7,8 +7,30 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
-function Dialog({ ...props }: DialogPrimitive.Root.Props) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+/**
+ * Un clic afuera NO cierra el modal.
+ *
+ * Pedido del usuario: un formulario a medio cargar no se puede perder por un
+ * clic al costado. Se cierra con la X, con Cancelar, con Escape o guardando.
+ *
+ * Va acá, en la raíz, y no en el contenido: Base UI decide el cierre en la
+ * raíz y avisa por qué (`outside-press`); cancelar ese motivo es todo. Al
+ * estar acá, vale para cada modal de la app sin que ninguno se acuerde.
+ */
+function Dialog({ onOpenChange, ...props }: DialogPrimitive.Root.Props) {
+  return (
+    <DialogPrimitive.Root
+      data-slot="dialog"
+      {...props}
+      onOpenChange={(abierto, detalle) => {
+        if (!abierto && detalle.reason === 'outside-press') {
+          detalle.cancel()
+          return
+        }
+        onOpenChange?.(abierto, detalle)
+      }}
+    />
+  )
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {

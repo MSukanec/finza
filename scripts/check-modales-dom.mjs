@@ -53,6 +53,9 @@ async function entorno(ancho) {
 const textoVisible = (t) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === t);
 
 async function tocar(act, el) {
+  // Si lo que hay que tocar no está, la prueba tiene que FALLAR con su nombre,
+  // no cortarse con un error de JavaScript tres pasos después.
+  if (!el) return false;
   await act(async () => {
     for (const tipo of ['pointerdown', 'mousedown', 'pointerup', 'mouseup']) {
       el.dispatchEvent(new MouseEvent(tipo, { bubbles: true, cancelable: true }));
@@ -60,6 +63,7 @@ async function tocar(act, el) {
     el.click();
   });
   await act(async () => espera(150));
+  return true;
 }
 
 // ---------------------------------------------------------------- 1. confirmación encima de un modal
@@ -110,6 +114,57 @@ for (const [nombre, ancho] of [['escritorio', 1280], ['teléfono', 390]]) {
   await tocar(act, textoVisible('Quitar'));
   registrar(`${nombre}: confirmar responde que sí`, respuesta === true, String(respuesta));
   registrar(`${nombre}: confirmar NO cierra el formulario`, formularioAbierto());
+
+  await act(async () => raiz.unmount());
+  await GlobalRegistrator.unregister();
+}
+
+// ---------------------------------------------------------------- 1.b un clic afuera no cierra
+//
+// Pedido del usuario: un formulario a medio cargar no se pierde por un clic al
+// costado. Cerrar sigue siendo la X, Cancelar, Escape o guardar.
+for (const [nombre, ancho] of [['escritorio', 1280], ['teléfono', 390]]) {
+  const { React, act, createRoot } = await entorno(ancho);
+  const modal = await import('../src/components/ui/responsive-modal.tsx');
+
+  function Formulario() {
+    const [abierto, setAbierto] = React.useState(true);
+    return React.createElement(
+      modal.ResponsiveModal,
+      { open: abierto, onOpenChange: setAbierto },
+      React.createElement(
+        modal.ResponsiveModalContent,
+        null,
+        React.createElement(modal.ResponsiveModalHeader, null,
+          React.createElement(modal.ResponsiveModalTitle, null, 'Nuevo movimiento')),
+        React.createElement(modal.ResponsiveModalBody, null,
+          React.createElement('p', { 'data-prueba': 'formulario' }, 'lo que se estaba cargando')),
+        React.createElement(modal.ResponsiveModalFooter, null,
+          React.createElement('button', { type: 'button', onClick: () => setAbierto(false) }, 'Guardar'))
+      )
+    );
+  }
+
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const raiz = createRoot(host);
+  await act(async () => raiz.render(React.createElement(Formulario)));
+  await act(async () => espera(100));
+
+  const abierto = () => !!document.querySelector('[data-prueba=formulario]');
+  registrar(`${nombre}: el modal arranca abierto`, abierto());
+
+  // El fondo oscuro: lo que se toca cuando uno hace clic "afuera".
+  const fondo = document.querySelector('[data-slot=dialog-overlay], [data-slot=drawer-overlay]');
+  registrar(`${nombre}: hay un fondo para tocar`, !!fondo);
+  if (fondo) {
+    await tocar(act, fondo);
+    registrar(`${nombre}: tocar afuera NO cierra el modal`, abierto());
+  }
+
+  // Y lo que sí tiene que cerrar, sigue cerrando.
+  const seToco = await tocar(act, textoVisible('Guardar'));
+  registrar(`${nombre}: guardar sí cierra`, seToco && !abierto(), seToco ? '' : 'el modal ya no estaba');
 
   await act(async () => raiz.unmount());
   await GlobalRegistrator.unregister();
