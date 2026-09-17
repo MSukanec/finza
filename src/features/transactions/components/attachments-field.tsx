@@ -77,7 +77,7 @@ export function AttachmentsField({
 
   return (
     <div className="space-y-1.5">
-      <Field label="Comprobantes" hint={cantidad > 0 && !soloLectura ? String(cantidad) : undefined}>
+      <Field label="Comprobantes">
         {soloLectura ? (
           <p className="text-right text-base text-muted-foreground md:text-[15px]">
             {cantidad === 0 ? 'Ninguno' : cantidad === 1 ? '1 archivo' : `${cantidad} archivos`}

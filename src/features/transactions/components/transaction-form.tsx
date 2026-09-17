@@ -14,11 +14,12 @@ import {
 } from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/date-input';
 import { useAutoFoco } from '@/components/ui/autofocus';
 import { Textarea } from '@/components/ui/textarea';
 import { Field } from '@/components/ui/field';
 import { Picker } from '@/components/ui/picker';
-import { parseAmount, formatMoney, ofreceFechaDePago } from '@/lib/money';
+import { parseAmount, ofreceFechaDePago } from '@/lib/money';
 import { AlertTriangle } from 'lucide-react';
 import { AttachmentsField } from './attachments-field';
 import { puedeCambiar } from '@/lib/autoria';
@@ -230,7 +231,6 @@ export function TransactionForm() {
   // "Se paga" sólo en un egreso desde una billetera que acepta pagos a fecha.
   const muestraPago = ofreceFechaDePago(type, account, editing?.settles_at);
 
-  const currency = currencies.find((c) => c.id === account?.currency_id) || currencies[0];
   const parsedAmount = parseAmount(amount);
 
   // Transferir entre monedas distintas necesita una cotización que el formulario
@@ -365,13 +365,8 @@ export function TransactionForm() {
               pegado debajo de ella y no arriba —cambiar de billetera no hace
               aparecer ni desaparecer nada por encima de donde se está tocando—;
               recién después la clasificación. */}
-          <Field label="Fecha" htmlFor="tx-fecha" hint="cuándo pasó">
-            <Input
-              id="tx-fecha"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
+          <Field label="Fecha" htmlFor="tx-fecha">
+            <DateInput id="tx-fecha" value={date} onChange={setDate} />
           </Field>
 
           <Field label="Tipo">
@@ -418,46 +413,18 @@ export function TransactionForm() {
           {/* La segunda fecha: la del cheque o el pago a cuenta. Cuándo
               aparece, en `muestraPago`. */}
           {muestraPago && (
-            <Field
-              label="Se paga"
-              htmlFor="tx-pago"
-              hint={
-                settlesAt ? (
-                  <button
-                    type="button"
-                    onClick={() => setSettlesAt('')}
-                    className="font-medium text-primary hover:underline"
-                  >
-                    contado
-                  </button>
-                ) : (
-                  'contado'
-                )
-              }
-            >
-              {/* Sin `min`: pagar por adelantado existe. En los datos hay un
-                  servicio de mayo pagado en marzo por $666.000. Poner el pago
-                  siempre después del hecho bloquearía un caso real. */}
-              <Input
-                id="tx-pago"
-                type="date"
-                value={settlesAt}
-                onChange={(e) => setSettlesAt(e.target.value)}
-              />
+            <Field label="Se paga" htmlFor="tx-pago">
+              {/* Vacío es contado: el placeholder lo dice. Para volver a
+                  contado se borra la fecha desde el calendario.
+                  Sin `min`: pagar por adelantado existe. En los datos hay un
+                  servicio de mayo pagado en marzo por $666.000. */}
+              <DateInput id="tx-pago" value={settlesAt} onChange={setSettlesAt} placeholder="Contado" />
             </Field>
           )}
 
           {/* Monto. Texto y no number: un input numérico rechaza la coma, así
               que "1.234,56" quedaba vacío. Se parsea con parseAmount. */}
-          <Field
-            label="Monto"
-            htmlFor="tx-monto"
-            hint={
-              parsedAmount !== null && parsedAmount > 0
-                ? formatMoney(parsedAmount, currency)
-                : currency?.code
-            }
-          >
+          <Field label="Monto" htmlFor="tx-monto">
             <Input
               id="tx-monto"
               type="text"
@@ -515,12 +482,7 @@ export function TransactionForm() {
 
           {isRecurring && !isTransfer && !isEquity && (
             <Field label="Período" htmlFor="tx-periodo">
-              <Input
-                id="tx-periodo"
-                type="month"
-                value={periodMonth}
-                onChange={(e) => setPeriodMonth(e.target.value)}
-              />
+              <DateInput id="tx-periodo" type="month" value={periodMonth} onChange={setPeriodMonth} />
             </Field>
           )}
 
@@ -542,7 +504,7 @@ export function TransactionForm() {
           </Field>
 
           {conReferencia && (
-            <Field label="Referencia" hint="opcional" htmlFor="tx-ref">
+            <Field label="Referencia" htmlFor="tx-ref">
               <Input
                 id="tx-ref"
                 placeholder="FC 1083"

@@ -24,6 +24,12 @@ function useAnclaDelCampo(): HTMLElement | null {
 /**
  * Campo canónico de los formularios.
  *
+ * Izquierda: SÓLO el título. Derecha: SÓLO el dato, o su placeholder si está
+ * vacío. Nada más en la fila — ni "opcional", ni la moneda, ni "cuándo pasó".
+ * Tenía una prop `hint` para eso y se sacó a pedido del usuario: esos textos
+ * competían con el dato y la fila dejaba de leerse de un vistazo. Lo que haga
+ * falta decir va en el placeholder.
+ *
  * Una fila: la etiqueta a la izquierda, el valor a la derecha. Nada de
  * etiqueta arriba y control abajo — eso duplicaba el alto de cada campo sin
  * agregar información, y un formulario de siete campos terminaba pidiendo
@@ -35,15 +41,12 @@ function useAnclaDelCampo(): HTMLElement | null {
  */
 function Field({
   label,
-  hint,
   error,
   htmlFor,
   className,
   children,
 }: {
   label: string;
-  /** Sufijo corto pegado al valor: la moneda, un atajo. */
-  hint?: React.ReactNode;
   error?: string | null;
   htmlFor?: string;
   className?: string;
@@ -88,7 +91,9 @@ function Field({
           '[&_[data-slot=textarea]]:rounded-none [&_[data-slot=textarea]]:border-0 [&_[data-slot=textarea]]:bg-transparent [&_[data-slot=textarea]]:px-0 [&_[data-slot=textarea]]:py-2.5 [&_[data-slot=textarea]]:text-base [&_[data-slot=textarea]]:md:text-[15px] [&_[data-slot=textarea]]:shadow-none [&_[data-slot=textarea]]:focus-visible:ring-0',
           '[&_[data-slot=picker-trigger]]:h-auto [&_[data-slot=picker-trigger]]:rounded-none [&_[data-slot=picker-trigger]]:border-0 [&_[data-slot=picker-trigger]]:bg-transparent [&_[data-slot=picker-trigger]]:px-0 [&_[data-slot=picker-trigger]]:py-2 [&_[data-slot=picker-trigger]]:text-base [&_[data-slot=picker-trigger]]:md:text-[15px] [&_[data-slot=picker-trigger]]:focus-visible:ring-0',
           // El texto del desplegable también va a la derecha, pegado a su flecha.
-          '[&_[data-slot=picker-trigger]>span]:text-right'
+          '[&_[data-slot=picker-trigger]>span]:text-right',
+          // La fecha la dibuja DateInput: ya viene alineada a la derecha.
+          '[&_[data-slot=date-input]]:w-full'
         )}
       >
         <label
@@ -101,10 +106,6 @@ function Field({
         <div className="min-w-0 flex-1">
           <AnclaDelCampo.Provider value={fila}>{children}</AnclaDelCampo.Provider>
         </div>
-
-        {hint && (
-          <span className="shrink-0 text-xs text-muted-foreground">{hint}</span>
-        )}
       </div>
 
       {error && <p className="mt-1 px-1 text-xs text-destructive">{error}</p>}

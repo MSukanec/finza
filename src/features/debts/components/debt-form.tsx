@@ -106,7 +106,7 @@ export function DebtForm() {
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
         <ResponsiveModalBody className="space-y-3">
-          <Field label="Nombre" hint="También es la subcategoría" htmlFor="deuda-nombre">
+          <Field label="Nombre" htmlFor="deuda-nombre">
             <Input
               id="deuda-nombre"
               value={name}
@@ -116,7 +116,7 @@ export function DebtForm() {
             />
           </Field>
 
-            <Field label="Total adeudado" hint="Monto fijo" htmlFor="deuda-total">
+            <Field label="Total adeudado" htmlFor="deuda-total">
               <Input
                 id="deuda-total"
                 type="text"
@@ -140,7 +140,7 @@ export function DebtForm() {
               />
             </Field>
 
-          <Field label="Detalle" hint="Opcional" htmlFor="deuda-detalle">
+          <Field label="Detalle" htmlFor="deuda-detalle">
             <Textarea
               id="deuda-detalle"
               value={description}

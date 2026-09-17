@@ -46,12 +46,16 @@ const registrar = (nombre, ok, detalle = '') => casos.push({ nombre, ok, detalle
   const html = renderToStaticMarkup(
     React.createElement(
       Field,
+      // `hint` a propósito: el campo ya no lo acepta y no lo tiene que dibujar.
       { label: 'Monto', hint: 'ARS', htmlFor: 'x' },
       React.createElement(Input, { id: 'x', defaultValue: '100' })
     )
   );
   registrar('Field asocia la etiqueta con el control', html.includes('for="x"'));
-  registrar('Field muestra el hint', html.includes('ARS'));
+  // Pedido del usuario: a la izquierda sólo el título, a la derecha sólo el
+  // dato o su placeholder. "cuándo pasó", "contado", "opcional", la moneda:
+  // afuera.
+  registrar('Field no dibuja textos al costado del dato', !html.includes('ARS'));
   registrar('Field marca el foco en el contenedor', html.includes('focus-within:'));
 }
 
@@ -345,6 +349,29 @@ const registrar = (nombre, ok, detalle = '') => casos.push({ nombre, ok, detalle
     enOrden,
     faltan.length ? `faltan: ${faltan.join(', ')}` : [...posiciones].sort((a, b) => a[1] - b[1]).map(([n]) => n).join(' → ')
   );
+}
+
+// ------------------------------------------- Fechas dentro de un campo
+//
+// El <input type="date"> nativo ignora la alineación y dejaba la fecha pegada a
+// la etiqueta. Dentro de un formulario se usa DateInput, que la dibuja a la
+// derecha como cualquier otro dato.
+{
+  const { default: fs } = await import('node:fs');
+  const nativas = [];
+  const recorrer = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const ruta = `${dir}/${e.name}`;
+      if (e.isDirectory()) recorrer(ruta);
+      else if (e.name.endsWith('-form.tsx') || e.name === 'attachments-field.tsx') {
+        const src = fs.readFileSync(ruta, 'utf8');
+        // Un <Input> o <input> con type de fecha; `<DateInput type="month">` es el bueno.
+        if (/<[Ii]nput\s[^>]*type="(date|month)"/.test(src)) nativas.push(ruta.replace('src/', ''));
+      }
+    }
+  };
+  recorrer('src/features');
+  registrar('Ningún formulario usa la fecha nativa: usan DateInput', nativas.length === 0, nativas.join(', '));
 }
 
 let fallas = 0;

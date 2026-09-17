@@ -133,17 +133,13 @@ export function PartnerForm() {
                 />
               </Field>
 
-              <Field
-                label="Participación"
-                hint={`Queda ${disponible.toLocaleString('es-AR')}%`}
-                htmlFor="socio-pct"
-              >
+              <Field label="Participación" htmlFor="socio-pct">
                 <Input
                   id="socio-pct"
                   type="text"
                   inputMode="decimal"
                   autoComplete="off"
-                  placeholder="0"
+                  placeholder={`Queda ${disponible.toLocaleString('es-AR')}%`}
                   className="tabular-nums"
                   value={pct}
                   onChange={(e) => setPct(e.target.value)}
@@ -153,7 +149,7 @@ export function PartnerForm() {
             {/* El socio existe antes que la cuenta: se carga con nombre y recién
                 cuando la persona se registra en la app se las vincula. */}
             {isEdit && (
-              <Field label="Usuario de la app" hint="Opcional">
+              <Field label="Usuario de la app">
                 <Picker
                   value={userId}
                   onValueChange={setUserId}
@@ -164,7 +160,7 @@ export function PartnerForm() {
               </Field>
             )}
 
-            <Field label="Nota" hint="Opcional" htmlFor="socio-nota">
+            <Field label="Nota" htmlFor="socio-nota">
               <Textarea
                 id="socio-nota"
                 value={notes}

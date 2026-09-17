@@ -164,11 +164,7 @@ export function ReconciliationForm() {
             <>
               {/* La billetera ya está en el título del modal: repetirla acá
                   hacía una etiqueta tan larga que se comía la fila entera. */}
-              <Field
-                label="Contás"
-                htmlFor="arqueo-monto"
-                hint={parsed !== null ? formatMoney(parsed, currency) : currency?.code}
-              >
+              <Field label="Contás" htmlFor="arqueo-monto">
                 <Input
                   id="arqueo-monto"
                   type="text"
@@ -183,7 +179,7 @@ export function ReconciliationForm() {
                 />
               </Field>
 
-              <Field label="Nota" hint="Opcional" htmlFor="arqueo-nota">
+              <Field label="Nota" htmlFor="arqueo-nota">
                 <Textarea
                   id="arqueo-nota"
                   placeholder="Ej: contado con Joel al cierre"

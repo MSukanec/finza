@@ -165,7 +165,7 @@ export function AccountForm() {
           {/* Decide si en un egreso desde esta billetera aparece "Se paga". No
               depende del tipo de cuenta: hay cheques del banco, pero también
               compras a cuenta que se pagan después en efectivo (DB/046). */}
-          <Field label="Pagos a fecha" hint={pagosAFecha ? 'cheques, cuenta corriente' : undefined}>
+          <Field label="Pagos a fecha">
             <Picker
               value={pagosAFecha ? 'si' : 'no'}
               onValueChange={(v) => setPagosAFecha(v === 'si')}
@@ -174,11 +174,7 @@ export function AccountForm() {
             />
           </Field>
 
-          <Field
-            label="Saldo inicial"
-            hint={isEdit ? 'punto de partida' : 'lo que hay hoy'}
-            htmlFor="acc-saldo"
-          >
+          <Field label="Saldo inicial" htmlFor="acc-saldo">
             <Input
               id="acc-saldo"
               type="text"
