@@ -134,7 +134,18 @@ try {
   )).rowCount;
   ok('puede corregir un movimiento suyo', editadas === 1);
 
+  // Recordar el último espacio abierto (DB/049) es escribir en la propia fila.
+  const recordo = (await c.query(
+    'update public.users set last_workspace_id = $1 where id = public.current_user_id()', [WS]
+  )).rowCount;
+  ok('puede recordar en qué espacio estaba', recordo === 1);
+
   console.log('\n--- lo que NO tiene que poder ---\n');
+
+  const tocoOtraCuenta = (await c.query(
+    'update public.users set last_workspace_id = $1 where id = $2', [WS, DUENIO]
+  )).rowCount;
+  ok('no puede cambiar en qué espacio arranca otra persona', tocoOtraCuenta === 0, `afectó ${tocoOtraCuenta}`);
 
   const ve = await cuantas(
     'select count(*) as n from public.transactions where workspace_id=$1 and deleted_at is null', [WS]

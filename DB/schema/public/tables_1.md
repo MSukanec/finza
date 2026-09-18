@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-17T21:48:54.883Z
+> Generated: 2026-09-18T12:53:26.719Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -208,6 +208,7 @@
 | updated_at | timestamptz | ✗ | now() |  |
 | is_admin | bool | ✗ | false |  |
 | avatar_url | text | ✓ |  |  |
+| last_workspace_id | uuid | ✓ |  | FK → workspaces.id |
 
 ### `wallet_reconciliations`
 

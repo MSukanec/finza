@@ -9,6 +9,7 @@ import { validarAdjunto, rutaDeAdjunto, tipoDeAdjunto } from '@/lib/adjuntos';
 import { puedeCambiar, SOLO_QUIEN_LO_CARGO } from '@/lib/autoria';
 import { migrarCategoria, planDeBorrarGrupo, type UsoDeCategoria, type UsoDeGrupo } from '@/lib/categorias';
 import type { UsoDeBilletera } from '@/lib/cuentas';
+import { elegirEspacio } from '@/lib/espacios';
 
 // Todo borrado es lógico: se marca `deleted_at` y la fila queda. Ver DB/021.
 const nowIso = () => new Date().toISOString();
@@ -447,12 +448,16 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
 
     // --- Workspaces (Espacios) ---
     // RLS ya devuelve solo los espacios donde soy miembro: propios y compartidos.
-    const { data: userData } = await supabase.from('users').select('id, is_admin').eq('auth_id', session.user.id).single();
+    const { data: userData } = await supabase
+      .from('users')
+      .select('id, is_admin, last_workspace_id')
+      .eq('auth_id', session.user.id)
+      .single();
     const appUserId: string | null = userData?.id ?? null;
     set({ appUserId, isAdmin: userData?.is_admin === true });
 
     let workspaces: Workspace[] = [];
-    let currentWorkspaceId: string | null = get().currentWorkspaceId || readWs();
+    let currentWorkspaceId: string | null = null;
 
     const [wsRes, memRes] = await Promise.all([
       supabase.from('workspaces').select('id,name,logo_url,created_at').is('deleted_at', null).order('created_at', { ascending: true }),
@@ -481,10 +486,23 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
       if (created) workspaces = [{ id: created.id, name: created.name, created_at: created.created_at, role: 'owner' }];
     }
 
-    if (!currentWorkspaceId || !workspaces.find((w) => w.id === currentWorkspaceId)) {
-      currentWorkspaceId = workspaces[0]?.id ?? null;
-    }
+    // Donde estaba la última vez, en cualquier dispositivo (ver elegirEspacio).
+    currentWorkspaceId = elegirEspacio(workspaces, {
+      enSesion: get().currentWorkspaceId,
+      enCuenta: userData?.last_workspace_id ?? null,
+      enNavegador: readWs(),
+    });
     writeWs(currentWorkspaceId);
+    // Y se guarda en la cuenta. Todo cambio de espacio —elegir otro, crear uno,
+    // salir o borrar— termina recargando por acá, así que alcanza con hacerlo
+    // en un solo lugar. Sin esperar: la pantalla no depende de esto.
+    if (appUserId && currentWorkspaceId && currentWorkspaceId !== userData?.last_workspace_id) {
+      void supabase
+        .from('users')
+        .update({ last_workspace_id: currentWorkspaceId })
+        .eq('id', appUserId)
+        .then(({ error }) => error && console.error('No se pudo recordar el espacio', error));
+    }
 
     const withWs = <T extends { eq: (col: string, val: any) => T }>(q: T): T =>
       currentWorkspaceId ? q.eq('workspace_id', currentWorkspaceId) : q;
@@ -1109,6 +1127,9 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     await supabase.auth.signOut();
     // Se limpia TODO: antes quedaban workspaces, deudas y grupos del usuario
     // anterior en memoria hasta la próxima recarga.
+    // Borrar el espacio del navegador ya no hace olvidar dónde estaba: eso vive
+    // en la cuenta (DB/049) y vuelve al entrar. Acá se borra por si otra persona
+    // usa este mismo navegador.
     writeWs(null);
     set({
       user: null,
