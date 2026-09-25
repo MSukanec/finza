@@ -21,9 +21,12 @@ import {
   Shield,
   CalendarClock,
   Settings,
+  WifiOff,
+  RefreshCw,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 import { useUIStore } from '@/stores/ui-store';
 import { useFinanceStore } from '@/stores/finance-store';
 import { veTodo } from '@/lib/types';
@@ -93,6 +96,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const user = useFinanceStore((s) => s.user);
   const isAdmin = useFinanceStore((s) => s.isAdmin);
   const previewRole = useFinanceStore((s) => s.previewRole);
+  const errorDeCarga = useFinanceStore((s) => s.errorDeCarga);
+  const hydrate = useFinanceStore((s) => s.hydrate);
+  // Si tarda, se dice. Quedarse mirando "Verificando sesión" sin saber si
+  // pasa algo es lo que hacía pensar que la app estaba colgada.
+  const [tarda, setTarda] = useState(false);
 
   // Durante una vista previa manda el rol previsualizado. Sólo recorta: el
   // administrador de la app deja de serlo mientras mira como otro, pero nadie
@@ -105,9 +113,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const rolReal = workspaces.find((w) => w.id === currentWorkspaceId)?.role ?? null;
   const rolActual = previewRole ?? rolReal;
 
+  // Sin sesión se va a entrar. Pero si lo que falló fue la carga, NO: no estás
+  // deslogueado, se cayó la conexión, y mandarte a entrar borra lo que estabas
+  // haciendo y no arregla nada.
   useEffect(() => {
-    if (isHydrated && !user) router.push('/login');
-  }, [isHydrated, user, router]);
+    if (isHydrated && !user && !errorDeCarga) router.push('/login');
+  }, [isHydrated, user, errorDeCarga, router]);
+
+  useEffect(() => {
+    if (isHydrated) return;
+    // El aviso aparece solo si a los 6 segundos todavía no cargó; al cargar,
+    // esta pantalla ya no se muestra, así que no hay que apagarlo.
+    const reloj = setTimeout(() => setTarda(true), 6000);
+    return () => clearTimeout(reloj);
+  }, [isHydrated]);
 
   // Cerrar el menú "Más" al navegar.
   useEffect(() => {
@@ -131,12 +150,44 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (!isHydrated || !user) {
     return (
-      <div className="flex h-dvh w-full items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <span className="flex size-12 animate-pulse items-center justify-center rounded-2xl bg-accent text-primary shadow-soft-sm">
-            <Wallet className="size-6" />
+      <div className="flex h-dvh w-full items-center justify-center bg-background p-6">
+        <div className="flex max-w-xs flex-col items-center gap-4 text-center">
+          <span
+            className={cn(
+              'flex size-12 items-center justify-center rounded-2xl shadow-soft-sm',
+              errorDeCarga ? 'bg-destructive/10 text-destructive' : 'animate-pulse bg-accent text-primary'
+            )}
+          >
+            {errorDeCarga ? <WifiOff className="size-6" /> : <Wallet className="size-6" />}
           </span>
-          <p className="text-sm text-muted-foreground">Verificando sesión…</p>
+
+          {errorDeCarga ? (
+            <>
+              <div>
+                <p className="text-sm font-medium">No pudimos cargar tus datos</p>
+                <p className="mt-1 text-sm text-muted-foreground">{errorDeCarga}</p>
+              </div>
+              <Button onClick={() => void hydrate()} className="gap-2">
+                <RefreshCw className="size-4" />
+                Reintentar
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">Verificando sesión…</p>
+              {tarda && (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    Está tardando más de lo normal. Puede ser la conexión.
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => void hydrate()} className="gap-2">
+                    <RefreshCw className="size-4" />
+                    Reintentar
+                  </Button>
+                </>
+              )}
+            </>
+          )}
         </div>
       </div>
     );

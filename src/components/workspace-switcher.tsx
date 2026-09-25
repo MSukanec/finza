@@ -134,10 +134,15 @@ export function WorkspaceSwitcher({ onCambiar }: { onCambiar?: () => void } = {}
                       if (w.role === 'owner') handleDelete(w.id, w.name);
                       else handleLeave(w.id, w.name);
                     }}
-                    className="opacity-0 group-hover/ws:opacity-100 p-1 -m-1 rounded-md text-muted-foreground hover:text-destructive transition-colors"
+                    // En el teléfono no hay "pasar el mouse": escondido tras
+                    // un hover, este botón no existía. Ahora se ve siempre en
+                    // mobile y aparece al pasar en pantalla grande. Y mide 36px:
+                    // 20 no es un blanco que se pueda tocar.
+                    className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive md:size-7 md:opacity-0 md:group-hover/ws:opacity-100 md:group-focus-within/ws:opacity-100"
+                    aria-label={w.role === 'owner' ? `Eliminar el espacio ${w.name}` : `Salir del espacio ${w.name}`}
                     title={w.role === 'owner' ? 'Eliminar espacio' : 'Salir del espacio'}
                   >
-                    {w.role === 'owner' ? <Trash2 className="size-3.5" /> : <LogOut className="size-3.5" />}
+                    {w.role === 'owner' ? <Trash2 className="size-4 md:size-3.5" /> : <LogOut className="size-4 md:size-3.5" />}
                   </button>
                 )}
               </DropdownMenuItem>

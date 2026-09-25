@@ -20,9 +20,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Field } from '@/components/ui/field';
 import { Picker } from '@/components/ui/picker';
 import { parseAmount, ofreceFechaDePago } from '@/lib/money';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Trash2 } from 'lucide-react';
 import { AttachmentsField } from './attachments-field';
 import { puedeCambiar } from '@/lib/autoria';
+import { useGlobalDialog } from '@/components/providers/dialog-provider';
 import { personName } from '@/components/ui/user-avatar';
 import type { TransactionType } from '@/lib/types';
 
@@ -57,6 +58,8 @@ export function TransactionForm() {
   const addTransaction = useFinanceStore((s) => s.addTransaction);
   const updateTransaction = useFinanceStore((s) => s.updateTransaction);
   const attachFiles = useFinanceStore((s) => s.attachFiles);
+  const removeTransaction = useFinanceStore((s) => s.removeTransaction);
+  const dialog = useGlobalDialog();
 
   const isEdit = activeSheet === 'edit-transaction';
   const isOpen = activeSheet === 'new-transaction' || isEdit;
@@ -267,6 +270,25 @@ export function TransactionForm() {
   );
 
   // ---------------------------------------------------------------- guardar
+
+  /**
+   * Eliminar, desde acá.
+   *
+   * En el teléfono la fila no tiene acciones —son `hidden md:flex`, aparecen al
+   * pasar el mouse—, así que sin esto no había ninguna forma de borrar un
+   * movimiento desde un celular.
+   */
+  const handleDelete = async () => {
+    if (!editing || soloLectura) return;
+    const ok = await dialog.confirm(
+      'Eliminar movimiento',
+      `Se elimina "${editing.description || 'este movimiento'}". Sus comprobantes se van con él.`,
+      { confirmar: 'Eliminar' }
+    );
+    if (!ok) return;
+    await removeTransaction(editing.id);
+    closeSheet();
+  };
 
   const handleSubmit = async () => {
     if (submitting || soloLectura) return;
@@ -553,6 +575,21 @@ export function TransactionForm() {
             </p>
           )}
         </ResponsiveModalBody>
+
+        {/* Eliminar va en el cuerpo y no en el pie: el pie es UN botón, el de
+            la acción principal. */}
+        {isEdit && !soloLectura && (
+          <div className="shrink-0 border-t border-border/60 px-4 py-2">
+            <button
+              type="button"
+              onClick={() => void handleDelete()}
+              className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
+            >
+              <Trash2 className="size-4" />
+              Eliminar movimiento
+            </button>
+          </div>
+        )}
 
         <ResponsiveModalFooter>
           {soloLectura ? (

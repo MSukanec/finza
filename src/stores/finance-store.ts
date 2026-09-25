@@ -285,6 +285,14 @@ interface FinanceState {
 
   primaryCurrencyId: string;
   isHydrated: boolean;
+  /**
+   * Por qué no se pudieron cargar los datos, si pasó.
+   *
+   * Existe para no confundir "se cayó la conexión" con "no tenés sesión": sin
+   * esto, un corte de red terminaba mandando a la pantalla de entrar, como si
+   * te hubieras deslogueado.
+   */
+  errorDeCarga: string | null;
   user: any | null;
   /** id de public.users (NO el de auth.users). */
   appUserId: string | null;
@@ -422,6 +430,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   partners: [],
   primaryCurrencyId: 'ars',
   isHydrated: false,
+  errorDeCarga: null,
   user: null,
   appUserId: null,
   isAdmin: false,
@@ -437,6 +446,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   },
 
   hydrate: async () => {
+   set({ errorDeCarga: null });
    try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
@@ -737,11 +747,17 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
         created_at: t.created_at
       })).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()),
       isHydrated: true,
+      errorDeCarga: null,
     });
    } catch (e) {
       console.error('Error hidratando datos:', e);
-      // Nunca dejar el loader colgado: marcamos hidratado aunque falle
-      set({ isHydrated: true });
+      // Nunca dejar el loader colgado: marcamos hidratado aunque falle, y se
+      // guarda el motivo para poder ofrecer reintentar en vez de mandar a
+      // entrar de nuevo.
+      set({
+        isHydrated: true,
+        errorDeCarga: (e as Error)?.message || 'No se pudieron cargar tus datos.',
+      });
    }
   },
 

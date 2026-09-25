@@ -180,23 +180,30 @@ export function SettingsView() {
             {members.map((m) => {
               const soyYo = !!m.user_id && m.user_id === appUserId;
               return (
-                <li key={m.id} className="flex items-center gap-3 py-3">
-                  <UserAvatar person={m.user_id ? people[m.user_id] : undefined} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium leading-tight">
-                      {m.full_name || m.email}
-                      {soyYo && <span className="font-normal text-muted-foreground"> (vos)</span>}
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                      {m.pending ? 'Invitación sin aceptar' : m.email}
-                    </p>
+                // En el teléfono la fila se parte en dos: arriba quién es,
+                // abajo el rol, la última conexión y quitar. En una sola fila,
+                // el nombre quedaba en cuatro letras y un "…".
+                <li key={m.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:gap-3">
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <UserAvatar person={m.user_id ? people[m.user_id] : undefined} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium leading-tight">
+                        {m.full_name || m.email}
+                        {soyYo && <span className="font-normal text-muted-foreground"> (vos)</span>}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                        {m.pending ? 'Invitación sin aceptar' : m.email}
+                      </p>
+                    </div>
                   </div>
+
+                  <div className="flex items-center gap-2 pl-13 sm:pl-0">
 
                   {/* El dueño cambia el rol acá mismo. Nadie cambia el suyo:
                       quedarse sin dueño dejaría el espacio sin quien lo
                       administre. */}
                   {esDuenio && !soyYo ? (
-                    <div className="w-36 shrink-0">
+                    <div className="min-w-0 flex-1 sm:w-36 sm:flex-none">
                       <Picker
                         value={m.role}
                         onValueChange={(v) => void cambiarRol(m, v as WorkspaceRole)}
@@ -214,7 +221,7 @@ export function SettingsView() {
                       quién no. Entre socios eso es información de trabajo. */}
                   <span
                     className={cn(
-                      'w-20 shrink-0 text-right text-[11px]',
+                      'shrink-0 text-right text-[11px] sm:w-20',
                       esDeHoy(m.last_sign_in) ? 'text-income' : 'text-muted-foreground'
                     )}
                   >
@@ -232,6 +239,7 @@ export function SettingsView() {
                       <Trash2 className="size-4" />
                     </button>
                   )}
+                  </div>
                 </li>
               );
             })}

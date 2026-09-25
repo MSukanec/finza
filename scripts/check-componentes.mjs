@@ -395,6 +395,48 @@ const registrar = (nombre, ok, detalle = '') => casos.push({ nombre, ok, detalle
   registrar('Ningún formulario usa la fecha nativa: usan DateInput', nativas.length === 0, nativas.join(', '));
 }
 
+// ------------------------------------------- Nada vive sólo detrás del mouse
+//
+// En el teléfono no existe "pasar por encima": una acción que sólo aparece con
+// `group-hover` es una acción que no se puede tocar. Pasó con borrar y salir de
+// un espacio, y con editar y borrar categorías.
+//
+// Vale esconderla en pantalla grande (`md:opacity-0 md:group-hover:opacity-100`)
+// o directamente no mostrarla en mobile (`hidden ... md:flex`) SI hay otro
+// camino: la fila de movimientos se toca y abre el formulario, que tiene su
+// propio botón de eliminar.
+{
+  const { default: fs } = await import('node:fs');
+  const escondidas = [];
+  const recorrer = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const ruta = `${dir}/${e.name}`;
+      if (e.isDirectory()) { recorrer(ruta); continue; }
+      if (!e.name.endsWith('.tsx')) continue;
+      const src = fs.readFileSync(ruta, 'utf8');
+      for (const m of src.matchAll(/className=[{"'`]([^"'`]*opacity-0[^"'`]*group-hover[^"'`]*opacity-100[^"'`]*)/g)) {
+        const clases = m[1];
+        if (clases.includes('md:opacity-0') || clases.includes('hidden')) continue;
+        escondidas.push(`${ruta.replace('src/', '')}:${src.slice(0, m.index).split('\n').length}`);
+      }
+    }
+  };
+  recorrer('src');
+  registrar(
+    'Ninguna acción se esconde detrás del mouse en el teléfono',
+    escondidas.length === 0,
+    escondidas.join(', ')
+  );
+
+  // Y la salida que justifica esconderlas en la lista de movimientos: el
+  // formulario tiene su propio botón de eliminar.
+  const formulario = fs.readFileSync('src/features/transactions/components/transaction-form.tsx', 'utf8');
+  registrar(
+    'Un movimiento se puede eliminar desde su formulario (único camino en el teléfono)',
+    formulario.includes('Eliminar movimiento') && formulario.includes('removeTransaction(')
+  );
+}
+
 let fallas = 0;
 for (const c of casos) {
   if (c.ok) console.log(`OK   ${c.nombre}`);
