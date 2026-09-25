@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useFinanceStore } from '@/stores/finance-store';
 import { WorkspaceLogo } from '@/components/workspace-logo';
 import {
@@ -23,7 +24,6 @@ import { Label } from '@/components/ui/label';
 import { useAutoFoco } from '@/components/ui/autofocus';
 import { cn } from '@/lib/utils';
 import { Check, ChevronsUpDown, Plus, Copy, FilePlus2, Trash2, Users, LogOut } from 'lucide-react';
-import { WorkspaceMembersDialog } from '@/components/workspace-members-dialog';
 import { useGlobalDialog } from '@/components/providers/dialog-provider';
 
 export function WorkspaceSwitcher({ onCambiar }: { onCambiar?: () => void } = {}) {
@@ -34,9 +34,9 @@ export function WorkspaceSwitcher({ onCambiar }: { onCambiar?: () => void } = {}
   const deleteWorkspace = useFinanceStore((s) => s.deleteWorkspace);
   const leaveWorkspace = useFinanceStore((s) => s.leaveWorkspace);
   const dialog = useGlobalDialog();
+  const router = useRouter();
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [membersOpen, setMembersOpen] = useState(false);
   const [name, setName] = useState('');
   const autoFoco = useAutoFoco();
   const [mode, setMode] = useState<'empty' | 'clone'>('empty');
@@ -144,8 +144,10 @@ export function WorkspaceSwitcher({ onCambiar }: { onCambiar?: () => void } = {}
             );
           })}
           <DropdownMenuSeparator />
+          {/* Los miembros se administran en Configuración, que es donde está
+              todo lo del espacio. Acá queda el atajo. */}
           {current && (
-            <DropdownMenuItem onClick={() => setMembersOpen(true)} className="gap-2 cursor-pointer">
+            <DropdownMenuItem onClick={() => router.push('/configuracion')} className="gap-2 cursor-pointer">
               <Users className="size-4" />
               Miembros de «{current.name}»
             </DropdownMenuItem>
@@ -164,15 +166,6 @@ export function WorkspaceSwitcher({ onCambiar }: { onCambiar?: () => void } = {}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      {current && (
-        <WorkspaceMembersDialog
-          workspaceId={current.id}
-          workspaceName={current.name}
-          open={membersOpen}
-          onOpenChange={setMembersOpen}
-        />
-      )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>

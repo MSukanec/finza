@@ -1065,8 +1065,10 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   changeMemberRole: async (workspaceId: string, member: WorkspaceMember, role: WorkspaceRole) => {
     // Una invitacion todavia sin aceptar vive en otra tabla que la membresia.
     const table = member.pending ? 'workspace_invitations' : 'workspace_members';
-    const { error } = await supabase.from(table).update({ role }).eq('id', member.id);
-    if (error) throw error;
+    exigirFilas(
+      await supabase.from(table).update({ role }).eq('id', member.id).select('id'),
+      'Sólo el dueño del espacio puede cambiar roles.'
+    );
     await get().loadMembers(workspaceId);
   },
 
@@ -1075,9 +1077,14 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     // EXCEPCIÓN al borrado lógico: quitarle el acceso a alguien tiene que
     // quitárselo de verdad. Una membresía marcada como borrada seguiría dando
     // true en is_workspace_member() y sería un agujero. Queda en el historial.
+    // Pedir las filas de vuelta y exigirlas: un DELETE que la RLS filtra no da
+    // error, borra cero filas y la lista vuelve igual. Desde afuera se ve como
+    // "no me deja borrar y no me dice por qué".
     const table = member.pending ? 'workspace_invitations' : 'workspace_members';
-    const { error } = await supabase.from(table).delete().eq('id', member.id);
-    if (error) throw error;
+    exigirFilas(
+      await supabase.from(table).delete().eq('id', member.id).select('id'),
+      'Sólo el dueño del espacio puede quitar miembros.'
+    );
     await get().loadMembers(workspaceId);
   },
 
