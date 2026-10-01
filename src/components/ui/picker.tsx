@@ -135,6 +135,13 @@ function Picker({
         <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
       </Combobox.Trigger>
 
+      {/* `pointer-events-auto` no es decorativo: la hoja de abajo de mobile
+          (vaul, sobre Radix) apaga los eventos de TODO el documento mientras
+          está abierta —`pointer-events: none` en el <body>— y se los devuelve
+          sólo a ella. Este menú se dibuja fuera de la hoja, colgado del
+          documento, así que heredaba el apagado: se abría, se veía, y los
+          toques no llegaban. En el teléfono eso era "toco otra billetera y no
+          cambia". En escritorio nunca pasó porque Base UI no apaga el documento. */}
       <Combobox.Portal>
         <Combobox.Positioner
           anchor={ancla ?? undefined}
@@ -142,7 +149,7 @@ function Picker({
           align="start"
           sideOffset={6}
           collisionPadding={12}
-          className="isolate z-[70]"
+          className="isolate z-[70] pointer-events-auto"
         >
           <Combobox.Popup
             data-slot="picker-popup"

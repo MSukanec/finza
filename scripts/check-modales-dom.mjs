@@ -170,6 +170,58 @@ for (const [nombre, ancho] of [['escritorio', 1280], ['teléfono', 390]]) {
   await GlobalRegistrator.unregister();
 }
 
+// ---------------------------------------------------------------- 1.c la lista de un campo recibe toques
+//
+// La hoja de abajo apaga los eventos del documento entero mientras está
+// abierta. El menú de un desplegable se dibuja FUERA de la hoja, así que sin
+// `pointer-events-auto` hereda ese apagado: se abre, se ve, y tocar una opción
+// no hace nada. En el teléfono era "elijo otra billetera y me queda la misma".
+{
+  const { React, act, createRoot } = await entorno(390);
+  const modal = await import('../src/components/ui/responsive-modal.tsx');
+  const { Picker } = await import('../src/components/ui/picker.tsx');
+
+  let elegido = 'efectivo';
+  function Formulario() {
+    const [v, setV] = React.useState('efectivo');
+    elegido = v;
+    return React.createElement(modal.ResponsiveModal, { open: true, onOpenChange() {} },
+      React.createElement(modal.ResponsiveModalContent, null,
+        React.createElement(modal.ResponsiveModalHeader, null,
+          React.createElement(modal.ResponsiveModalTitle, null, 'Nuevo movimiento')),
+        React.createElement(modal.ResponsiveModalBody, null,
+          React.createElement(Picker, {
+            value: v,
+            onValueChange: setV,
+            searchable: false,
+            options: [{ value: 'efectivo', label: 'Efectivo' }, { value: 'banco', label: 'Banco Santander' }],
+          }))));
+  }
+
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const raiz = createRoot(host);
+  await act(async () => raiz.render(React.createElement(Formulario)));
+  await act(async () => espera(150));
+
+  registrar('con la hoja abierta, el documento queda sin eventos (por eso hace falta el arreglo)',
+    document.body.style.pointerEvents === 'none', JSON.stringify(document.body.style.pointerEvents));
+
+  await tocar(act, document.querySelector('[data-slot=picker-trigger]'));
+  const contenedor = document.querySelector('[data-slot=picker-popup]')?.parentElement;
+  const hoja = document.querySelector('[data-slot=drawer-content]');
+  registrar('la lista se dibuja fuera de la hoja', !!contenedor && !hoja?.contains(contenedor));
+  registrar('y pide recibir toques igual',
+    !!contenedor && contenedor.className.includes('pointer-events-auto'), contenedor?.className);
+
+  const opcion = [...document.querySelectorAll('[role=option]')].find((o) => o.textContent.includes('Santander'));
+  await tocar(act, opcion);
+  registrar('elegir otra opción cambia el valor', elegido === 'banco', elegido);
+
+  await act(async () => raiz.unmount());
+  await GlobalRegistrator.unregister();
+}
+
 // ---------------------------------------------------------------- 2. borrar con reemplazo
 {
   const { React, act, createRoot } = await entorno(1280);

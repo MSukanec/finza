@@ -437,6 +437,27 @@ const registrar = (nombre, ok, detalle = '') => casos.push({ nombre, ok, detalle
   );
 }
 
+// ------------------------------------------- Los menús flotantes reciben toques
+//
+// La hoja de abajo de mobile apaga los eventos de todo el documento mientras
+// está abierta y se los devuelve sólo a ella. Un menú que se dibuja fuera —la
+// lista de un desplegable, un popover, un menú— hereda el apagado: se abre, se
+// ve, y los toques no llegan. Era "elijo otra billetera y no cambia".
+{
+  const { default: fs } = await import('node:fs');
+  const sinToques = ['picker.tsx', 'select.tsx', 'popover.tsx', 'dropdown-menu.tsx'].filter((archivo) => {
+    const src = fs.readFileSync(`src/components/ui/${archivo}`, 'utf8');
+    // El `pointer-events-auto` tiene que estar en el contenedor portado, que es
+    // el que cuelga del documento: el que lleva la capa `z-[70]`.
+    return !/className="[^"]*z-\[70\][^"]*pointer-events-auto/.test(src);
+  });
+  registrar(
+    'Todo menú flotante puede recibir toques con una hoja abierta',
+    sinToques.length === 0,
+    sinToques.join(', ')
+  );
+}
+
 let fallas = 0;
 for (const c of casos) {
   if (c.ok) console.log(`OK   ${c.nombre}`);
