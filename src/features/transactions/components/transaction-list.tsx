@@ -69,6 +69,11 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
   const people = useFinanceStore((s) => s.people);
   const adjuntos = useFinanceStore((s) => s.attachments);
   const appUserId = useFinanceStore((s) => s.appUserId);
+  // Previsualizando otro rol mandan los permisos de ese rol: la pantalla tiene
+  // que mostrar lo que esa persona vería.
+  const currentRole = useFinanceStore((s) => s.currentRole);
+  const previewRole = useFinanceStore((s) => s.previewRole);
+  const rol = previewRole ?? currentRole;
   const dialog = useGlobalDialog();
 
   // Un conteo por movimiento, armado una vez: buscarlo fila por fila recorrería
@@ -218,7 +223,7 @@ export function TransactionList({ transactions, onEdit }: TransactionListProps) 
                         Y sólo en lo propio: cada uno cambia lo que cargó (DB/045).
                         Lo ajeno se abre igual tocando la fila, para verlo y
                         descargar sus comprobantes. */}
-                    {puedeCambiar(tx, appUserId) && (
+                    {puedeCambiar(tx, appUserId, rol) && (
                     <div className="hidden shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 md:flex">
                       <IconButton
                         label="Cambiar estado de revisión"

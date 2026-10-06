@@ -206,6 +206,18 @@ function optimistic(
 const escriturasPendientes = new Map<string, Promise<boolean>>();
 
 /**
+ * El rol con el que se decide qué se puede tocar.
+ *
+ * Durante una vista previa manda el rol previsualizado, y sólo puede recortar:
+ * la base sigue respondiendo con los permisos reales, así que lo que se ve
+ * mientras se previsualiza tiene que ser lo que vería esa persona.
+ */
+const rolVigente = () => {
+  const st = useFinanceStore.getState();
+  return st.previewRole ?? st.currentRole;
+};
+
+/**
  * Exige que una escritura haya tocado alguna fila.
  *
  * Un UPDATE que la RLS filtra no da error: "sale bien" sobre cero filas. Sin
@@ -918,7 +930,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     // consulta y no en la vista, para que el límite cuente movimientos reales.
     const { data, error } = await supabase
       .from('activity_log')
-      .select('id,user_id,action,entity,entity_id,summary,changes,created_at')
+      .select('id,user_id,target_user_id,action,entity,entity_id,summary,changes,created_at')
       .eq('workspace_id', workspaceId)
       .not('user_id', 'is', null)
       .order('created_at', { ascending: false })
@@ -1274,7 +1286,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   updateTransaction: async (id, data) => {
     const before = get().transactions.find((t) => t.id === id);
     if (!before) return;
-    if (!puedeCambiar(before, get().appUserId)) {
+    if (!puedeCambiar(before, get().appUserId, rolVigente())) {
       toast.error(SOLO_QUIEN_LO_CARGO);
       return;
     }
@@ -1309,7 +1321,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   removeTransaction: async (id) => {
     const before = get().transactions.find((t) => t.id === id);
     if (!before) return;
-    if (!puedeCambiar(before, get().appUserId)) {
+    if (!puedeCambiar(before, get().appUserId, rolVigente())) {
       toast.error(SOLO_QUIEN_LO_CARGO);
       return;
     }
@@ -1337,10 +1349,10 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
     // Todo o nada. Si parte del lote ya es de otra persona (se reasignó la
     // autoría después de importar), deshacer sólo lo propio dejaría la
     // importación a medias y sin forma de entender qué quedó.
-    const ajenos = removed.filter((t) => !puedeCambiar(t, get().appUserId)).length;
+    const ajenos = removed.filter((t) => !puedeCambiar(t, get().appUserId, rolVigente())).length;
     if (ajenos > 0) {
       toast.error(
-        `No se puede deshacer: ${ajenos} de los ${removed.length} movimientos de esta importación son de otra persona, y sólo quien cargó un movimiento puede darlo de baja.`
+        `No se puede deshacer: ${ajenos} de los ${removed.length} movimientos de esta importación los cargó alguien cuyos movimientos no podés dar de baja.`
       );
       return;
     }
@@ -1380,7 +1392,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   toggleCheckpoint: async (id: string, current: boolean) => {
     const before = get().transactions.find((t) => t.id === id);
     if (!before) return;
-    if (!puedeCambiar(before, get().appUserId)) {
+    if (!puedeCambiar(before, get().appUserId, rolVigente())) {
       toast.error(SOLO_QUIEN_LO_CARGO);
       return;
     }
@@ -1401,7 +1413,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   toggleTransactionStatus: async (id: string, status: 'draft' | 'warning' | 'reviewed') => {
     const before = get().transactions.find((t) => t.id === id);
     if (!before) return;
-    if (!puedeCambiar(before, get().appUserId)) {
+    if (!puedeCambiar(before, get().appUserId, rolVigente())) {
       toast.error(SOLO_QUIEN_LO_CARGO);
       return;
     }
@@ -1427,7 +1439,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   attachFiles: async (transactionId, archivos) => {
     const { currentWorkspaceId, appUserId } = get();
     if (!currentWorkspaceId) throw new Error('No hay un espacio activo.');
-    if (!puedeCambiar(get().transactions.find((t) => t.id === transactionId), appUserId)) {
+    if (!puedeCambiar(get().transactions.find((t) => t.id === transactionId), appUserId, rolVigente())) {
       toast.error(SOLO_QUIEN_LO_CARGO);
       return;
     }
@@ -1510,7 +1522,7 @@ export const useFinanceStore = create<FinanceState>()((set, get) => ({
   removeAttachment: async (id) => {
     const antes = get().attachments.find((a) => a.id === id);
     if (!antes) return;
-    if (!puedeCambiar(get().transactions.find((t) => t.id === antes.transaction_id), get().appUserId)) {
+    if (!puedeCambiar(get().transactions.find((t) => t.id === antes.transaction_id), get().appUserId, rolVigente())) {
       toast.error(SOLO_QUIEN_LO_CARGO);
       return;
     }

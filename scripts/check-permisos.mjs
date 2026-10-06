@@ -242,11 +242,28 @@ try {
   ok('el administrador lista los miembros',
     (await c.query('select * from public.list_workspace_members($1)', [WS])).rows.length > 0);
 
-  // Ver todo no es poder cambiar todo (DB/045): cada uno edita lo que cargó.
-  const tocoAjeno = (await c.query('update public.transactions set amount = 1 where id = $1', [mio[0].id])).rowCount;
-  ok('el administrador no edita un movimiento que cargó otro', tocoAjeno === 0, `afectó ${tocoAjeno}`);
+  // Si lo ve, lo puede corregir (DB/050, da vuelta DB/045): entre socios, el
+  // que encuentra un gasto mal cargado lo arregla sin pedirle al otro que entre.
+  const tocoAjeno = (await c.query(
+    `update public.transactions set description = 'corregido por el administrador' where id = $1`, [mio[0].id]
+  )).rowCount;
+  ok('el administrador corrige un movimiento que cargó otro', tocoAjeno === 1, `afectó ${tocoAjeno}`);
+
+  // Y queda escrito quién lo hizo y de quién era: eso es lo que ordena que
+  // cualquiera pueda corregir cualquier cosa.
+  const { rows: [huella] } = await c.query(
+    // Se busca POR EL CAMBIO, no por fecha ni por acción: todas las filas de
+    // una transacción comparten `now()`, y sobre este movimiento hay varias
+    // ediciones (el colaborador corrigió el suyo más arriba).
+    `select user_id, target_user_id from public.activity_log
+      where entity='transactions' and entity_id=$1
+        and changes->'description'->>'despues' = 'corregido por el administrador'
+      limit 1`, [mio[0].id]);
+  ok('Actividad guarda quién lo cambió', huella?.user_id === DUENIO, JSON.stringify(huella));
+  ok('Actividad guarda de quién era', huella?.target_user_id === COLAB, JSON.stringify(huella));
+
   const borroAjeno = (await c.query('delete from public.transactions where id = $1', [mio[0].id])).rowCount;
-  ok('el administrador no borra un movimiento que cargó otro', borroAjeno === 0, `borró ${borroAjeno}`);
+  ok('el administrador puede dar de baja un movimiento ajeno', borroAjeno === 1, `borró ${borroAjeno}`);
 
   // Reorganizar categorías sí toca movimientos de todos: es estructura del
   // espacio, no el contenido de un movimiento. Por eso va por función.

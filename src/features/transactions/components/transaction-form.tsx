@@ -74,8 +74,10 @@ export function TransactionForm() {
    * alguien quiere mirar de un gasto que cargó otro.
    */
   const appUserId = useFinanceStore((s) => s.appUserId);
+  const previewRole = useFinanceStore((s) => s.previewRole);
   const people = useFinanceStore((s) => s.people);
-  const soloLectura = isEdit && !!editing && !puedeCambiar(editing, appUserId);
+  const currentRole = useFinanceStore((s) => s.currentRole);
+  const soloLectura = isEdit && !!editing && !puedeCambiar(editing, appUserId, previewRole ?? currentRole);
   const autor = editing?.user_id ? people[editing.user_id] : undefined;
 
   const [type, setType] = useState<TransactionType>('expense');

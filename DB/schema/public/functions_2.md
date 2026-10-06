@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-18T12:53:26.719Z
+> Generated: 2026-10-06T19:29:03.615Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -218,6 +218,7 @@ DECLARE
     v_old     jsonb;
     v_ws      uuid;
     v_actor   uuid;
+    v_duenio  uuid;
     v_action  text;
     v_verbo   text;
     v_summary text;
@@ -242,6 +243,9 @@ BEGIN
     IF v_actor IS NULL AND TG_TABLE_NAME = 'workspace_members' THEN
         v_actor := (v_rec->>'user_id')::uuid;
     END IF;
+
+    -- De quién era lo que se tocó, cuando no es de quien lo tocó (DB/050).
+    v_duenio := NULLIF((v_rec->>'user_id')::uuid, v_actor);
 
     v_action := lower(TG_OP);
     IF TG_OP = 'UPDATE' THEN
@@ -294,8 +298,8 @@ BEGIN
     END IF;
 
     INSERT INTO public.activity_log
-        (workspace_id, user_id, action, entity, entity_id, summary, changes)
-    VALUES (v_ws, v_actor, v_action, TG_TABLE_NAME, (v_rec->>'id')::uuid, v_summary, v_changes);
+        (workspace_id, user_id, action, entity, entity_id, summary, changes, target_user_id)
+    VALUES (v_ws, v_actor, v_action, TG_TABLE_NAME, (v_rec->>'id')::uuid, v_summary, v_changes, v_duenio);
 
     RETURN COALESCE(NEW, OLD);
 END;

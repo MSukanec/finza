@@ -165,7 +165,12 @@ export function ActivityView() {
             <h3 className="mb-2 px-1 text-xs font-medium text-muted-foreground">{day}</h3>
             <div className="space-y-2">
               {items.map((e) => (
-                <Entry key={e.id} entry={e} person={e.user_id ? people[e.user_id] : undefined} />
+                <Entry
+                  key={e.id}
+                  entry={e}
+                  person={e.user_id ? people[e.user_id] : undefined}
+                  duenioPersona={e.target_user_id ? people[e.target_user_id] : undefined}
+                />
               ))}
             </div>
           </section>
@@ -174,7 +179,7 @@ export function ActivityView() {
   );
 }
 
-function Entry({ entry, person }: { entry: ActivityEntry; person?: Person }) {
+function Entry({ entry, person, duenioPersona }: { entry: ActivityEntry; person?: Person; duenioPersona?: Person }) {
   const meta = ACTION_META[entry.action];
   const Icon = meta.icon;
 
@@ -183,6 +188,10 @@ function Entry({ entry, person }: { entry: ActivityEntry; person?: Person }) {
   // se puede resolver el nombre, se dice, en vez de disfrazarlo de "Sistema".
   const autor =
     person?.full_name || person?.email || 'Alguien que ya no podemos identificar';
+
+  // Quien cargó lo que se tocó, si no es quien lo tocó. Si no lo conocemos por
+  // nombre, no se inventa nada: se omite.
+  const duenio = duenioPersona?.full_name || duenioPersona?.email || null;
 
   const changes = Object.entries(entry.changes ?? {}).filter(([k]) => !HIDDEN_FIELDS.has(k));
 
@@ -207,6 +216,10 @@ function Entry({ entry, person }: { entry: ActivityEntry; person?: Person }) {
             <span className="text-xs text-muted-foreground">(ya no está en el espacio)</span>
           )}{' '}
           <span className="text-muted-foreground">{lowerFirst(entry.summary)}</span>
+          {/* De quién era. Desde que cualquier socio puede corregir lo de
+              cualquiera (DB/050), esto es la mitad de la información: sin esto
+              dice "editó un movimiento" y no se sabe de quién. */}
+          {duenio && <span className="text-muted-foreground"> de <span className="text-foreground">{duenio}</span></span>}
         </p>
 
         {changes.length > 0 && (

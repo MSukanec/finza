@@ -236,8 +236,10 @@ const registrar = (nombre, ok, detalle = '') => casos.push({ nombre, ok, detalle
     /soloLectura \? \(\s*<Button[^>]*onClick=\{closeSheet\}/.test(formulario)
   );
   registrar(
-    'La lista sólo muestra acciones en lo propio',
-    /puedeCambiar\(tx, appUserId\) && \(\s*<div className="hidden shrink-0/.test(lista)
+    'La lista muestra acciones sólo donde la base las va a aceptar',
+    // Con el rol: un socio corrige todo el espacio, la encargada sólo lo suyo
+    // (DB/050). Sin pasarle el rol, la pantalla volvería a la regla vieja.
+    /puedeCambiar\(tx, appUserId, rol\) && \(\s*<div className="hidden shrink-0/.test(lista)
   );
   registrar(
     'Sin permiso no se ofrece adjuntar ni quitar',

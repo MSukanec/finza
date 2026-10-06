@@ -88,17 +88,23 @@ Tres roles, en `workspace_members.role`: `owner` (Administrador), `member`
 (Miembro) y `collaborator` (Colaborador). Los dos primeros ven el espacio
 entero; el tercero **sólo los movimientos que cargó él**.
 
-**Ver y cambiar son dos reglas distintas** (DB/045, decidido con el usuario el
-2026-09-17). Ver depende del rol, como dice arriba. Cambiar un movimiento
-—editarlo, darlo de baja, marcarlo, adjuntarle o quitarle un comprobante— es
-**sólo de quien lo cargó, sea cual sea su rol**: el administrador tampoco toca lo
-que cargó un socio o la encargada. Lo ajeno se abre en modo lectura, y sus
-comprobantes se ven y se descargan igual. `puedeCambiar()` en `src/lib/autoria.ts`
-es la misma regla del lado de la app, para no ofrecer botones que la base rechaza.
+**Si lo ves, lo podés corregir** (DB/050, decidido con el usuario el 2026-10-06;
+da vuelta DB/045, que ató cambiar a quien lo cargó). Cambiar un movimiento
+—editarlo, darlo de baja, marcarlo, adjuntarle o quitarle un comprobante— sigue
+la misma regla que verlo: el administrador y los miembros corrigen todo el
+espacio; la encargada queda encerrada en lo suyo porque es lo único que ve.
 
-La única escritura sobre movimientos de todos que sigue existiendo es reorganizar
-categorías (`transferir_categoria`), porque es estructura del espacio y no el
-contenido de un movimiento. Va por función con guardia `can_see_all`.
+El motivo del cambio: entre socios, el que encuentra un gasto mal cargado tiene
+que poder arreglarlo sin pedirle al otro que entre. **Lo que ordena eso no es la
+prohibición, es el registro**: cada cambio queda en Actividad con quién lo hizo
+y DE QUIÉN era (`activity_log.target_user_id`, que llena el trigger). Si alguna
+vez se vuelve a restringir, hay que tocar la política Y `puedeCambiar()` en
+`src/lib/autoria.ts`, que es la misma regla del lado de la app para no ofrecer
+botones que la base rechaza.
+
+Reorganizar categorías (`transferir_categoria`) sigue yendo por función con
+guardia `can_see_all`: toca movimientos de todos de una, y es estructura del
+espacio, no el contenido de un movimiento.
 
 Un UPDATE que la RLS filtra **no da error**: sale bien sobre cero filas. Toda
 escritura del store sobre movimientos pide `.select('id')` y pasa por
@@ -134,10 +140,10 @@ dice qué es y de quién; el archivo vive en el bucket **privado** `adjuntos`, e
 
 **No tienen una regla de permisos propia, y no hay que dársela: van de la mano
 del movimiento.** Leer pregunta si el movimiento existe, y esa subconsulta pasa
-por la RLS de `transactions` de quien consulta: quien ve el movimiento ve y
-descarga sus comprobantes, los haya subido quien sea. Adjuntar y quitar preguntan
-además si el movimiento es PROPIO, igual que editarlo. Escribir acá un
-`can_see_all` es abrir la puerta a que las reglas se separen.
+por la RLS de `transactions` de quien consulta: quien ve el movimiento ve,
+descarga, adjunta y quita sus comprobantes (DB/050). Escribir acá un
+`can_see_all` o una regla de autoría es abrir la puerta a que las dos se
+separen y un día digan cosas distintas.
 
 1. `workspace_id` y `user_id` los pone un trigger. No se le cree al cliente.
 2. De una fila sólo se puede cambiar `deleted_at` (GRANT por columna): quitar un

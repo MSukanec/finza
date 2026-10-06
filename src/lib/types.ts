@@ -195,6 +195,13 @@ export interface Reconciliation {
 export interface ActivityEntry {
   id: string;
   user_id: string | null;
+  /**
+   * De quién era lo que se tocó, si no es de quien lo tocó (DB/050).
+   *
+   * Desde que cualquier socio puede corregir lo de cualquiera, "editó un
+   * movimiento" no alcanza: hace falta saber de quién era.
+   */
+  target_user_id?: string | null;
   action: 'insert' | 'update' | 'delete';
   entity: string;
   entity_id: string | null;

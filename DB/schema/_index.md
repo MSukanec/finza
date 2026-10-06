@@ -1,5 +1,5 @@
 # Database Schema (Auto-generated)
-> Generated: 2026-09-18T12:53:26.719Z
+> Generated: 2026-10-06T19:29:03.615Z
 > Source: Supabase PostgreSQL (read-only introspection)
 > ⚠️ This file is auto-generated. Do NOT edit manually.
 
@@ -7,20 +7,20 @@
 
 ### Tables (18)
 
-- **`activity_log`** (9 cols | FK: workspace_id → workspaces)
+- **`activity_log`** (10 cols | FK: workspace_id → workspaces, target_user_id → users)
 - **`budget_categories`** (4 cols | FK: category_id → categories, budget_id → budgets)
-- **`budgets`** (9 cols | FK: workspace_id → workspaces, user_id → users)
-- **`categories`** (11 cols | FK: user_id → users, group_id → category_groups, workspace_id → workspaces)
+- **`budgets`** (9 cols | FK: user_id → users, workspace_id → workspaces)
+- **`categories`** (11 cols | FK: user_id → users, workspace_id → workspaces, group_id → category_groups)
 - **`category_groups`** (7 cols | FK: workspace_id → workspaces, user_id → users)
-- **`debts`** (10 cols | FK: category_id → categories, user_id → users, workspace_id → workspaces)
-- **`import_batches`** (12 cols | FK: user_id → users, workspace_id → workspaces)
-- **`import_rules`** (15 cols | FK: wallet_id → wallets, user_id → users, category_id → categories, workspace_id → workspaces)
+- **`debts`** (10 cols | FK: workspace_id → workspaces, user_id → users, category_id → categories)
+- **`import_batches`** (12 cols | FK: workspace_id → workspaces, user_id → users)
+- **`import_rules`** (15 cols | FK: workspace_id → workspaces, user_id → users, category_id → categories, wallet_id → wallets)
 - **`partners`** (10 cols | FK: workspace_id → workspaces, user_id → users)
 - **`purges`** (8 cols | FK: user_id → users, workspace_id → workspaces)
-- **`transaction_attachments`** (10 cols | FK: workspace_id → workspaces, user_id → users, transaction_id → transactions)
-- **`transactions`** (26 cols | FK: user_id → users, category_id → categories, purge_id → purges, workspace_id → workspaces, import_batch_id → import_batches, partner_id → partners, wallet_id → wallets, related_transaction_id → transactions)
+- **`transaction_attachments`** (10 cols | FK: transaction_id → transactions, workspace_id → workspaces, user_id → users)
+- **`transactions`** (26 cols | FK: partner_id → partners, workspace_id → workspaces, wallet_id → wallets, related_transaction_id → transactions, category_id → categories, import_batch_id → import_batches, user_id → users, purge_id → purges)
 - **`users`** (9 cols | FK: last_workspace_id → workspaces)
-- **`wallet_reconciliations`** (14 cols | FK: adjustment_transaction_id → transactions, workspace_id → workspaces, wallet_id → wallets, user_id → users)
+- **`wallet_reconciliations`** (14 cols | FK: wallet_id → wallets, workspace_id → workspaces, adjustment_transaction_id → transactions, user_id → users)
 - **`wallets`** (14 cols | FK: workspace_id → workspaces, parent_id → wallets, user_id → users)
 - **`workspace_invitations`** (7 cols | FK: invited_by → users, workspace_id → workspaces)
 - **`workspace_members`** (5 cols | FK: user_id → users, workspace_id → workspaces)
